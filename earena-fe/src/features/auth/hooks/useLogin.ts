@@ -27,7 +27,12 @@ export const useLogin = () => {
       }
 
       // 3. Fallback theo Role quy chuẩn
+<<<<<<< HEAD
       const targetRoute = user.role === 'STUDENT' ? '/student' : '/teacher';
+=======
+      const targetRoute =
+        user.role === 'ADMIN' ? '/admin' : user.role === 'STUDENT' ? '/student' : '/teacher';
+>>>>>>> feature/admin-full
       router.replace(targetRoute);
     },
     onError: (error) => {

@@ -38,6 +38,11 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     }
 
     return {
+<<<<<<< HEAD
+=======
+      // Backward compatibility: một số controller đang dùng CurrentUser('id')
+      id: payload.userId,
+>>>>>>> feature/admin-full
       userId: payload.userId,
       email: payload.email,
       role: payload.role,

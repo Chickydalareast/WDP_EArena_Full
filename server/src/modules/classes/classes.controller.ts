@@ -20,12 +20,26 @@ import {
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+<<<<<<< HEAD
 
 @Controller('classes')
+=======
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
+import { UserRole } from '../users/schemas/user.schema';
+import { UseGuards } from '@nestjs/common';
+
+@Controller('classes')
+@UseGuards(RolesGuard)
+>>>>>>> feature/admin-full
 export class ClassesController {
   constructor(private readonly classesService: ClassesService) { }
 
   @Post()
+<<<<<<< HEAD
+=======
+  @Roles(UserRole.TEACHER, UserRole.ADMIN)
+>>>>>>> feature/admin-full
   async createClass(
     @Body() dto: CreateClassDto,
     @CurrentUser('userId') userId: string,
@@ -43,6 +57,10 @@ export class ClassesController {
   }
 
   @Post(':id/request-join')
+<<<<<<< HEAD
+=======
+  @Roles(UserRole.STUDENT)
+>>>>>>> feature/admin-full
   @HttpCode(HttpStatus.OK)
   async requestJoin(
     @Param('id') classId: string,
@@ -52,6 +70,10 @@ export class ClassesController {
   }
 
   @Post('join-by-code')
+<<<<<<< HEAD
+=======
+  @Roles(UserRole.STUDENT)
+>>>>>>> feature/admin-full
   @HttpCode(HttpStatus.OK)
   async joinByCode(
     @Body() dto: JoinByCodeDto,
@@ -61,6 +83,10 @@ export class ClassesController {
   }
 
   @Patch(':id/review-member')
+<<<<<<< HEAD
+=======
+  @Roles(UserRole.TEACHER, UserRole.ADMIN)
+>>>>>>> feature/admin-full
   @HttpCode(HttpStatus.OK)
   async reviewMember(
     @Param('id') classId: string,
@@ -77,6 +103,10 @@ export class ClassesController {
   }
 
   @Get(':id/members')
+<<<<<<< HEAD
+=======
+  @Roles(UserRole.TEACHER, UserRole.ADMIN)
+>>>>>>> feature/admin-full
   async getClassMembers(
     @Param('id') classId: string,
     @Query() query: GetMembersDto,
@@ -86,6 +116,10 @@ export class ClassesController {
   }
 
  @Get()
+<<<<<<< HEAD
+=======
+  @Roles(UserRole.TEACHER, UserRole.ADMIN)
+>>>>>>> feature/admin-full
   @HttpCode(HttpStatus.OK)
   async getMyClasses(
     @CurrentUser('userId') userId: string,

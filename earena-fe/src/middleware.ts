@@ -5,6 +5,10 @@ import { decodeJwt } from 'jose';
 const protectedRoutes = {
   student: '/student',
   teacher: '/teacher', 
+<<<<<<< HEAD
+=======
+  admin: '/admin',
+>>>>>>> feature/admin-full
 };
 
 const authRoutes = ['/login', '/register', '/forgot-password'];
@@ -18,7 +22,16 @@ export function middleware(request: NextRequest) {
     try {
       const payload = decodeJwt(token);
       const role = payload.role as string;
+<<<<<<< HEAD
       const targetRoute = role === 'STUDENT' ? protectedRoutes.student : protectedRoutes.teacher;
+=======
+      const targetRoute =
+        role === 'ADMIN'
+          ? protectedRoutes.admin
+          : role === 'STUDENT'
+            ? protectedRoutes.student
+            : protectedRoutes.teacher;
+>>>>>>> feature/admin-full
       return NextResponse.redirect(new URL(targetRoute, request.url));
     } catch (error) {
       // Token lỗi/giả mạo -> Xóa cookie và cho đi tiếp vào trang login
@@ -31,8 +44,14 @@ export function middleware(request: NextRequest) {
   // 3. Kịch bản 2: Truy cập Route Protect (student/teacher)
   const isStudentRoute = pathname.startsWith(protectedRoutes.student);
   const isTeacherRoute = pathname.startsWith(protectedRoutes.teacher);
+<<<<<<< HEAD
 
   if (isStudentRoute || isTeacherRoute) {
+=======
+  const isAdminRoute = pathname.startsWith(protectedRoutes.admin);
+
+  if (isStudentRoute || isTeacherRoute || isAdminRoute) {
+>>>>>>> feature/admin-full
     if (!token) {
       // Chưa login -> Đá về /login kèm callback URL
       const loginUrl = new URL('/login', request.url);
@@ -53,6 +72,14 @@ export function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL(protectedRoutes.student, request.url));
       }
 
+<<<<<<< HEAD
+=======
+      if (isAdminRoute && role !== 'ADMIN') {
+        const fallback = role === 'TEACHER' ? protectedRoutes.teacher : protectedRoutes.student;
+        return NextResponse.redirect(new URL(fallback, request.url));
+      }
+
+>>>>>>> feature/admin-full
     } catch (error) {
       // Token không hợp lệ -> Xóa và đá về login
       const loginUrl = new URL('/login', request.url);

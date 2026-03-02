@@ -3,6 +3,7 @@ import { Button } from "@/shared/components/ui/button";
 
 export default function LandingPage() {
   return (
+<<<<<<< HEAD
     <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 dark:bg-black p-4">
       <main className="max-w-3xl text-center space-y-8">
         
@@ -12,6 +13,16 @@ export default function LandingPage() {
           </h1>
           <p className="text-lg text-slate-600 dark:text-slate-400 max-w-xl mx-auto">
             Nền tảng tổ chức thi và kiểm tra năng lực toàn diện, bảo mật cao. 
+=======
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
+      <main className="max-w-3xl text-center space-y-8">
+        <div className="space-y-4">
+          <h1 className="text-5xl font-extrabold tracking-tight text-foreground">
+            Hệ thống thi trực tuyến <span className="text-primary">EArena</span>
+          </h1>
+          <p className="text-lg text-muted-foreground max-w-xl mx-auto">
+            Nền tảng tổ chức thi và kiểm tra năng lực toàn diện, bảo mật cao.
+>>>>>>> feature/admin-full
             Dành cho Học viên, Giáo viên và Quản trị viên.
           </p>
         </div>
@@ -28,8 +39,15 @@ export default function LandingPage() {
             </Button>
           </Link>
         </div>
+<<<<<<< HEAD
 
       </main>
     </div>
   );
 }
+=======
+      </main>
+    </div>
+  );
+}
+>>>>>>> feature/admin-full

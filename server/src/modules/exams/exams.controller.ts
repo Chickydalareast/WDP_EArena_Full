@@ -23,42 +23,74 @@ export class ExamsController {
   ) {}
 
   @Post('manual/init')
+<<<<<<< HEAD
   @Roles(UserRole.TEACHER) 
   @HttpCode(HttpStatus.CREATED)
   async initManualExam(
     @Body() dto: InitManualExamDto,
     @CurrentUser('id') userId: string,
+=======
+  @Roles(UserRole.TEACHER, UserRole.ADMIN) 
+  @HttpCode(HttpStatus.CREATED)
+  async initManualExam(
+    @Body() dto: InitManualExamDto,
+    @CurrentUser('userId') userId: string,
+>>>>>>> feature/admin-full
   ) {
     return this.examsService.initManualExam(userId, dto);
   }
 
   @Patch('manual/papers/:paperId/questions')
+<<<<<<< HEAD
   @Roles(UserRole.TEACHER) 
+=======
+  @Roles(UserRole.TEACHER, UserRole.ADMIN) 
+>>>>>>> feature/admin-full
   @HttpCode(HttpStatus.OK)
   async updatePaperQuestions(
     @Param('paperId') paperId: string,
     @Body() dto: UpdatePaperQuestionsDto,
+<<<<<<< HEAD
     @CurrentUser('id') userId: string,
+=======
+    @CurrentUser('userId') userId: string,
+>>>>>>> feature/admin-full
   ) {
     return this.examsService.updatePaperQuestions(paperId, userId, dto.action, dto.questionId);
   }
 
   @Post('assignments')
+<<<<<<< HEAD
   @Roles(UserRole.TEACHER) 
   @HttpCode(HttpStatus.CREATED)
   async assignExamToClass(
     @Body() dto: CreateExamAssignmentDto,
     @CurrentUser('id') userId: string,
+=======
+  @Roles(UserRole.TEACHER, UserRole.ADMIN) 
+  @HttpCode(HttpStatus.CREATED)
+  async assignExamToClass(
+    @Body() dto: CreateExamAssignmentDto,
+    @CurrentUser('userId') userId: string,
+>>>>>>> feature/admin-full
   ) {
     return this.examsService.assignExamToClass(userId, dto);
   }
 
   @Post('generate')
+<<<<<<< HEAD
   @Roles(UserRole.TEACHER) 
   @HttpCode(HttpStatus.CREATED)
   async generateFromMatrix(
     @Body() dto: GenerateMatrixDto,
     @CurrentUser('id') userId: string,
+=======
+  @Roles(UserRole.TEACHER, UserRole.ADMIN) 
+  @HttpCode(HttpStatus.CREATED)
+  async generateFromMatrix(
+    @Body() dto: GenerateMatrixDto,
+    @CurrentUser('userId') userId: string,
+>>>>>>> feature/admin-full
   ) {
     return this.examGeneratorService.generateFromMatrix({
       teacherId: userId,

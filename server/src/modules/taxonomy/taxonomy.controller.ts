@@ -11,7 +11,11 @@ export class TaxonomyController {
   ) {}
 
   @Get('my-subjects')
+<<<<<<< HEAD
   async getMySubjects(@CurrentUser('id') userId: string) {
+=======
+  async getMySubjects(@CurrentUser('userId') userId: string) {
+>>>>>>> feature/admin-full
     return this.subjectsService.getMySubjects(userId);
   }
 

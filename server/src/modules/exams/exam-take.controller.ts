@@ -17,7 +17,11 @@ export class ExamTakeController {
   async startExam(
     @Body('examId') examId: string,
     @Body('examPaperId') examPaperId: string,
+<<<<<<< HEAD
     @CurrentUser('id') userId: string,
+=======
+    @CurrentUser('userId') userId: string,
+>>>>>>> feature/admin-full
   ) {
     return this.examTakeService.startExam(examId, examPaperId, userId);
   }

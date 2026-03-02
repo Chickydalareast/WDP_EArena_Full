@@ -41,7 +41,12 @@ export class AuthController {
       secure: isProduction,
       sameSite: 'strict', 
       maxAge: refreshExpireDays * 24 * 60 * 60 * 1000,
+<<<<<<< HEAD
       path: '/api/auth/refresh', 
+=======
+      // IMPORTANT: Global prefix là /api/v1
+      path: '/api/v1/auth/refresh', 
+>>>>>>> feature/admin-full
     });
   }
 
@@ -50,7 +55,11 @@ export class AuthController {
     const cookieOptions = { httpOnly: true, secure: isProduction, sameSite: 'strict' as const };
     
     res.clearCookie('accessToken', { ...cookieOptions, path: '/' });
+<<<<<<< HEAD
     res.clearCookie('refreshToken', { ...cookieOptions, path: '/api/auth/refresh' });
+=======
+    res.clearCookie('refreshToken', { ...cookieOptions, path: '/api/v1/auth/refresh' });
+>>>>>>> feature/admin-full
   }
 
   @Public() 

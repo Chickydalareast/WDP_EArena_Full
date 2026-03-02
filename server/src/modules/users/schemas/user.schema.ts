@@ -15,6 +15,15 @@ export enum UserStatus {
   BANNED = 'BANNED',
 }
 
+<<<<<<< HEAD
+=======
+export enum TeacherVerificationStatus {
+  PENDING = 'PENDING',
+  VERIFIED = 'VERIFIED',
+  REJECTED = 'REJECTED',
+}
+
+>>>>>>> feature/admin-full
 export enum AuthProvider {
   LOCAL = 'LOCAL',
   GOOGLE = 'GOOGLE',
@@ -50,6 +59,22 @@ export class User {
   @Prop({ type: String, enum: UserStatus, default: UserStatus.ACTIVE, index: true })
   status: UserStatus;
 
+<<<<<<< HEAD
+=======
+  // Teacher verification (tick xanh uy tín)
+  @Prop({ type: String, enum: TeacherVerificationStatus, default: TeacherVerificationStatus.PENDING, index: true })
+  teacherVerificationStatus: TeacherVerificationStatus;
+
+  @Prop({ default: null })
+  teacherVerificationNote?: string;
+
+  @Prop({ default: null })
+  teacherVerifiedAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null })
+  teacherVerifiedBy?: Types.ObjectId;
+
+>>>>>>> feature/admin-full
   
   @Prop({ type: String, enum: AuthProvider, default: AuthProvider.LOCAL })
   authProvider: AuthProvider;

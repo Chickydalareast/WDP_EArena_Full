@@ -5,16 +5,29 @@ import { APP_GUARD } from '@nestjs/core';
 import { BullModule } from '@nestjs/bull';
 import { validationSchema } from './common/configs/env.validation';
 import { DatabaseModule } from './common/database/database.module';
+<<<<<<< HEAD
 import { RedisModule } from './common/redis/redis.module'; 
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard'; 
 import { MailModule } from './modules/mail/mail.module';  
 import {MediaModule} from './modules/media/media.module'
+=======
+import { RedisModule } from './common/redis/redis.module';
+import { UsersModule } from './modules/users/users.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { MailModule } from './modules/mail/mail.module';
+import {MediaModule} from './modules/media/media.module';
+>>>>>>> feature/admin-full
 import { TaxonomyModule } from './modules/taxonomy/taxonomy.module';
 import { QuestionsModule } from './modules/questions/questions.module';
 import { ClassesModule } from './modules/classes/classes.module';
 import { ExamsModule } from './modules/exams/exams.module';
+<<<<<<< HEAD
+=======
+import { AdminModule } from './modules/admin/admin.module';
+>>>>>>> feature/admin-full
 
 @Module({
   imports: [
@@ -43,7 +56,12 @@ import { ExamsModule } from './modules/exams/exams.module';
     TaxonomyModule,
     QuestionsModule,
     ClassesModule,
+<<<<<<< HEAD
     ExamsModule
+=======
+    ExamsModule,
+    AdminModule
+>>>>>>> feature/admin-full
   ],
   providers: [
     {
