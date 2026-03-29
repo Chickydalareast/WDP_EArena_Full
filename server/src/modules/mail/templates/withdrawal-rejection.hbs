@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  <title>Withdrawal Rejected</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style type="text/css">
+    /* Reset styles (copy from approval) */
+    body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
+    table, td { mso-table-lspace: 0pt; mso-table-rspace: 0pt; }
+    img { -ms-interpolation-mode: bicubic; }
+    body { height: 100% !important; margin: 0 !important; padding: 0 !important; width: 100% !important; background-color: #F4F6F8; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+    
+    /* Layout styles - Centered based on image reference */
+    .main-wrapper { max-width: 600px; margin: 20px auto; padding: 20px; background-color: #ffffff; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+    .header { text-align: center; padding-bottom: 20px; }
+    .logo { max-height: 50px; }
+    
+    /* Typography - Orange for warning H1 */
+    h1 { color: #F97316; /* Orange Warning */ font-size: 24px; font-weight: 700; text-align: center; margin: 0 0 20px 0; }
+    p { color: #555555; font-size: 16px; line-height: 1.6; margin: 0 0 10px 0; }
+    
+    /* Details Box */
+    .details-box { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 20px; margin: 20px 0; text-align: left; }
+    .detail-item { font-size: 14px; color: #666666; margin-bottom: 8px; border-bottom: 1px solid #eeeeee; padding-bottom: 8px; }
+    .detail-item:last-child { margin-bottom: 0; border-bottom: none; padding-bottom: 0; }
+    .detail-label { font-weight: 600; color: #333333; display: inline-block; width: 140px; }
+    .detail-value { font-weight: 400; color: #555555; }
+    
+    /* Status Badge */
+    .status-rejected { color: #ffffff; background-color: #EF4444; /* Red error */ padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
+    
+    /* Rejection Reason Highlight - Use Pink border as accent like reference */
+    .reason-box { background-color: #fff1f2; border-left: 4px solid #E9429F; /* Pink Accent from reference */ color: #b91c1c; padding: 15px; margin: 20px 0; font-weight: 500; border-radius: 4px; }
+
+    .footer { text-align: center; font-size: 12px; color: #888888; margin-top: 30px; border-top: 1px solid #eeeeee; padding-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="main-wrapper">
+    <div class="header">
+      {{#if logoUrl}}
+        <img src="{{logoUrl}}" alt="E-Arena Logo" class="logo">
+      {{else}}
+        <span style="font-size: 20px; font-weight: bold; color: #333;">E-ARENA</span>
+      {{/if}}
+    </div>
+    
+    <h1>⚠️ Rút tiền bị từ chối</h1>
+    
+    <p>Chào <strong>{{fullName}}</strong>,</p>
+    
+    <p>Yêu cầu rút tiền của bạn đã được Admin Financial đối soát và **TỪ CHỐI** xuất bản lệnh chuyển khoản.</p>
+
+    <div class="reason-box">
+      <strong>Lý do từ chối:</strong><br>
+      {{rejectionReason}}
+    </div>
+
+    <div class="details-box">
+      <div class="detail-item"><span class="detail-label">Mã giao dịch:</span> <span class="detail-value">{{transactionId}}</span></div>
+      <div class="detail-item"><span class="detail-label">Số tiền:</span> <span class="detail-value" style="font-weight: bold; font-size: 18px;">{{amountFormatted}}</span></div>
+      <div class="detail-item"><span class="detail-label">Trạng thái:</span> <span class="status-rejected">Bị từ chối</span></div>
+    </div>
+    
+    <p>Số tiền đã khóa ({{amountFormatted}}) **đã được hoàn trả ngay lập tức** vào ví E-ARENA Coin của bạn. Vui lòng kiểm tra lại số dư ví và tạo lại yêu cầu rút tiền mới nếu cần.</p>
+    
+    <p style="margin-top: 20px; font-size: 14px; color: #777;">Trân trọng,<br>Đội ngũ E-ARENA Financial.</p>
+    
+    <div class="footer">
+      <p>&copy; {{year}} E-ARENA Platform. All rights reserved.</p>
+      <p>Danang, Vietnam | Hỗ trợ: support@earena.vn</p>
+    </div>
+  </div>
+</body>
+</html>
