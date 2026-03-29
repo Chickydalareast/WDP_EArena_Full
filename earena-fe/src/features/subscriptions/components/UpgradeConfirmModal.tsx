@@ -1,0 +1,136 @@
+'use client';
+
+import React, { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { IPricingPlan, upgradeSubscriptionSchema, UpgradeSubscriptionDTO } from '../types/subscription.schema';
+import { useUpgradePlan } from '../hooks/useSubscriptions';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/shared/components/ui/dialog';
+import { Form, FormField, FormItem, FormControl, FormMessage } from '@/shared/components/ui/form';
+import { Button } from '@/shared/components/ui/button';
+import { Loader2, AlertCircle, Calendar, CreditCard } from 'lucide-react';
+import { cn } from '@/shared/lib/utils';
+
+interface UpgradeConfirmModalProps {
+    plan: IPricingPlan | null;
+    onClose: () => void;
+}
+
+export function UpgradeConfirmModal({ plan, onClose }: UpgradeConfirmModalProps) {
+    const isOpen = !!plan;
+
+    const { mutate: upgradePlan, isPending } = useUpgradePlan(() => {
+        onClose();
+    });
+
+    const form = useForm<UpgradeSubscriptionDTO>({
+        resolver: zodResolver(upgradeSubscriptionSchema),
+        defaultValues: {
+            planId: '',
+            billingCycle: 'MONTHLY',
+        },
+    });
+
+    useEffect(() => {
+        if (plan) {
+            form.reset({ planId: plan._id, billingCycle: 'MONTHLY' });
+        }
+    }, [plan, form]);
+
+    const billingCycle = form.watch('billingCycle');
+
+    if (!plan) return null;
+
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+    };
+
+    const onSubmit = (data: UpgradeSubscriptionDTO) => {
+        upgradePlan(data); // Đẩy xuống React Query Mutation
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={(open) => !open && !isPending && onClose()}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+                        <CreditCard className="w-6 h-6 text-primary" /> Xác nhận thanh toán
+                    </DialogTitle>
+                    <DialogDescription>
+                        Bạn đang chọn gói <span className="font-bold text-foreground uppercase">{plan.name}</span>. Vui lòng chọn chu kỳ thanh toán.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-2">
+                        <FormField
+                            control={form.control}
+                            name="billingCycle"
+                            render={() => (
+                                <FormItem>
+                                    <FormControl>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            {/* Lựa chọn theo Tháng */}
+                                            <div
+                                                onClick={() => !isPending && form.setValue('billingCycle', 'MONTHLY')}
+                                                className={cn(
+                                                    "cursor-pointer rounded-xl border-2 p-4 flex flex-col items-center justify-center gap-2 transition-all",
+                                                    billingCycle === 'MONTHLY'
+                                                        ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20"
+                                                        : "border-border hover:bg-slate-50 text-muted-foreground"
+                                                )}
+                                            >
+                                                <Calendar className={cn("w-6 h-6", billingCycle === 'MONTHLY' && "text-primary")} />
+                                                <div className="text-sm font-bold">Thanh toán Tháng</div>
+                                                <div className={cn("text-lg font-extrabold", billingCycle === 'MONTHLY' && "text-primary")}>
+                                                    {formatCurrency(plan.priceMonthly)}
+                                                </div>
+                                            </div>
+
+                                            {/* Lựa chọn theo Năm (Kèm Tag tiết kiệm) */}
+                                            <div
+                                                onClick={() => !isPending && form.setValue('billingCycle', 'YEARLY')}
+                                                className={cn(
+                                                    "relative cursor-pointer rounded-xl border-2 p-4 flex flex-col items-center justify-center gap-2 transition-all",
+                                                    billingCycle === 'YEARLY'
+                                                        ? "border-green-500 bg-green-50 shadow-sm ring-1 ring-green-500/20"
+                                                        : "border-border hover:bg-slate-50 text-muted-foreground"
+                                                )}
+                                            >
+                                                <div className="absolute -top-3 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                                                    TIẾT KIỆM 20%
+                                                </div>
+                                                <Calendar className={cn("w-6 h-6", billingCycle === 'YEARLY' && "text-green-600")} />
+                                                <div className="text-sm font-bold">Thanh toán Năm</div>
+                                                <div className={cn("text-lg font-extrabold", billingCycle === 'YEARLY' && "text-green-600")}>
+                                                    {formatCurrency(plan.priceYearly)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+
+                        {/* Cảnh báo UX về Proration */}
+                        <div className="bg-blue-50 border border-blue-100 text-blue-800 text-xs p-3 rounded-lg flex items-start gap-2">
+                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                            <p>Hệ thống sẽ tự động tính toán <strong>khấu trừ (nếu có)</strong> dựa trên số ngày còn lại của gói cước hiện tại. Số tiền bị trừ trong ví có thể thấp hơn mức giá hiển thị.</p>
+                        </div>
+
+                        <DialogFooter className="gap-2 sm:gap-0">
+                            <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
+                                Hủy bỏ
+                            </Button>
+                            <Button type="submit" disabled={isPending} className="font-bold min-w-[120px]">
+                                {isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                                {isPending ? 'Đang xử lý...' : 'Xác nhận thanh toán'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
+    );
+}

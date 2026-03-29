@@ -1,0 +1,217 @@
+'use client';
+
+import { useState, useMemo, useEffect } from 'react';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/shared/components/ui/dialog';
+import { useAdminCourseDetail } from '../hooks/useAdminCourses';
+import { Loader2, Play, FileText, BrainCircuit, X, AlertCircle, Eye } from 'lucide-react';
+import { VideoPlayer } from '@/shared/components/ui/video-player';
+import { Button } from '@/shared/components/ui/button';
+import { cn } from '@/shared/lib/utils';
+import dynamic from 'next/dynamic';
+
+// [CTO UPGRADE]: Import Document Viewer động giống màn hình Học Sinh
+const DocumentViewer = dynamic(
+    () => import('@/shared/components/ui/document-viewer').then((mod) => mod.DocumentViewer),
+    {
+        ssr: false,
+        loading: () => (
+            <div className="flex flex-col items-center justify-center h-full w-full gap-4 bg-slate-900/5 dark:bg-black/20">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                <p className="text-sm font-semibold text-muted-foreground">Đang khởi tạo trình xem PDF...</p>
+            </div>
+        )
+    }
+);
+
+// [CTO UPGRADE]: Xóa bỏ ZERO 'any' theo tiêu chuẩn Enterprise
+interface AttachmentData { id: string; url: string; originalName: string; size?: number; }
+interface LessonData { id: string; title: string; content?: string; examId?: string; primaryVideo?: { url: string; blurHash?: string; }; isFreePreview?: boolean; attachments?: AttachmentData[]; }
+interface SectionData { id: string; title: string; lessons: LessonData[]; }
+
+export function AdminCoursePreviewModal({ courseId, isOpen, onClose }: { courseId: string | null, isOpen: boolean, onClose: () => void }) {
+    const { data: courseDetail, isLoading } = useAdminCourseDetail(courseId);
+    const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+    const [activeAttachmentId, setActiveAttachmentId] = useState<string | null>(null); // State cho Document Viewer
+
+    const { activeLesson, curriculumTree } = useMemo(() => {
+        if (!courseDetail) return { activeLesson: null, curriculumTree: [] as SectionData[] };
+
+        const sections: SectionData[] = courseDetail.sections || [];
+        const lessonsMap = new Map<string, LessonData>();
+        
+        for (const section of sections) {
+            for (const lesson of section.lessons || []) {
+                lessonsMap.set(lesson.id, lesson);
+            }
+        }
+
+        const currentId = activeLessonId || (sections[0]?.lessons[0]?.id || null);
+        
+        return {
+            activeLesson: currentId ? lessonsMap.get(currentId) || null : null,
+            curriculumTree: sections
+        };
+    }, [courseDetail, activeLessonId]);
+
+    // Reset Document Viewer khi chuyển bài học khác
+    useEffect(() => {
+        setActiveAttachmentId(null);
+    }, [activeLessonId]);
+
+    const activeAttachment = useMemo(() => {
+        if (!activeAttachmentId || !activeLesson?.attachments) return null;
+        return activeLesson.attachments.find(a => a.id === activeAttachmentId) || null;
+    }, [activeAttachmentId, activeLesson?.attachments]);
+
+    return (
+        <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+            <DialogContent className="max-w-[95vw] sm:max-w-screen-2xl w-full h-[90vh] p-0 gap-0 overflow-hidden flex flex-row bg-background border border-border rounded-xl shadow-2xl animate-in fade-in duration-300">
+                
+                {/* [CTO FIX]: Khai báo Title Ẩn để dập tắt lỗi Accessibility của Radix UI (Screen Reader) */}
+                <DialogTitle className="sr-only">Thẩm định khóa học</DialogTitle>
+                <DialogDescription className="sr-only">Chế độ xem trước nội dung khóa học dành cho Admin</DialogDescription>
+
+                {isLoading ? (
+                    <div className="flex-1 h-full flex items-center justify-center bg-card"><Loader2 className="w-12 h-12 animate-spin text-primary" /></div>
+                ) : (
+                    <>
+                        {/* SIDEBAR LEFT */}
+                        <aside className="w-[360px] h-full shrink-0 border-r border-border bg-card/80 backdrop-blur-sm flex flex-col">
+                            <div className="px-6 py-4 border-b border-border flex items-center gap-3 bg-card shrink-0">
+                                <div className="size-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                                    <BrainCircuit className="size-5 text-primary" />
+                                </div>
+                                <h2 className="text-lg font-extrabold tracking-tight">EArena Review</h2>
+                            </div>
+
+                            <div className="flex-1 w-full overflow-y-auto scrollbar-thin">
+                                <div className="p-4 space-y-6">
+                                    {curriculumTree.length === 0 ? (
+                                        <p className="text-sm text-muted-foreground italic px-2">Khóa học trống.</p>
+                                    ) : curriculumTree.map((section, idx) => (
+                                        <div key={section.id} className="space-y-1.5">
+                                            <h4 className="text-xs font-bold uppercase text-muted-foreground px-2.5 tracking-wider">
+                                                Chương {idx + 1}: {section.title}
+                                            </h4>
+                                            {section.lessons?.map((lesson) => (
+                                                <button
+                                                    key={lesson.id}
+                                                    onClick={() => setActiveLessonId(lesson.id)}
+                                                    className={cn(
+                                                        "w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-colors text-sm font-medium",
+                                                        activeLesson?.id === lesson.id 
+                                                            ? 'bg-primary/10 text-primary border border-primary/20 shadow-inner' 
+                                                            : 'hover:bg-accent text-foreground'
+                                                    )}
+                                                >
+                                                    {lesson.examId ? <BrainCircuit className="w-4 h-4 shrink-0 text-purple-500" /> : lesson.primaryVideo ? <Play className="w-4 h-4 shrink-0 text-blue-500" /> : <FileText className="w-4 h-4 shrink-0 text-orange-500" />}
+                                                    <span className="truncate flex-1">{lesson.title}</span>
+                                                    {lesson.isFreePreview && <span className="text-[10px] font-bold bg-green-500/10 text-green-600 px-1.5 py-0.5 rounded">Free</span>}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </aside>
+
+                        {/* MAIN CONTENT AREA RIGHT */}
+                        <main className="flex-1 h-full flex flex-col relative bg-muted/20">
+                            {/* Dùng h2 cho tiêu đề hiển thị thật, Radix chỉ bắt DialogTitle ở DOM ảo */}
+                            <header className="px-8 py-3.5 border-b border-border bg-card/80 backdrop-blur-sm flex items-center justify-between gap-6 shrink-0 z-10 sticky top-0">
+                                <div>
+                                    <h2 className="text-xl font-bold tracking-tight text-foreground line-clamp-1">{courseDetail?.title}</h2>
+                                    <p className="text-xs text-muted-foreground mt-0.5">Admin Preview Mode - Bỏ qua các ràng buộc khóa học</p>
+                                </div>
+                                <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full size-9 shrink-0"><X className="size-5" /></Button>
+                            </header>
+
+                            {curriculumTree.length === 0 ? (
+                                <div className="flex-1 h-full flex flex-col items-center justify-center gap-4 text-center bg-card p-12">
+                                    <AlertCircle className="w-16 h-16 text-muted-foreground/50" />
+                                    <h3 className="text-xl font-semibold text-muted-foreground">Khóa học này chưa có nội dung bài học.</h3>
+                                    <p className="text-sm text-muted-foreground max-w-sm mt-1">Giáo viên cần bổ sung ít nhất một chương học và một bài học trước khi gửi yêu cầu kiểm duyệt.</p>
+                                </div>
+                            ) : activeLesson ? (
+                                <div className="flex-1 w-full h-full overflow-y-auto scrollbar-thin pb-12">
+                                    <div className="w-full flex flex-col">
+                                        {(activeLesson.primaryVideo?.url || activeLesson.examId) && (
+                                            <div className="w-full bg-slate-950 dark:bg-black p-8 flex justify-center border-b border-border/50">
+                                                {activeLesson.primaryVideo?.url ? (
+                                                   <div className="w-full max-w-5xl mx-auto aspect-video rounded-xl overflow-hidden shadow-2xl border border-white/5">
+                                                     <VideoPlayer src={activeLesson.primaryVideo.url} />
+                                                   </div>
+                                                ) : (
+                                                   <div className="p-16 border-2 border-dashed border-primary/50 bg-primary/5 rounded-2xl text-center max-w-2xl w-full mx-auto">
+                                                     <BrainCircuit className="w-16 h-16 text-primary mx-auto mb-5" />
+                                                     <h3 className="font-bold text-xl">Bài thi trắc nghiệm (ID: {activeLesson.examId})</h3>
+                                                     <p className="text-sm text-muted-foreground mt-3 max-w-sm mx-auto">Nội dung đề thi được quản lý trong Ngân hàng đề, không thẩm định tại đây.</p>
+                                                   </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        <div className="p-10 max-w-5xl mx-auto w-full space-y-10">
+                                            <h2 className="text-4xl font-extrabold text-foreground tracking-tighter line-clamp-2">{activeLesson.title}</h2>
+                                            
+                                            {activeLesson.content && activeLesson.content !== '<p></p>' && (
+                                               <article className="prose prose-base dark:prose-invert prose-orange max-w-none bg-card p-8 rounded-2xl border border-border shadow-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: activeLesson.content }} />
+                                            )}
+
+                                            {/* [CTO UPGRADE]: Nâng cấp Khối File Đính kèm + Khung xem PDF */}
+                                            {activeLesson.attachments && activeLesson.attachments.length > 0 && (
+                                                <div className="pt-8 border-t border-border">
+                                                    <h3 className="font-bold text-xl mb-6 flex items-center gap-3 text-foreground"><FileText className="size-6 text-orange-500"/> Tài liệu đính kèm</h3>
+                                                    
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                                        {activeLesson.attachments.map((file) => (
+                                                            <button
+                                                                key={file.id}
+                                                                onClick={() => setActiveAttachmentId(file.id)}
+                                                                className={cn(
+                                                                    "p-4 border bg-card rounded-xl flex items-center gap-4 transition-all shadow-sm text-left outline-none",
+                                                                    activeAttachmentId === file.id 
+                                                                        ? "border-primary bg-primary/5 ring-2 ring-primary/20" 
+                                                                        : "border-border hover:bg-muted hover:border-primary/30"
+                                                                )}
+                                                            >
+                                                                <div className="p-2 rounded-lg bg-orange-500/10"><FileText className="size-6 text-orange-400 shrink-0" /></div>
+                                                                <span className="font-medium text-sm truncate flex-1" title={file.originalName}>{file.originalName}</span>
+                                                                <Eye className="size-4 text-muted-foreground shrink-0"/>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+
+                                                    {/* Khung Document Viewer Nội tuyến */}
+                                                    {activeAttachment && activeAttachment.url && (
+                                                        <div className="rounded-2xl border border-border bg-card shadow-lg overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500 ring-1 ring-primary/20">
+                                                            <div className="flex items-center justify-between p-3 px-4 bg-muted/40 border-b border-border">
+                                                                <span className="font-semibold text-sm text-foreground flex items-center gap-2 truncate pr-4">
+                                                                    <Eye className="w-4 h-4 text-primary shrink-0" /> Đang xem: <span className="truncate">{activeAttachment.originalName}</span>
+                                                                </span>
+                                                                <Button variant="ghost" size="sm" onClick={() => setActiveAttachmentId(null)} className="shrink-0 h-8 gap-1.5 text-muted-foreground hover:text-foreground">
+                                                                    <X className="w-4 h-4" /> Đóng file
+                                                                </Button>
+                                                            </div>
+                                                            <div className="h-[75vh] w-full bg-slate-900/5 dark:bg-black/20">
+                                                                <DocumentViewer
+                                                                    url={activeAttachment.url}
+                                                                    originalName={activeAttachment.originalName}
+                                                                    className="border-none rounded-none shadow-none h-full"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
+                        </main>
+                    </>
+                )}
+            </DialogContent>
+        </Dialog>
+    );
+}
