@@ -17,6 +17,7 @@ export interface PopulatedSubQuestion {
     _id: string;
     originalQuestionId: string;
     content: string;
+    explanation?: string; // [FIX] Đã bổ sung chuẩn Data Contract
     difficultyLevel?: 'NB' | 'TH' | 'VD' | 'VDC' | 'UNKNOWN';
     attachedMedia?: PopulatedMedia[];
     answers?: PopulatedAnswer[];
@@ -27,6 +28,10 @@ export interface PopulatedQuestion {
     originalQuestionId: string;
     type: 'MULTIPLE_CHOICE' | 'PASSAGE';
     content: string;
+    explanation?: string; // [FIX] Đã bổ sung
+    topicId?: string;     // [FIX CORE BUG] Đã bổ sung để không rơi rụng Data
+    tags?: string[];      // [FIX] Đã bổ sung
+    isDraft?: boolean;    // [FIX] Đã bổ sung để map đúng trạng thái xuất bản
     difficultyLevel?: 'NB' | 'TH' | 'VD' | 'VDC' | 'UNKNOWN';
     attachedMedia?: PopulatedMedia[];
     answers?: PopulatedAnswer[];
@@ -65,7 +70,7 @@ const mapAnswersWithKeys = (
     return answers.map((ans) => ({
         id: ans.id,
         content: ans.content,
-        isCorrect: !!ans.isCorrect,
+        isCorrect: !!ans.isCorrect, // Chống undefined crash boolean
     }));
 };
 
@@ -79,10 +84,15 @@ export const hydrateQuestionForEdit = (
     answerKeys?: AnswerKey[]
 ): EditQuestionFormDTO => {
 
+    // [BẢN VÁ QUAN TRỌNG]: Map toàn bộ các trường ẩn/siêu dữ liệu
     const baseDTO: Partial<EditQuestionFormDTO> = {
         _id: question._id,
         type: question.type,
         content: question.content || '',
+        explanation: question.explanation || '',
+        topicId: question.topicId || undefined, // undefined an toàn hơn string rỗng cho Zod optional
+        tags: question.tags || [],
+        isDraft: question.isDraft ?? true, // Nullish Coalescing để không đè mất state false
         difficultyLevel: question.difficultyLevel || 'UNKNOWN',
         attachedMedia: extractMediaIds(question.attachedMedia),
     };
@@ -91,6 +101,7 @@ export const hydrateQuestionForEdit = (
         const subQuestionsDTO: EditSubQuestionDTO[] = (question.subQuestions || []).map((subQ) => ({
             _id: subQ._id,
             content: subQ.content || '',
+            explanation: subQ.explanation || '',
             difficultyLevel: subQ.difficultyLevel || 'UNKNOWN',
             attachedMedia: extractMediaIds(subQ.attachedMedia),
             answers: mapAnswersWithKeys(subQ.answers, subQ._id || subQ.originalQuestionId, answerKeys),

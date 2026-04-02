@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { QuestionsService } from './questions.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -19,12 +19,15 @@ import { BulkDeleteQuestionDto } from './dto/bulk-delete-question.dto';
 import { SuggestFolderDto } from './dto/suggest-folder.dto';
 import { OrganizeQuestionsDto } from './dto/organize-questions.dto';
 import { AutoTagQuestionsDto } from './dto/auto-tag-questions.dto';
+import { ActiveFiltersDto } from './dto/active-filters.dto';
+import { BulkPublishQuestionPayload, GetActiveFiltersPayload } from './interfaces/question.interface';
+import { BulkPublishQuestionDto } from './dto/bulk-publish-question.dto';
 
 @Controller('questions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.TEACHER, UserRole.ADMIN)
 export class QuestionsController {
-  constructor(private readonly questionsService: QuestionsService) {}
+  constructor(private readonly questionsService: QuestionsService) { }
 
 
   @Get()
@@ -32,9 +35,10 @@ export class QuestionsController {
     return this.questionsService.getQuestionsPaginated(userId, {
       page: query.page || 1,
       limit: query.limit || 10,
-      folderId: query.folderId,
-      topicId: query.topicId,
+      folderIds: query.folderIds,
+      topicIds: query.topicIds,
       difficultyLevels: query.difficultyLevels,
+      tags: query.tags,
       search: query.search,
       isDraft: query.isDraft,
     });
@@ -108,6 +112,19 @@ export class QuestionsController {
     });
   }
 
+  
+  @Patch('bulk-publish')
+  @HttpCode(HttpStatus.OK)
+  async bulkPublishQuestions(
+    @CurrentUser('userId') userId: string, 
+    @Body() dto: BulkPublishQuestionDto
+  ) {
+    const payload: BulkPublishQuestionPayload = {
+      questionIds: dto.questionIds,
+    };
+    return this.questionsService.bulkPublishQuestions(userId, payload);
+  }
+
   @Patch(':id')
   async updateQuestion(@Param('id') id: string, @CurrentUser('userId') userId: string, @Body() dto: UpdateQuestionDto) {
     return this.questionsService.updateQuestion(id, userId, {
@@ -152,7 +169,7 @@ export class QuestionsController {
 
   @Post('organize/preview')
   async previewOrganizeQuestions(
-    @CurrentUser('userId') userId: string, 
+    @CurrentUser('userId') userId: string,
     @Body() dto: OrganizeQuestionsDto
   ) {
     return this.questionsService.previewOrganize(userId, {
@@ -164,7 +181,7 @@ export class QuestionsController {
 
   @Post('organize/execute')
   async executeOrganizeQuestions(
-    @CurrentUser('userId') userId: string, 
+    @CurrentUser('userId') userId: string,
     @Body() dto: OrganizeQuestionsDto
   ) {
     return this.questionsService.executeOrganize(userId, {
@@ -176,11 +193,48 @@ export class QuestionsController {
 
   @Post('bulk-auto-tag')
   async bulkAutoTagQuestions(
-    @CurrentUser('userId') userId: string, 
+    @CurrentUser('userId') userId: string,
     @Body() dto: AutoTagQuestionsDto
   ) {
     return this.questionsService.dispatchAutoTagJob(userId, {
       questionIds: dto.questionIds,
     });
   }
+
+  // @Post('active-filters/query')
+  // @HttpCode(HttpStatus.OK)
+  // async getActiveFilters(
+  //   @CurrentUser('userId') userId: string,
+  //   @Body() dto: ActiveFiltersDto
+  // ) {
+  //   return this.questionsService.getActiveFilters(userId, {
+  //     folderIds: dto.folderIds,
+  //     topicIds: dto.topicIds,
+  //     difficulties: dto.difficulties,
+  //     tags: dto.tags
+  //   });
+  // }
+
+  @Post('active-filters')
+  @HttpCode(HttpStatus.OK)
+  async getActiveFilters(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: ActiveFiltersDto,
+  ) {
+    const payload: GetActiveFiltersPayload = {
+      folderIds: dto.folderIds,
+      topicIds: dto.topicIds,
+      difficulties: dto.difficulties,
+      tags: dto.tags,
+      isDraft: dto.isDraft
+    };
+
+    const data = await this.questionsService.getActiveFilters(userId, payload);
+
+    return {
+      message: 'Lấy bộ lọc động thành công.',
+      data
+    };
+  }
+
 }

@@ -3,10 +3,25 @@
 import { useRef, useState } from 'react';
 import { useAuthStore } from '@/features/auth/stores/auth.store';
 import { useUpdateProfile } from '../hooks/useUpdateProfile';
-import { Camera, MapPin, Loader2 } from 'lucide-react';
+import { Camera, MapPin, Loader2, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import PersonalInfoSection from './sections/PersonalInfoSection';
 import SecuritySection from './sections/SecuritySection'; 
+
+const ROLE_MAP: Record<string, { label: string, className: string }> = {
+  STUDENT: { 
+    label: 'Học sinh', 
+    className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' 
+  },
+  TEACHER: { 
+    label: 'Giảng viên', 
+    className: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-400' 
+  },
+  ADMIN: { 
+    label: 'Quản trị viên', 
+    className: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-400' 
+  },
+};
 
 export default function ProfileLayout() {
   const user = useAuthStore((state) => state.user);
@@ -37,7 +52,6 @@ export default function ProfileLayout() {
           toast.success('Cập nhật ảnh đại diện thành công');
         },
         onError: () => {
-          // Upload lỗi thì trả về ảnh cũ
           setPreviewUrl(null);
           if (fileInputRef.current) fileInputRef.current.value = '';
         }
@@ -46,14 +60,15 @@ export default function ProfileLayout() {
   };
 
   const displayAvatar = previewUrl || user.avatar;
+  const roleDisplay = ROLE_MAP[user.role] || ROLE_MAP.STUDENT;
 
   return (
     <div className="max-w-4xl mx-auto flex flex-col gap-8 py-8 px-4 sm:px-6 animate-in fade-in duration-500">
       <section className="bg-white dark:bg-slate-800 rounded-xl p-6 lg:p-8 shadow-sm border border-primary/5">
-        <div className="flex flex-col md:flex-row items-center gap-6">
+        <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
           
           <div 
-            className="relative group cursor-pointer"
+            className="relative group cursor-pointer shrink-0"
             onClick={() => !isUploading && fileInputRef.current?.click()}
           >
             <input 
@@ -81,21 +96,36 @@ export default function ProfileLayout() {
             </div>
           </div>
           
-          <div className="flex flex-col items-center md:items-start text-center md:text-left">
+          <div className="flex flex-col items-center md:items-start text-center md:text-left pt-2">
             <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
               {user.fullName || 'Người dùng hệ thống'}
             </h2>
-            <div className="flex gap-2 mt-2">
-              <span className="bg-primary/10 text-primary text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
-                Học sinh
+            
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mt-3">
+              <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${roleDisplay.className}`}>
+                {roleDisplay.label}
               </span>
-              <span className="bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1">
-                <span className="size-2 bg-green-500 rounded-full animate-pulse"></span>
+
+              {user.role === 'TEACHER' && user.subjects && user.subjects.length > 0 && (
+                user.subjects.map((subject: any) => (
+                  <span 
+                    key={subject.id} 
+                    className="bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-foreground text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1 border border-primary/20"
+                  >
+                    <BookOpen size={12} />
+                    {subject.name}
+                  </span>
+                ))
+              )}
+
+              <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5">
+                <span className="size-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
                 Đang hoạt động
               </span>
             </div>
-            <p className="text-slate-500 text-sm mt-3 flex items-center gap-1">
-              <MapPin size={16} />
+
+            <p className="text-slate-500 text-sm mt-4 flex items-center justify-center md:justify-start gap-1.5 font-medium">
+              <MapPin size={16} className="text-slate-400" />
               Việt Nam
             </p>
           </div>

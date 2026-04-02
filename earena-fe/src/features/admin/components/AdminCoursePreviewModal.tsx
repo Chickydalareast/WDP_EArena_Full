@@ -9,7 +9,12 @@ import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/utils';
 import dynamic from 'next/dynamic';
 
-// [CTO UPGRADE]: Import Document Viewer động giống màn hình Học Sinh
+// --- DATA CONTRACTS TỪ MODULE EXAM BUILDER (Chỉ mượn Type, KHÔNG mượn Hook) ---
+import { PopulatedQuestion, AnswerKey, PopulatedMedia, PopulatedAnswer } from '@/features/exam-builder/lib/hydration-utils';
+
+// [CTO FIX]: Đổi import Hook mới
+import { useAdminPaperDetailByExam } from '../hooks/useAdminExams';
+
 const DocumentViewer = dynamic(
     () => import('@/shared/components/ui/document-viewer').then((mod) => mod.DocumentViewer),
     {
@@ -23,22 +28,188 @@ const DocumentViewer = dynamic(
     }
 );
 
-// [CTO UPGRADE]: Xóa bỏ ZERO 'any' theo tiêu chuẩn Enterprise
 interface AttachmentData { id: string; url: string; originalName: string; size?: number; }
-interface LessonData { id: string; title: string; content?: string; examId?: string; primaryVideo?: { url: string; blurHash?: string; }; isFreePreview?: boolean; attachments?: AttachmentData[]; }
+interface LessonData { id: string; title: string; content?: string; examId?: string; primaryVideo?: { url: string; blurHash?: string; }; isFreePreview?: boolean; attachments?: AttachmentData[]; type?: string; }
 interface SectionData { id: string; title: string; lessons: LessonData[]; }
+
+// ============================================================================
+// 1. SUB-COMPONENTS CHO CHỨC NĂNG XEM TRƯỚC ĐỀ THI (READ-ONLY)
+// ============================================================================
+
+const MediaGallery = ({ mediaList }: { mediaList?: PopulatedMedia[] }) => {
+    if (!mediaList || mediaList.length === 0) return null;
+    return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-3">
+            {mediaList.map((media) => {
+                const isImage = media.mimetype.startsWith('image/');
+                const isAudio = media.mimetype.startsWith('audio/');
+                return (
+                    <div key={media._id} className="relative group bg-muted/50 rounded-xl border border-border overflow-hidden flex flex-col justify-center p-2">
+                        {isImage && <img src={media.url} alt={media.originalName} loading="lazy" className="max-h-[160px] w-full object-contain rounded-lg mx-auto" />}
+                        {isAudio && (
+                            <div className="w-full px-3 py-2 flex flex-col items-center">
+                                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2 w-full text-left">Audio file</span>
+                                <audio src={media.url} controls className="w-full h-8 outline-none" />
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+const ReadOnlyAnswers = ({ answers, correctAnswerId }: { answers?: PopulatedAnswer[], correctAnswerId?: string }) => {
+    if (!answers || answers.length === 0) return null;
+    return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+            {answers.map((ans) => {
+                const isCorrect = ans.id === correctAnswerId;
+                return (
+                    <div key={ans.id} className={cn(
+                        "flex border rounded-xl overflow-hidden transition-all shadow-sm",
+                        isCorrect ? "bg-green-50 border-green-500" : "bg-card border-border"
+                    )}>
+                        <div className={cn(
+                            "flex items-center justify-center w-10 shrink-0 font-bold text-sm transition-colors",
+                            isCorrect ? "bg-green-500 text-white" : "bg-muted text-muted-foreground border-r border-border"
+                        )}>
+                            {ans.id}
+                        </div>
+                        <div className="flex-1 p-3 min-w-0 flex items-center">
+                            <div className={cn("text-sm w-full prose prose-sm max-w-none break-words [&>p]:m-0", isCorrect ? "text-green-900 font-bold" : "text-foreground")} dangerouslySetInnerHTML={{ __html: ans.content }} />
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+// [CTO FIX]: Ubiquitous Language - Đổi tên prop cho đúng bản chất
+const AdminQuizViewer = ({ examId }: { examId: string }) => {
+    // Gọi Hook mới
+    const { data: paperResponse, isLoading, error } = useAdminPaperDetailByExam(examId);
+
+    if (isLoading) {
+        return (
+            <div className="p-16 flex flex-col items-center justify-center bg-card border border-border rounded-2xl w-full shadow-sm">
+                <Loader2 className="animate-spin text-primary w-10 h-10 mb-4" />
+                <p className="text-muted-foreground font-medium">Đang trích xuất nội dung đề thi...</p>
+            </div>
+        );
+    }
+
+    if (error || !paperResponse) {
+        return (
+            <div className="p-10 text-center bg-destructive/5 border border-destructive/20 rounded-2xl w-full">
+                <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-3" />
+                <h3 className="font-bold text-destructive text-lg">Lỗi tải dữ liệu</h3>
+                <p className="text-destructive/80 text-sm mt-1">Không thể lấy dữ liệu đề thi từ máy chủ. Vui lòng thử lại.</p>
+            </div>
+        );
+    }
+
+    // [CTO FIX]: Ép kiểu an toàn (Safe Type Casting) thay vì dùng "as any"
+    type ExpectedPaperResponse = {
+        questions: PopulatedQuestion[];
+        answerKeys: AnswerKey[];
+    };
+
+    const responseObj = paperResponse as { data?: ExpectedPaperResponse } | ExpectedPaperResponse | null;
+    const paper = responseObj && typeof responseObj === 'object' && 'data' in responseObj 
+        ? responseObj.data 
+        : responseObj as ExpectedPaperResponse | null;
+
+    const questions: PopulatedQuestion[] = paper?.questions || [];
+    const answerKeys: AnswerKey[] = paper?.answerKeys || [];
+
+    const getCorrectAnswerId = (qId: string) => answerKeys.find(k => k.originalQuestionId === qId)?.correctAnswerId;
+
+    if (questions.length === 0) {
+        return (
+            <div className="p-16 text-center bg-card border border-border rounded-2xl w-full">
+                <BrainCircuit className="w-12 h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
+                <h3 className="font-bold text-foreground text-lg">Đề thi chưa soạn</h3>
+                <p className="text-muted-foreground text-sm mt-1">Giáo viên chưa thêm bất kỳ câu hỏi nào vào bộ đề này.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="space-y-6 w-full animate-in fade-in duration-500">
+            <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl flex items-center gap-4">
+                <div className="p-3 bg-primary/20 rounded-lg shrink-0">
+                    <BrainCircuit className="text-primary w-6 h-6" />
+                </div>
+                <div>
+                    <h3 className="font-bold text-primary text-lg tracking-tight">Thẩm định Đề thi (Chỉ đọc)</h3>
+                    <p className="text-sm text-primary/80 font-medium">Hiển thị cấu trúc câu hỏi, Media đính kèm và Đáp án đúng đã được khai báo.</p>
+                </div>
+            </div>
+
+            {questions.map((q, index) => {
+                const isPassage = q.type === 'PASSAGE';
+                const correctId = getCorrectAnswerId(q.originalQuestionId || q._id);
+
+                return (
+                    <div key={q.originalQuestionId || q._id || index} className="bg-card border border-border rounded-2xl p-5 md:p-6 shadow-sm">
+                        <div className="flex gap-4">
+                            <div className="shrink-0 w-8 h-8 bg-slate-800 text-white rounded-lg flex items-center justify-center font-bold text-sm shadow-sm mt-0.5">
+                                {index + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                {isPassage && <span className="text-[10px] font-bold uppercase text-purple-600 bg-purple-100 border border-purple-200 px-2 py-0.5 rounded inline-block mb-3 shadow-sm">Khối bài đọc</span>}
+
+                                <div className="prose prose-sm max-w-none text-foreground font-medium break-words [&>p]:m-0 leading-relaxed w-full mb-4" dangerouslySetInnerHTML={{ __html: q.content }} />
+
+                                <MediaGallery mediaList={q.attachedMedia} />
+
+                                {isPassage ? (
+                                    <div className="space-y-4 mt-6 border-l-2 border-border pl-4 md:pl-6">
+                                        {q.subQuestions?.map((subQ, subIdx) => {
+                                            const subCorrectId = getCorrectAnswerId(subQ.originalQuestionId || subQ._id);
+                                            return (
+                                                <div key={subQ.originalQuestionId || subQ._id || subIdx} className="bg-muted/30 p-4 md:p-5 rounded-xl border border-border">
+                                                    <div className="flex gap-3 md:gap-4">
+                                                        <div className="w-7 h-7 bg-muted-foreground/10 text-muted-foreground rounded-md flex items-center justify-center font-bold text-xs shrink-0">{subIdx + 1}</div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="prose prose-sm max-w-none text-foreground font-medium break-words [&>p]:m-0 leading-relaxed w-full mb-3" dangerouslySetInnerHTML={{ __html: subQ.content }} />
+                                                            <MediaGallery mediaList={subQ.attachedMedia} />
+                                                            <ReadOnlyAnswers answers={subQ.answers} correctAnswerId={subCorrectId} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                ) : (
+                                    <ReadOnlyAnswers answers={q.answers} correctAnswerId={correctId} />
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
+// ============================================================================
+// 2. MAIN MODAL EXPORT
+// ============================================================================
 
 export function AdminCoursePreviewModal({ courseId, isOpen, onClose }: { courseId: string | null, isOpen: boolean, onClose: () => void }) {
     const { data: courseDetail, isLoading } = useAdminCourseDetail(courseId);
     const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
-    const [activeAttachmentId, setActiveAttachmentId] = useState<string | null>(null); // State cho Document Viewer
+    const [activeAttachmentId, setActiveAttachmentId] = useState<string | null>(null);
 
     const { activeLesson, curriculumTree } = useMemo(() => {
         if (!courseDetail) return { activeLesson: null, curriculumTree: [] as SectionData[] };
 
         const sections: SectionData[] = courseDetail.sections || [];
         const lessonsMap = new Map<string, LessonData>();
-        
+
         for (const section of sections) {
             for (const lesson of section.lessons || []) {
                 lessonsMap.set(lesson.id, lesson);
@@ -46,14 +217,13 @@ export function AdminCoursePreviewModal({ courseId, isOpen, onClose }: { courseI
         }
 
         const currentId = activeLessonId || (sections[0]?.lessons[0]?.id || null);
-        
+
         return {
             activeLesson: currentId ? lessonsMap.get(currentId) || null : null,
             curriculumTree: sections
         };
     }, [courseDetail, activeLessonId]);
 
-    // Reset Document Viewer khi chuyển bài học khác
     useEffect(() => {
         setActiveAttachmentId(null);
     }, [activeLessonId]);
@@ -66,8 +236,6 @@ export function AdminCoursePreviewModal({ courseId, isOpen, onClose }: { courseI
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DialogContent className="max-w-[95vw] sm:max-w-screen-2xl w-full h-[90vh] p-0 gap-0 overflow-hidden flex flex-row bg-background border border-border rounded-xl shadow-2xl animate-in fade-in duration-300">
-                
-                {/* [CTO FIX]: Khai báo Title Ẩn để dập tắt lỗi Accessibility của Radix UI (Screen Reader) */}
                 <DialogTitle className="sr-only">Thẩm định khóa học</DialogTitle>
                 <DialogDescription className="sr-only">Chế độ xem trước nội dung khóa học dành cho Admin</DialogDescription>
 
@@ -99,8 +267,8 @@ export function AdminCoursePreviewModal({ courseId, isOpen, onClose }: { courseI
                                                     onClick={() => setActiveLessonId(lesson.id)}
                                                     className={cn(
                                                         "w-full flex items-center gap-3 p-2.5 rounded-lg text-left transition-colors text-sm font-medium",
-                                                        activeLesson?.id === lesson.id 
-                                                            ? 'bg-primary/10 text-primary border border-primary/20 shadow-inner' 
+                                                        activeLesson?.id === lesson.id
+                                                            ? 'bg-primary/10 text-primary border border-primary/20 shadow-inner'
                                                             : 'hover:bg-accent text-foreground'
                                                     )}
                                                 >
@@ -117,7 +285,6 @@ export function AdminCoursePreviewModal({ courseId, isOpen, onClose }: { courseI
 
                         {/* MAIN CONTENT AREA RIGHT */}
                         <main className="flex-1 h-full flex flex-col relative bg-muted/20">
-                            {/* Dùng h2 cho tiêu đề hiển thị thật, Radix chỉ bắt DialogTitle ở DOM ảo */}
                             <header className="px-8 py-3.5 border-b border-border bg-card/80 backdrop-blur-sm flex items-center justify-between gap-6 shrink-0 z-10 sticky top-0">
                                 <div>
                                     <h2 className="text-xl font-bold tracking-tight text-foreground line-clamp-1">{courseDetail?.title}</h2>
@@ -135,34 +302,35 @@ export function AdminCoursePreviewModal({ courseId, isOpen, onClose }: { courseI
                             ) : activeLesson ? (
                                 <div className="flex-1 w-full h-full overflow-y-auto scrollbar-thin pb-12">
                                     <div className="w-full flex flex-col">
-                                        {(activeLesson.primaryVideo?.url || activeLesson.examId) && (
+
+                                        {/* KHỐI RENDER VIDEO PLAYER NỀN ĐEN */}
+                                        {activeLesson.primaryVideo?.url && (
                                             <div className="w-full bg-slate-950 dark:bg-black p-8 flex justify-center border-b border-border/50">
-                                                {activeLesson.primaryVideo?.url ? (
-                                                   <div className="w-full max-w-5xl mx-auto aspect-video rounded-xl overflow-hidden shadow-2xl border border-white/5">
-                                                     <VideoPlayer src={activeLesson.primaryVideo.url} />
-                                                   </div>
-                                                ) : (
-                                                   <div className="p-16 border-2 border-dashed border-primary/50 bg-primary/5 rounded-2xl text-center max-w-2xl w-full mx-auto">
-                                                     <BrainCircuit className="w-16 h-16 text-primary mx-auto mb-5" />
-                                                     <h3 className="font-bold text-xl">Bài thi trắc nghiệm (ID: {activeLesson.examId})</h3>
-                                                     <p className="text-sm text-muted-foreground mt-3 max-w-sm mx-auto">Nội dung đề thi được quản lý trong Ngân hàng đề, không thẩm định tại đây.</p>
-                                                   </div>
-                                                )}
+                                                <div className="w-full max-w-5xl mx-auto aspect-video rounded-xl overflow-hidden shadow-2xl border border-white/5">
+                                                    <VideoPlayer src={activeLesson.primaryVideo.url} />
+                                                </div>
                                             </div>
                                         )}
 
                                         <div className="p-10 max-w-5xl mx-auto w-full space-y-10">
                                             <h2 className="text-4xl font-extrabold text-foreground tracking-tighter line-clamp-2">{activeLesson.title}</h2>
-                                            
+
                                             {activeLesson.content && activeLesson.content !== '<p></p>' && (
-                                               <article className="prose prose-base dark:prose-invert prose-orange max-w-none bg-card p-8 rounded-2xl border border-border shadow-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: activeLesson.content }} />
+                                                <article className="prose prose-base dark:prose-invert prose-orange max-w-none bg-card p-8 rounded-2xl border border-border shadow-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: activeLesson.content }} />
                                             )}
 
-                                            {/* [CTO UPGRADE]: Nâng cấp Khối File Đính kèm + Khung xem PDF */}
+                                            {/* [CTO FIX]: Truyền đúng prop examId */}
+                                            {activeLesson.examId && (
+                                                <div className="pt-4 border-t border-border">
+                                                    <AdminQuizViewer examId={activeLesson.examId} />
+                                                </div>
+                                            )}
+
+                                            {/* KHỐI TÀI LIỆU ĐÍNH KÈM */}
                                             {activeLesson.attachments && activeLesson.attachments.length > 0 && (
                                                 <div className="pt-8 border-t border-border">
-                                                    <h3 className="font-bold text-xl mb-6 flex items-center gap-3 text-foreground"><FileText className="size-6 text-orange-500"/> Tài liệu đính kèm</h3>
-                                                    
+                                                    <h3 className="font-bold text-xl mb-6 flex items-center gap-3 text-foreground"><FileText className="size-6 text-orange-500" /> Tài liệu đính kèm</h3>
+
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                                                         {activeLesson.attachments.map((file) => (
                                                             <button
@@ -170,19 +338,18 @@ export function AdminCoursePreviewModal({ courseId, isOpen, onClose }: { courseI
                                                                 onClick={() => setActiveAttachmentId(file.id)}
                                                                 className={cn(
                                                                     "p-4 border bg-card rounded-xl flex items-center gap-4 transition-all shadow-sm text-left outline-none",
-                                                                    activeAttachmentId === file.id 
-                                                                        ? "border-primary bg-primary/5 ring-2 ring-primary/20" 
+                                                                    activeAttachmentId === file.id
+                                                                        ? "border-primary bg-primary/5 ring-2 ring-primary/20"
                                                                         : "border-border hover:bg-muted hover:border-primary/30"
                                                                 )}
                                                             >
                                                                 <div className="p-2 rounded-lg bg-orange-500/10"><FileText className="size-6 text-orange-400 shrink-0" /></div>
                                                                 <span className="font-medium text-sm truncate flex-1" title={file.originalName}>{file.originalName}</span>
-                                                                <Eye className="size-4 text-muted-foreground shrink-0"/>
+                                                                <Eye className="size-4 text-muted-foreground shrink-0" />
                                                             </button>
                                                         ))}
                                                     </div>
 
-                                                    {/* Khung Document Viewer Nội tuyến */}
                                                     {activeAttachment && activeAttachment.url && (
                                                         <div className="rounded-2xl border border-border bg-card shadow-lg overflow-hidden animate-in fade-in slide-in-from-top-4 duration-500 ring-1 ring-primary/20">
                                                             <div className="flex items-center justify-between p-3 px-4 bg-muted/40 border-b border-border">

@@ -29,11 +29,12 @@ export type BulkMoveQuestionsDTO = z.infer<typeof BulkMoveQuestionsSchema>;
 export interface FetchBankQuestionsParams {
   page?: number;
   limit?: number;
-  folderId?: string;
+  folderIds?: string[];
+  topicIds?: string[];
+  difficultyLevels?: ('NB' | 'TH' | 'VD' | 'VDC' | 'UNKNOWN')[];
+  tags?: string[];
   search?: string;
   isDraft?: boolean;
-  topicId?: string;
-  difficultyLevels?: string | string[];
 }
 
 export interface BankQuestionsResponse {
@@ -173,4 +174,14 @@ export interface IAiBatchCompletedEvent {
   batchNum: number;
   totalBatches: number;
   processedQuestions: IAiProcessedQuestion[];
+}
+
+export const BulkPublishQuestionsSchema = z.object({
+  questionIds: z.array(z.string()).min(1, 'Phải chọn ít nhất 1 câu hỏi để xuất bản'),
+});
+
+export type BulkPublishQuestionsDTO = z.infer<typeof BulkPublishQuestionsSchema>;
+
+export interface BulkPublishResponse {
+  publishedCount: number;
 }

@@ -50,7 +50,7 @@ export class CourseReaderService {
     private readonly redisService: RedisService,
     private readonly mediaService: MediaService,
     private readonly reviewsRepo: CourseReviewsRepository,
-    private readonly lessonProgressRepo: LessonProgressRepository, // [CẬP NHẬT]: Inject Repo
+    private readonly lessonProgressRepo: LessonProgressRepository,
   ) { }
 
   async searchPublicCourses(payload: SearchPublicCoursesPayload) {
@@ -163,15 +163,12 @@ export class CourseReaderService {
     const isTeacher = course.teacherId.toString() === payload.userId;
 
     let enrollment = null;
-    let myReview = null; // [ENTERPRISE FIX]: Khởi tạo state review mặc định là null
+    let myReview = null;
 
     if (!isTeacher) {
-      // 1. Kiểm tra quyền truy cập (Enrollment)
       enrollment = await this.enrollmentsRepo.findUserEnrollment(payload.userId, payload.courseId);
       if (!enrollment) throw new ForbiddenException('Bạn chưa ghi danh khóa học này.');
 
-      // 2. [ENTERPRISE FIX]: Lấy bài đánh giá của user hiện tại (nếu có)
-      // Dùng findOneSafe kết hợp select cực chặt để tối ưu RAM
       const reviewDoc = await this.reviewsRepo.findOneSafe({
         courseId: new Types.ObjectId(payload.courseId),
         userId: new Types.ObjectId(payload.userId)
@@ -248,16 +245,10 @@ export class CourseReaderService {
 
     if (!hasAccess) throw new ForbiddenException('Vui lòng ghi danh khóa học để xem nội dung này.');
 
-    // ==========================================
-    // [ENTERPRISE UPGRADE]: PROGRESSION GUARD
-    // ==========================================
-    // 1. Lấy thông tin Mode của Course (Lấy thêm teacherId để check quyền admin khóa học)
     const courseInfo = await this.coursesRepo.findByIdSafe(payload.courseId, { select: 'progressionMode teacherId' });
     const mode = courseInfo?.progressionMode || 'FREE';
 
-    // 2. Nếu là STRICT_LINEAR và không phải Teacher đang test
     if (mode === 'STRICT_LINEAR' && courseInfo?.teacherId?.toString() !== payload.userId) {
-      // Populate thêm để lấy thông tin order (Cập nhật truy vấn lesson cũ của bạn)
       const currentLesson = await this.lessonsRepo.findByIdSafe(payload.lessonId, {
         populate: [{ path: 'sectionId', select: 'order' }]
       });
@@ -286,11 +277,29 @@ export class CourseReaderService {
     const primaryVideo = lesson.primaryVideoId as any;
     const attachments = (lesson.attachments || []) as any[];
 
+    let progressData = null;
+    if (payload.userId) {
+      const history = await this.lessonProgressRepo.findOneSafe({
+        userId: new Types.ObjectId(payload.userId),
+        lessonId: new Types.ObjectId(payload.lessonId)
+      }, { select: 'watchTime lastPosition isCompleted' });
+
+      if (history) {
+        progressData = {
+          watchTime: history.watchTime,
+          lastPosition: history.lastPosition,
+          isCompleted: history.isCompleted
+        };
+      }
+    }
+
     return {
       id: (lesson._id as Types.ObjectId).toString(),
       title: lesson.title,
       content: lesson.content || null,
       examId: lesson.examId ? lesson.examId.toString() : null,
+      
+      progress: progressData, 
 
       primaryVideo: primaryVideo ? {
         id: primaryVideo._id.toString(),

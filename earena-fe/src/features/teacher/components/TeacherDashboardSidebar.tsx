@@ -4,14 +4,14 @@ import { FolderOpen, FileEdit, BarChart2 } from 'lucide-react';
 
 const MENU_ITEMS = [
   {
-    href: '/teacher/questions', // Chuẩn bị cho Phase sau
+    href: '/teacher/questions',
     icon: FolderOpen,
     title: 'Ngân hàng câu hỏi',
     subtitle: 'Quản lý thư mục, Import',
     colorClass: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
   },
   {
-    href: '/teacher/exams', // ĐÂY LÀ ENTRY POINT CHO PHASE 5
+    href: '/teacher/exams',
     icon: FileEdit,
     title: 'Kho Đề Thi',
     subtitle: 'Quản lý, Soạn đề & Ma trận',
@@ -53,7 +53,6 @@ export function TeacherDashboardSidebar() {
         </div>
       </div>
 
-      {/* Khối 2: Hoạt động gần đây (Mock data tĩnh chờ API) */}
       <div className="bg-card rounded-xl shadow-sm border border-border p-5 flex-1">
         <div className="flex justify-between items-center mb-5">
           <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">

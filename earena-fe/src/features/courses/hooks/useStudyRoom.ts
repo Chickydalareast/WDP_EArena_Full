@@ -1,4 +1,3 @@
-// Giữ nguyên các phần import và useStudyTree, useLessonContent ở trên...
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { courseService } from '../api/course.service';
 import { courseQueryKeys } from '../api/course-keys';
@@ -39,17 +38,29 @@ export const useMarkLessonCompleted = (courseId: string) => {
       const previousTree = queryClient.getQueryData<StudyTreeResponse>(treeKey);
       
       if (previousTree) {
-        queryClient.setQueryData<StudyTreeResponse>(treeKey, {
-          ...previousTree,
-          curriculum: {
-            ...previousTree.curriculum,
-            sections: previousTree.curriculum.sections.map(section => ({
-              ...section,
-              lessons: section.lessons.map(lesson => 
-                lesson.id === lessonId ? { ...lesson, isCompleted: true } : lesson
-              )
-            }))
-          }
+        queryClient.setQueryData<StudyTreeResponse>(treeKey, (oldData) => {
+          if (!oldData) return oldData;
+
+          const newSections = oldData.curriculum.sections.map(section => ({
+            ...section,
+            lessons: section.lessons.map(lesson => 
+              lesson.id === lessonId ? { ...lesson, isCompleted: true } : lesson
+            )
+          }));
+
+          const allLessons = newSections.flatMap(s => s.lessons);
+          const totalLessons = allLessons.length;
+          const completedLessons = allLessons.filter(l => l.isCompleted).length;
+          const newProgress = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
+
+          return {
+            ...oldData,
+            progress: newProgress,
+            curriculum: {
+              ...oldData.curriculum,
+              sections: newSections
+            }
+          };
         });
       }
       return { previousTree };

@@ -18,7 +18,12 @@ import { UsersRepository } from '../users/users.repository';
 import { MediaRepository } from '../media/media.repository';
 import { MediaStatus } from '../media/schemas/media.schema';
 import { CourseValidatorService } from './services/course-validator.service';
-import { CourseEventPattern, CourseSubmittedEventPayload } from './constants/course-event.constant';
+import { CourseDeactivatedEventPayload, CourseEventPattern, CourseSubmittedEventPayload } from './constants/course-event.constant';
+import { EnrollmentsRepository } from './repositories/enrollments.repository';
+import { EnrollmentStatus } from './schemas/enrollment.schema';
+
+import { CourseReviewsRepository } from './repositories/course-reviews.repository';
+import { WalletTransactionsRepository } from '../wallets/wallet-transactions.repository';
 
 export type CreateCoursePayload = {
   title: string;
@@ -57,7 +62,10 @@ export class CoursesService {
     private readonly usersRepo: UsersRepository,
     private readonly mediaRepo: MediaRepository,
     private readonly validatorService: CourseValidatorService,
-    private readonly eventEmitter: EventEmitter2, // <-- Khai báo DI
+    private readonly eventEmitter: EventEmitter2,
+    private readonly enrollmentsRepo: EnrollmentsRepository,
+    private readonly courseReviewsRepo: CourseReviewsRepository,
+    private readonly walletTransactionsRepo: WalletTransactionsRepository
   ) { }
 
   private generateSlug(title: string): string {
@@ -189,7 +197,10 @@ export class CoursesService {
 
     if (!Types.ObjectId.isValid(courseId)) throw new BadRequestException('ID khóa học không hợp lệ.');
 
-    const course = await this.coursesRepo.findByIdSafe(courseId, { select: 'teacherId slug status' });
+    const course = await this.coursesRepo.findByIdSafe(courseId, {
+      select: 'teacherId slug status title progressionMode isStrictExam'
+    });
+
     if (!course) throw new NotFoundException('Khóa học không tồn tại.');
     if (course.teacherId.toString() !== teacherId) throw new ForbiddenException('Bạn không có quyền sửa khóa học này.');
 
@@ -197,11 +208,26 @@ export class CoursesService {
       throw new ForbiddenException('Khóa học đang trong quá trình xét duyệt, bạn không thể chỉnh sửa nội dung lúc này.');
     }
 
-    const mediaToVerify = [updateData.coverImageId, updateData.promotionalVideoId];
-    // Giả định hàm verifyMediaOwnershipStrict đã được định nghĩa ở trên
-    await this.verifyMediaOwnershipStrict(mediaToVerify, teacherId);
+    const isChangingProgression = updateData.progressionMode !== undefined && updateData.progressionMode !== course.progressionMode;
+    const isChangingStrictExam = updateData.isStrictExam !== undefined && updateData.isStrictExam !== course.isStrictExam;
 
-    // Xử lý sanitizedUpdate thông minh (Tự động hứng progressionMode và isStrictExam nếu có)
+    if (isChangingProgression || isChangingStrictExam) {
+      const studentCount = await this.enrollmentsRepo.modelInstance.countDocuments({
+        courseId: new Types.ObjectId(courseId),
+        status: EnrollmentStatus.ACTIVE
+      });
+
+      if (studentCount > 0) {
+        throw new ForbiddenException(
+          'Hành động bị từ chối! Không thể thay đổi Chế độ học tập hoặc Cấu hình thi khi khóa học đã có học viên ghi danh, nhằm tránh gây lỗi tiến độ học của hệ thống.'
+        );
+      }
+    }
+
+    const mediaToVerify = [updateData.coverImageId, updateData.promotionalVideoId];
+    // Giả định hàm verifyMediaOwnershipStrict nằm trong validatorService hoặc service này
+    await this.validatorService.verifyMediaOwnershipStrict(mediaToVerify, teacherId);
+
     const sanitizedUpdate = Object.keys(updateData).reduce((acc, key) => {
       const k = key as keyof Omit<UpdateCoursePayload, 'courseId' | 'teacherId'>;
       if (updateData[k] !== undefined) acc[k] = updateData[k] as any;
@@ -209,15 +235,11 @@ export class CoursesService {
     }, {} as any);
 
     if (sanitizedUpdate.coverImageId !== undefined) {
-      sanitizedUpdate.coverImageId = sanitizedUpdate.coverImageId
-        ? new Types.ObjectId(sanitizedUpdate.coverImageId)
-        : null;
+      sanitizedUpdate.coverImageId = sanitizedUpdate.coverImageId ? new Types.ObjectId(sanitizedUpdate.coverImageId) : null;
     }
 
     if (sanitizedUpdate.promotionalVideoId !== undefined) {
-      sanitizedUpdate.promotionalVideoId = sanitizedUpdate.promotionalVideoId
-        ? new Types.ObjectId(sanitizedUpdate.promotionalVideoId)
-        : null;
+      sanitizedUpdate.promotionalVideoId = sanitizedUpdate.promotionalVideoId ? new Types.ObjectId(sanitizedUpdate.promotionalVideoId) : null;
     }
 
     const updated = await this.coursesRepo.updateByIdSafe(courseId, { $set: sanitizedUpdate });
@@ -250,7 +272,7 @@ export class CoursesService {
       }
 
       finalSlug = course.slug;
-      courseTitle = course.title; // Lấy data ra RAM
+      courseTitle = course.title;
 
       await this.validatorService.validateCourseSubmissionRules({
         courseId,
@@ -279,13 +301,10 @@ export class CoursesService {
       });
     });
 
-    // BƯỚC 2: Xóa Cache (Sau khi Transaction commit thành công)
     if (finalSlug) {
       this.clearCourseCache(finalSlug);
     }
 
-    // BƯỚC 3: [RẢI MÌN] Bắn Event báo cho Admin
-    // Luôn bắn Event Ở NGOÀI Transaction để đảm bảo tính toàn vẹn (Reliability)
     this.eventEmitter.emit(CourseEventPattern.COURSE_SUBMITTED, {
       courseId,
       teacherId,
@@ -297,14 +316,25 @@ export class CoursesService {
 
 
   async deleteCourse(courseId: string, teacherId: string) {
-    const course = await this.coursesRepo.findByIdSafe(courseId);
+    const course = await this.coursesRepo.findByIdSafe(courseId, { select: 'teacherId slug status' });
     if (!course) throw new NotFoundException('Khóa học không tồn tại.');
-    if (course.teacherId.toString() !== teacherId) throw new ForbiddenException('Không có quyền xóa.');
+    if (course.teacherId.toString() !== teacherId) throw new ForbiddenException('Bạn không có quyền thao tác trên khóa học này.');
 
-    if (course.status !== CourseStatus.DRAFT) {
+    const studentCount = await this.enrollmentsRepo.modelInstance.countDocuments({
+      courseId: new Types.ObjectId(courseId),
+      status: EnrollmentStatus.ACTIVE
+    });
+
+    if (course.status !== CourseStatus.DRAFT || studentCount > 0) {
       await this.coursesRepo.updateByIdSafe(courseId, { $set: { status: CourseStatus.ARCHIVED } });
+      this.eventEmitter.emit(CourseEventPattern.COURSE_STATUS_DEACTIVATED, {
+        courseId,
+        reason: 'ARCHIVED',
+      } as CourseDeactivatedEventPayload);
       this.clearCourseCache(course.slug);
-      return { message: 'Khóa học đã được lưu trữ (Archived) do đã từng được xuất bản.' };
+      return {
+        message: 'Khóa học đã được chuyển sang trạng thái Lưu trữ (Archived) nhằm bảo vệ quyền lợi của học viên đã mua.'
+      };
     }
 
     await this.coursesRepo.executeInTransaction(async () => {
@@ -315,7 +345,7 @@ export class CoursesService {
 
     this.clearCourseCache(course.slug);
 
-    return { message: 'Đã xóa vĩnh viễn khóa học và toàn bộ giáo án.' };
+    return { message: 'Đã xóa vĩnh viễn khóa học bản nháp và toàn bộ giáo án.' };
   }
 
   async getMyCourses(teacherId: string) {
@@ -340,5 +370,62 @@ export class CoursesService {
       promotionalVideo: promotionalVideoId ? { id: promotionalVideoId._id.toString(), url: promotionalVideoId.url, blurHash: promotionalVideoId.blurHash } : null,
       ...rest
     };
+  }
+
+  async getTeacherCourseCurriculum(courseId: string, teacherId: string) {
+    if (!Types.ObjectId.isValid(courseId)) throw new BadRequestException('ID khóa học không hợp lệ.');
+
+    const course = await this.coursesRepo.findByIdSafe(courseId, { select: 'teacherId' });
+    if (!course) throw new NotFoundException('Khóa học không tồn tại.');
+    if (course.teacherId.toString() !== teacherId) {
+      throw new ForbiddenException('Bạn không có quyền xem cấu trúc khóa học này.');
+    }
+
+    const curriculum = await this.coursesRepo.getFullCourseCurriculum(courseId, { maskMediaUrls: false });
+    return curriculum;
+  }
+
+  async getTeacherCourseStats(courseId: string, teacherId: string) {
+    if (!Types.ObjectId.isValid(courseId)) throw new BadRequestException('ID khóa học không hợp lệ.');
+
+    // [PERFORMANCE TUNE]: Check Cache Redis (TTL: 5 phút) để tránh Hammering DB mỗi khi F5
+    const cacheKey = `teacher:dashboard:stats:${courseId}`;
+    const cachedStats = await this.redisService.get(cacheKey);
+    if (cachedStats) {
+      return JSON.parse(cachedStats);
+    }
+
+    const course = await this.coursesRepo.findByIdSafe(courseId, {
+      select: 'teacherId averageRating totalReviews'
+    });
+
+    if (!course) throw new NotFoundException('Khóa học không tồn tại.');
+    if (course.teacherId.toString() !== teacherId) {
+      throw new ForbiddenException('Bạn không có quyền truy cập thống kê này.');
+    }
+
+    // [CTO UPGRADE]: Chạy song song 4 truy vấn nặng để tối đa hóa hiệu suất I/O
+    const [studentCount, averageProgress, pendingReviews, totalRevenue] = await Promise.all([
+      this.enrollmentsRepo.modelInstance.countDocuments({
+        courseId: new Types.ObjectId(courseId),
+        status: EnrollmentStatus.ACTIVE
+      }),
+      this.enrollmentsRepo.getCourseAverageProgress(courseId),
+      this.courseReviewsRepo.countUnrepliedReviews(courseId),
+      this.walletTransactionsRepo.calculateTotalRevenueByCourse(courseId)
+    ]);
+
+    const stats = {
+      totalStudents: studentCount,
+      averageProgress: Math.round(averageProgress * 10) / 10,
+      averageRating: course.averageRating || 0,
+      totalReviews: course.totalReviews || 0,
+      pendingReviews: pendingReviews,
+      totalRevenue: totalRevenue
+    };
+
+    await this.redisService.set(cacheKey, JSON.stringify(stats), 300);
+
+    return stats;
   }
 }

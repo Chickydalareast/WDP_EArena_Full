@@ -10,6 +10,9 @@ export enum CourseStatus {
     ARCHIVED = 'ARCHIVED',
 }
 
+export const ProgressionModeEnum = z.enum(['FREE', 'STRICT_LINEAR']);
+export type ProgressionMode = z.infer<typeof ProgressionModeEnum>;
+
 export interface AttachmentData {
     id: string;
     url: string | null;
@@ -48,24 +51,6 @@ export interface SectionPreview {
     lessons: LessonPreview[];
 }
 
-export interface StudyTreeResponse {
-    progress: number;
-    status: 'ACTIVE' | 'EXPIRED' | 'BANNED';
-    curriculum: {
-        sections: SectionPreview[];
-    };
-    myReview: MyCourseReview | null;
-}
-
-export interface LessonContentResponse {
-    id: string;
-    content?: string;
-    examId?: string;
-    examRules?: ExamRuleDTO;
-    primaryVideo?: PrimaryVideoData;
-    attachments?: AttachmentData[];
-}
-
 export interface CourseBasic {
     id: string;
     slug: string;
@@ -102,6 +87,7 @@ export interface CourseBasic {
     
     submittedAt?: string;
     rejectionReason?: string;
+    isEnrolled?: boolean; 
 }
 
 export interface CourseTeacherDetail extends CourseBasic {
@@ -120,6 +106,42 @@ export interface PublicCourseDetail extends CourseBasic {
         totalDocuments?: number;
         totalQuizzes?: number;
     };
+}
+
+export interface StudyTreeResponse {
+    progress: number;
+    status: 'ACTIVE' | 'EXPIRED' | 'BANNED';
+    progressionMode: 'FREE' | 'STRICT_LINEAR';
+    isStrictExam: boolean;
+    curriculum: {
+        sections: SectionPreview[];
+    };
+    myReview: MyCourseReview | null;
+}
+
+export interface LessonProgressResponseDto {
+    watchTime: number;
+    lastPosition: number;
+    isCompleted: boolean;
+}
+
+export interface LessonContentResponse {
+    id: string;
+    content?: string;
+    examId?: string;
+    examRules?: ExamRuleDTO;
+    primaryVideo?: PrimaryVideoData;
+    attachments?: AttachmentData[];
+    progress?: LessonProgressResponseDto | null;
+}
+
+export interface CourseDashboardStats {
+    totalStudents: number;
+    averageProgress: number;
+    averageRating: number;
+    totalReviews: number;
+    pendingReviews: number;
+    totalRevenue: number;
 }
 
 export const reorderCurriculumSchema = z.object({
@@ -144,6 +166,8 @@ export const createCourseSchema = z.object({
     title: z.string().min(1, 'Tên khóa học không được để trống'),
     price: z.coerce.number().min(0, 'Giá khóa học không được âm'),
     description: z.string().optional(),
+    progressionMode: ProgressionModeEnum.default('FREE'),
+    isStrictExam: z.boolean().default(false),
 });
 
 export type CreateCourseDTO = z.infer<typeof createCourseSchema>;
@@ -155,8 +179,11 @@ export const baseUpdateCourseSchema = z.object({
     description: z.string().optional(),
     benefits: z.array(z.string()).optional(),
     requirements: z.array(z.string()).optional(),
-    coverImageId: z.string().optional(),
-    promotionalVideoId: z.string().optional(),
+    coverImageId: z.string().nullable().optional(),
+    promotionalVideoId: z.string().nullable().optional(),
+    
+    progressionMode: ProgressionModeEnum.optional(),
+    isStrictExam: z.boolean().optional(),
 });
 
 export const updateCourseSchema = baseUpdateCourseSchema.superRefine((data, ctx) => {
@@ -172,50 +199,3 @@ export const updateCourseSchema = baseUpdateCourseSchema.superRefine((data, ctx)
 });
 
 export type UpdateCourseDTO = z.infer<typeof updateCourseSchema>;
-
-export interface PublicCourseDetail extends CourseBasic {
-    isEnrolled?: boolean;
-    curriculum: {
-        sections: SectionPreview[];
-        totalLessons?: number;
-        totalVideos?: number;
-        totalDocuments?: number;
-        totalQuizzes?: number;
-    };
-}
-
-export interface CourseBasic {
-    id: string;
-    slug: string;
-    title: string;
-    description?: string;
-    price: number;
-    discountPrice?: number;
-    status: CourseStatus;
-    
-    coverImage?: {
-        id: string;
-        url: string;
-        blurHash?: string;
-    } | null;
-    promotionalVideoId?: string | null;
-    
-    averageRating?: number;
-    totalReviews?: number;
-    studentCount?: number;
-    
-    teacher?: { id: string; fullName: string; avatar?: string; bio?: string | null };
-    subject?: { id: string; name: string };
-    
-    benefits?: string[];
-    requirements?: string[];
-    createdAt?: string;
-    updatedAt?: string;
-
-    totalLessons?: number;
-    totalVideos?: number;
-    totalDocuments?: number;
-    totalQuizzes?: number;
-
-    isEnrolled?: boolean; 
-}

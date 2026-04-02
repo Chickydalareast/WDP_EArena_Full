@@ -1,99 +1,96 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { useFolderTree, useBankQuestions } from '@/features/question-bank/hooks/useBankQueries';
-import { FolderNode } from '@/features/question-bank/types/question-bank.schema';
+import React, { useState } from 'react';
+import { useQuestionBankStore } from '@/features/question-bank/stores/question-bank.store';
+import { useActiveFilters } from '@/features/exam-builder/hooks/useActiveFilters';
+import { useBankQuestions } from '@/features/question-bank/hooks/useBankQueries';
 import { useDebounce } from '@/shared/hooks/useDebounce';
+
 import { MiniQuestionCard } from './MiniQuestionCard';
+import { TreeSelectMulti } from '@/features/exam-builder/components/TreeSelectMulti';
 
 import { Input } from '@/shared/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
 import { Skeleton } from '@/shared/components/ui/skeleton';
-import { Search, Loader2, Database } from 'lucide-react';
+import { Search, Loader2, Database, FilterX } from 'lucide-react';
+import { Button } from '@/shared/components/ui/button';
+import { cn } from '@/shared/lib/utils';
 
 interface MiniBankSidebarProps {
-    existingQuestionIds: string[]; // Mảng ID các câu đã có trong đề (để disable)
+    existingQuestionIds: string[];
 }
 
-// Helper: Làm phẳng cây thư mục để tống vào Dropdown Select cho gọn
-const flattenTreeForSelect = (nodes: FolderNode[], depth = 0): { _id: string; name: string }[] => {
-    let result: { _id: string; name: string }[] = [];
-    for (const node of nodes) {
-        result.push({ _id: node._id, name: `${'— '.repeat(depth)}${node.name}` });
-        if (node.children && node.children.length > 0) {
-            result = result.concat(flattenTreeForSelect(node.children, depth + 1));
-        }
-    }
-    return result;
-};
-
 export function MiniBankSidebar({ existingQuestionIds }: MiniBankSidebarProps) {
-    // Local States để quản lý Filter độc lập
-    const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
+    const { activePayload, setFilters, resetFilters } = useQuestionBankStore();
+    
     const [searchTerm, setSearchTerm] = useState('');
     const debouncedSearch = useDebounce(searchTerm, 500);
 
-    // Queries
-    const { data: treeData, isLoading: isLoadingTree } = useFolderTree();
+    const { data: filtersResponse, isLoading: isLoadingFilters } = useActiveFilters(activePayload);
+    const foldersTree = filtersResponse?.folders || (filtersResponse as any)?.data?.folders || [];
 
-    // Tối ưu Performance: Chỉ chạy lại Flatten khi treeData thay đổi
-    const flatFolders = useMemo(() => {
-        if (!treeData) return [];
-        return flattenTreeForSelect(treeData);
-    }, [treeData]);
-
-    const { data: response, isLoading: isLoadingQuestions } = useBankQuestions({
-        folderId: selectedFolderId === 'all' ? undefined : selectedFolderId,
+    const { data: questionsResponse, isFetching: isFetchingQuestions } = useBankQuestions({
+        ...activePayload,
         search: debouncedSearch,
-        limit: 50, // Lấy nhiều hơn 1 chút để kéo thả đã tay
+        limit: 50, 
     });
+    
+    const questions = questionsResponse?.items || (questionsResponse as any)?.data || [];
 
-    const questions = response?.items || (response as any)?.data || [];
+    const hasActiveFilters = activePayload.folderIds && activePayload.folderIds.length > 0;
 
     return (
-        <div className="h-full flex flex-col bg-slate-50 border-l border-slate-200">
+        <div className="h-full flex flex-col bg-slate-50 border-l border-border relative">
 
-            {/* 1. HEADER & FILTERS */}
-            <div className="p-4 bg-white border-b shrink-0 space-y-3">
-                <h3 className="font-black text-slate-800 flex items-center gap-2">
-                    <Database className="w-4 h-4 text-blue-600" /> Ngân Hàng Kéo Thả
-                </h3>
+            <div className="p-4 bg-card border-b border-border shrink-0 space-y-3 shadow-sm z-10 relative">
+                <div className="flex items-center justify-between">
+                    <h3 className="font-black text-foreground flex items-center gap-2">
+                        <Database className="w-4 h-4 text-primary" /> Ngân Hàng Câu Hỏi
+                    </h3>
+                    
+                    {hasActiveFilters && (
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            onClick={resetFilters}
+                            title="Xóa bộ lọc"
+                        >
+                            <FilterX className="w-4 h-4" />
+                        </Button>
+                    )}
+                </div>
 
-                {isLoadingTree ? (
-                    <Skeleton className="h-10 w-full" />
+                {isLoadingFilters ? (
+                    <Skeleton className="h-10 w-full rounded-md bg-slate-200" />
                 ) : (
-                    <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
-                        <SelectTrigger className="w-full bg-slate-50">
-                            <SelectValue placeholder="Chọn thư mục..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all" className="font-bold text-blue-600">Tất cả câu hỏi</SelectItem>
-                            {flatFolders.map(folder => (
-                                <SelectItem key={folder._id} value={folder._id}>
-                                    {folder.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <TreeSelectMulti 
+                        data={foldersTree}
+                        selectedIds={activePayload.folderIds || []}
+                        onChange={(ids) => setFilters({ folderIds: ids })}
+                    />
                 )}
 
                 <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
                         placeholder="Tìm theo nội dung..."
-                        className="pl-8 bg-slate-50"
+                        className="pl-8 bg-slate-50 border-border focus-visible:ring-primary"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
             </div>
 
-            {/* 2. DRAGGABLE LIST (DANH SÁCH KÉO THẢ) */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-slate-200">
-                {isLoadingQuestions ? (
-                    <div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500" /></div>
-                ) : questions.length === 0 ? (
-                    <div className="text-center p-8 text-slate-400 text-sm border-2 border-dashed rounded-xl">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-thin scrollbar-thumb-slate-200 relative">
+                
+                {isFetchingQuestions && (
+                    <div className="absolute inset-0 bg-white/60 backdrop-blur-[1px] z-10 flex justify-center pt-10">
+                        <Loader2 className="w-6 h-6 animate-spin text-primary drop-shadow-md" />
+                    </div>
+                )}
+
+                {!isFetchingQuestions && questions.length === 0 ? (
+                    <div className="text-center p-8 text-muted-foreground text-sm border-2 border-dashed border-border rounded-xl bg-white">
                         Không tìm thấy câu hỏi phù hợp.
                     </div>
                 ) : (

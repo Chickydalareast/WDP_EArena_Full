@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { BullModule } from '@nestjs/bullmq';
 
 import { Course, CourseSchema } from './schemas/course.schema';
 import { Section, SectionSchema } from './schemas/section.schema';
@@ -22,20 +23,30 @@ import { EnrollmentsService } from './services/enrollments.service';
 import { CourseCheckoutService } from './services/course-checkout.service';
 import { CourseReviewsService } from './services/course-reviews.service';
 import { AiCourseBuilderService } from './services/ai-course-builder.service';
+import { CourseValidatorService } from './services/course-validator.service';
+import { CourseQuizBuilderService } from './services/course-quiz-builder.service';
+
+import { LearningTrackingService } from './services/learning-tracking.service';
+import { HeartbeatSyncProcessor } from './processors/heartbeat-sync.processor';
+import { CourseProgressionListener } from './listeners/course-progression.listener';
 
 import { CoursesController } from './courses.controller';
 import { CurriculumController } from './controllers/curriculum.controller';
 import { CourseReaderController } from './controllers/course-reader.controller';
 import { EnrollmentsController } from './controllers/enrollments.controller';
 import { CourseReviewsController } from './controllers/course-reviews.controller';
+import { AiCourseBuilderController } from './controllers/ai-course-builder.controller';
+import { CourseQuizBuilderController } from './controllers/course-quiz-builder.controller';
+
+import { LearningTrackingController } from './controllers/learning-tracking.controller';
 
 import { WalletsModule } from '../wallets/wallets.module';
 import { UsersModule } from '../users/users.module';
 import { MediaModule } from '../media/media.module';
 import { ExamsModule } from '../exams/exams.module';
 import { AiModule } from '../ai/ai.module';
-import { AiCourseBuilderController } from './controllers/ai-course-builder.controller';
-import { CourseValidatorService } from './services/course-validator.service';
+
+import { NotificationsModule } from '../notifications/notifications.module'; 
 
 @Module({
   imports: [
@@ -47,10 +58,14 @@ import { CourseValidatorService } from './services/course-validator.service';
       { name: CourseReview.name, schema: CourseReviewSchema },
       { name: LessonProgress.name, schema: LessonProgressSchema },
     ]),
+    BullModule.registerQueue({
+      name: 'learning-tracking',
+    }),
     WalletsModule,
     UsersModule,
     MediaModule,
     AiModule,
+    NotificationsModule,
     forwardRef(() => ExamsModule)
   ],
   controllers: [
@@ -60,6 +75,8 @@ import { CourseValidatorService } from './services/course-validator.service';
     EnrollmentsController,
     CourseReviewsController,
     AiCourseBuilderController,
+    LearningTrackingController,
+    CourseQuizBuilderController,
   ],
   providers: [
     CoursesRepository,
@@ -68,6 +85,7 @@ import { CourseValidatorService } from './services/course-validator.service';
     EnrollmentsRepository,
     CourseReviewsRepository,
     LessonProgressRepository,
+    
     CoursesService,
     CurriculumService,
     CourseReaderService,
@@ -75,7 +93,11 @@ import { CourseValidatorService } from './services/course-validator.service';
     CourseCheckoutService,
     CourseReviewsService,
     AiCourseBuilderService,
-    CourseValidatorService
+    CourseValidatorService,
+    CourseQuizBuilderService,
+    LearningTrackingService,
+    HeartbeatSyncProcessor,
+    CourseProgressionListener,
   ],
   exports: [
     EnrollmentsService,

@@ -7,13 +7,14 @@ import { CourseStatus } from '../../types/course.schema';
 
 interface SubmitForReviewButtonProps {
     courseId: string;
-    status?: CourseStatus;
+    // Mở rộng type sang string để hứng đạn nếu BE trả về text thường thay vì Enum
+    status?: CourseStatus | string; 
 }
 
-export function SubmitForReviewButton({ courseId, status = CourseStatus.DRAFT }: SubmitForReviewButtonProps) {
+export function SubmitForReviewButton({ courseId, status = 'DRAFT' }: SubmitForReviewButtonProps) {
     const { mutate: submitForReview, isPending } = useSubmitForReview(courseId);
 
-    if (status === CourseStatus.PENDING_REVIEW) {
+    if (status === CourseStatus.PENDING_REVIEW || status === 'PENDING_REVIEW') {
         return (
             <Button disabled variant="outline" className="font-semibold border-yellow-400 text-yellow-600 bg-yellow-50">
                 <Loader2 className="mr-2 w-4 h-4 animate-spin" />
@@ -22,7 +23,7 @@ export function SubmitForReviewButton({ courseId, status = CourseStatus.DRAFT }:
         );
     }
 
-    if (status === CourseStatus.PUBLISHED) {
+    if (status === CourseStatus.PUBLISHED || status === 'PUBLISHED') {
         return (
             <Button disabled variant="outline" className="font-semibold border-green-400 text-green-600 bg-green-50">
                 <CheckCircle2 className="mr-2 w-4 h-4" />
@@ -30,7 +31,6 @@ export function SubmitForReviewButton({ courseId, status = CourseStatus.DRAFT }:
             </Button>
         );
     }
-
     return (
         <Button
             onClick={() => submitForReview()}

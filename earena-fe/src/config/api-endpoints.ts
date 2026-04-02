@@ -15,6 +15,7 @@ export const API_ENDPOINTS = {
   USERS: {
     PROFILE: '/users/me/profile',
     ME_FAST: '/users/me',
+    PUBLIC_PROFILE: (id: string) => `/users/${id}/public-profile` as const,
   },
 
   MEDIA: {
@@ -37,6 +38,9 @@ export const API_ENDPOINTS = {
     DETAIL: (courseId: string) => `/courses/${courseId}` as const,
     SECTIONS: (courseId: string) => `/courses/${courseId}/sections` as const,
     LESSONS: (courseId: string, sectionId: string) => `/courses/${courseId}/sections/${sectionId}/lessons` as const,
+    LESSON_DETAIL: (courseId: string, lessonId: string) => `/courses/${courseId}/lessons/${lessonId}` as const,
+    QUIZ_BUILDER: '/courses/builder/quiz',
+    
     REORDER: (courseId: string) => `/courses/${courseId}/curriculum/reorder` as const,
     PUBLISH: (courseId: string) => `/courses/${courseId}/publish` as const,
     SUBMIT_REVIEW: (courseId: string) => `/courses/${courseId}/submit-for-review` as const,
@@ -45,6 +49,9 @@ export const API_ENDPOINTS = {
     TEACHER_COURSES: '/courses/me',
     TEACHER_DETAIL: (courseId: string) => `/courses/teacher/${courseId}` as const,
     AI_GENERATE: (courseId: string) => `/courses/${courseId}/ai-builder/generate` as const,
+
+    TEACHER_DASHBOARD_STATS: (courseId: string) => `/courses/teacher/${courseId}/dashboard-stats` as const,
+    TEACHER_CURRICULUM_VIEW: (courseId: string) => `/courses/teacher/${courseId}/curriculum-view` as const,
 
     REVIEWS: (courseId: string) => `/courses/${courseId}/reviews` as const,
     REVIEW_REPLY: (courseId: string, reviewId: string) => `/courses/${courseId}/reviews/${reviewId}/reply` as const,
@@ -56,6 +63,7 @@ export const API_ENDPOINTS = {
     MOCK_DEPOSIT: '/wallets/mock-deposit',
     WITHDRAW: '/wallets/withdraw',
   },
+  
   ADMIN_WALLETS: {
     WITHDRAWALS: '/admin/wallets/withdrawals',
     PROCESS_WITHDRAWAL: (id: string) => `/admin/wallets/withdrawals/${id}/process` as const,
@@ -70,13 +78,16 @@ export const API_ENDPOINTS = {
     BASE: '/question-folders',
     DETAIL: (id: string) => `/question-folders/${id}` as const,
   },
-QUESTIONS: {
+  
+  QUESTIONS: {
     BASE: '/questions',
     BULK_CREATE: '/questions/bulk-create',
+    BULK_STANDARDIZE: '/questions/bulk-standardize',
     BULK_MOVE: '/questions/bulk-move',
     BULK_CLONE: '/questions/bulk-clone',
     BULK_DELETE: '/questions/bulk-delete',
-    AI_GENERATE: '/questions/ai-generate',
+    SUGGEST_FOLDERS: '/questions/suggest-folders',
+    AI_GENERATE: '/questions/ai-builder/generate',
   
     ORGANIZE_PREVIEW: '/questions/organize/preview',
     ORGANIZE_EXECUTE: '/questions/organize/execute',
@@ -86,16 +97,33 @@ QUESTIONS: {
     
     PASSAGE: (id: string) => `/questions/${id}/passage` as const, 
     BULK_AUTO_TAG: '/questions/bulk-auto-tag',
-  },
+    BULK_PUBLISH: '/questions/bulk-publish',
 
+    ACTIVE_FILTERS: '/questions/active-filters',
+  },
 
   EXAMS: {
     BASE: '/exams',
+    DETAIL: (examId: string) => `/exams/${examId}` as const,
     MANUAL_INIT: '/exams/manual/init',
     PAPER_QUESTIONS: (paperId: string) => `/exams/manual/papers/${paperId}/questions` as const,
     PAPER_PREVIEW: (paperId: string) => `/exams/manual/papers/${paperId}` as const,
     GENERATE: '/exams/generate',
     PUBLISH: (examId: string) => `/exams/${examId}/publish` as const,
+
+    FILL_FROM_MATRIX: (paperId: string) => `/exams/manual/papers/${paperId}/fill-from-matrix` as const,
+    UPDATE_POINTS: (paperId: string) => `/exams/manual/papers/${paperId}/points` as const,
+
+    PREVIEW_MATRIX_RULE: (paperId: string) => `/exams/manual/papers/${paperId}/matrix/preview-rule` as const,
+    
+    LEADERBOARD: (courseId: string, lessonId: string) => `/exams/leaderboard/courses/${courseId}/lessons/${lessonId}` as const,
+
+    DYNAMIC_PREVIEW: '/exams/dynamic/preview',
+  },
+
+  EXAM_MATRICES: {
+    BASE: '/exam-matrices',
+    DETAIL: (id: string) => `/exam-matrices/${id}` as const,
   },
 
   EXAM_TAKING: {
@@ -104,6 +132,8 @@ QUESTIONS: {
     SUBMIT: (submissionId: string) => `/exam-take/${submissionId}/submit` as const,
     RESULT: (submissionId: string) => `/exam-take/${submissionId}/result` as const,
     HISTORY: '/exam-take/history',
+    HISTORY_OVERVIEW: '/exam-take/history/overview',
+    HISTORY_LESSON: (lessonId: string) => `/exam-take/history/lesson/${lessonId}` as const,
   },
 
   ADMIN: {
@@ -114,9 +144,11 @@ QUESTIONS: {
     USER_ROLE: (id: string) => `/admin/users/${id}/role` as const,
     USER_STATUS: (id: string) => `/admin/users/${id}/status` as const,
     USER_RESET_PASSWORD: (id: string) => `/admin/users/${id}/reset-password` as const,
+    
 
     EXAMS: '/admin/exams',
     EXAM_PUBLISH: (id: string) => `/admin/exams/${id}/publish` as const,
+    EXAM_PAPER_DETAIL_BY_EXAM: (examId: string) => `/admin/exams/${examId}/paper` as const,
 
     QUESTIONS: '/admin/questions',
     QUESTION_ARCHIVE: (id: string) => `/admin/questions/${id}/archive` as const,
@@ -144,6 +176,8 @@ QUESTIONS: {
   },
 
   TAXONOMY: {
+    SUBJECTS: '/taxonomy/subjects',
+    MY_SUBJECTS: '/taxonomy/my-subjects',
     TOPICS_TREE: (subjectId: string) => `/taxonomy/topics/tree/${subjectId}` as const,
   },
 
@@ -157,5 +191,9 @@ QUESTIONS: {
     STREAM: '/notifications/stream',
     READ: (id: string) => `/notifications/${id}/read` as const,
     READ_ALL: '/notifications/read-all',
+  },
+
+  LEARNING: {
+    HEARTBEAT: '/learning/heartbeat',
   },
 } as const;

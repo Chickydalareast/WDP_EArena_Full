@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsInt, IsNotEmpty, IsOptional, IsString, MaxLength, Min, IsMongoId } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class InitManualExamDto {
@@ -16,4 +16,8 @@ export class InitManualExamDto {
   @IsInt()
   @Min(0)
   totalScore: number;
+
+  @IsMongoId({ message: 'ID Môn học không đúng định dạng.' })
+  @IsNotEmpty({ message: 'Bắt buộc phải chọn Môn học cho đề thi.' })
+  subjectId: string;
 }

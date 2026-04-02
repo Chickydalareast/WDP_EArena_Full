@@ -1,6 +1,7 @@
 import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsMongoId, IsArray, IsInt, Min, Max, IsEnum, ValidateNested } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ShowResultMode } from '../schemas/lesson.schema';
+import { EmbeddedExamConfigDto } from './embedded-exam-config.dto';
 
 export class ExamRuleConfigDto {
   @IsInt({ message: 'Thời gian làm bài phải là số nguyên' })
@@ -60,6 +61,11 @@ export class CreateLessonDto {
   @Type(() => ExamRuleConfigDto)
   examRules?: ExamRuleConfigDto;
 
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => EmbeddedExamConfigDto)
+  embeddedExamConfig?: EmbeddedExamConfigDto;
+
   @IsString()
   @IsNotEmpty({ message: 'Nội dung/Ghi chú bài học không được để trống' })
   content: string;
@@ -95,6 +101,11 @@ export class UpdateLessonDto {
   @IsOptional()
   attachments?: string[];
 
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ExamRuleConfigDto)
+  examRules?: ExamRuleConfigDto;
+
   @IsMongoId({ message: 'examId không hợp lệ' })
   @IsOptional()
   @Transform(({ value }) => value === '' ? undefined : value)
@@ -102,8 +113,8 @@ export class UpdateLessonDto {
 
   @IsOptional()
   @ValidateNested()
-  @Type(() => ExamRuleConfigDto)
-  examRules?: ExamRuleConfigDto;
+  @Type(() => EmbeddedExamConfigDto)
+  embeddedExamConfig?: EmbeddedExamConfigDto;
 
   @IsString()
   @IsNotEmpty({ message: 'Nội dung/Ghi chú bài học không được để trống' })

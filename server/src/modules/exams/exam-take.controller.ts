@@ -3,10 +3,10 @@ import { ExamTakeService } from './exam-take.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { StartExamDto, AutoSaveDto, GetStudentHistoryDto } from './dto/exam-take.dto';
+import { StartExamDto, AutoSaveDto, GetStudentHistoryDto, GetStudentHistoryOverviewDto, GetLessonAttemptsParamDto, GetLessonAttemptsQueryDto } from './dto/exam-take.dto';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
-import { StartExamPayload } from './interfaces/exam-take.interface';
+import { GetLessonAttemptsPayload, GetStudentHistoryOverviewPayload, GetStudentHistoryPayload, StartExamPayload } from './interfaces/exam-take.interface';
 
 @Controller('exam-take')
 @UseGuards(JwtAuthGuard)
@@ -71,13 +71,49 @@ export class ExamTakeController {
     @Query() dto: GetStudentHistoryDto,
     @CurrentUser('userId') studentId: string,
   ) {
-    const payload = {
+    const payload: GetStudentHistoryPayload = {
       studentId,
       page: dto.page,
       limit: dto.limit,
       courseId: dto.courseId,
       lessonId: dto.lessonId,
     };
+
     return this.examTakeService.getStudentHistory(payload);
+  }
+
+  @Get('history/overview')
+  @Roles(UserRole.STUDENT)
+  @HttpCode(HttpStatus.OK)
+  async getHistoryOverview(
+    @Query() dto: GetStudentHistoryOverviewDto,
+    @CurrentUser('userId') studentId: string,
+  ) {
+    const payload: GetStudentHistoryOverviewPayload = {
+      studentId,
+      page: dto.page || 1, 
+      limit: dto.limit || 10,
+      courseId: dto.courseId,
+    };
+
+    return this.examTakeService.getStudentHistoryOverview(payload);
+  }
+
+  @Get('history/lesson/:lessonId')
+  @Roles(UserRole.STUDENT)
+  @HttpCode(HttpStatus.OK)
+  async getLessonAttempts(
+    @Param() params: GetLessonAttemptsParamDto,
+    @Query() query: GetLessonAttemptsQueryDto,
+    @CurrentUser('userId') studentId: string,
+  ) {
+    const payload: GetLessonAttemptsPayload = {
+      studentId,
+      lessonId: params.lessonId,
+      page: query.page || 1,
+      limit: query.limit || 10,
+    };
+
+    return this.examTakeService.getLessonAttempts(payload);
   }
 }

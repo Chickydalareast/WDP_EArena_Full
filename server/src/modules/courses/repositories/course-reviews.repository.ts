@@ -89,4 +89,15 @@ export class CourseReviewsRepository extends AbstractRepository<CourseReviewDocu
             total: result.totalCount[0]?.count || 0
         };
     }
+
+    async countUnrepliedReviews(courseId: string | Types.ObjectId): Promise<number> {
+        return this.reviewModel.countDocuments({
+            courseId: new Types.ObjectId(courseId.toString()),
+            $or: [
+                { teacherReply: { $exists: false } },
+                { teacherReply: null },
+                { teacherReply: '' }
+            ]
+        }).exec();
+    }
 }

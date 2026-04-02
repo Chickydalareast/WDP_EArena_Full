@@ -16,16 +16,12 @@ export function PublicPricingScreen() {
     const { user, isInitialized } = useAuthStore();
 
     const handleCtaClick = () => {
-        // Luồng 1: Chưa đăng nhập
         if (!user) {
             router.push(`${ROUTES.AUTH.LOGIN}?callbackUrl=${encodeURIComponent(ROUTES.PUBLIC.PRICING)}`);
             return;
         }
 
-        // Luồng 2: Là Học sinh -> Cần nâng cấp làm Giáo viên
         if (user.role === 'STUDENT') {
-            // [Zero Assumption]: Project hiện tại chưa có Route dành cho form đăng ký Giảng viên của Student.
-            // Tạm thời bật Toast Info, khi nào có file/route sẽ thay bằng router.push()
             toast.info('Trở thành Giảng viên', {
                 description: 'Vui lòng đăng ký tài khoản Teacher ở mục Đăng Ký',
                 duration: 5000,
@@ -33,7 +29,6 @@ export function PublicPricingScreen() {
             return;
         }
 
-        // Luồng 3: Là Giáo viên -> Chuyển hướng vào Dashboard quản lý gói
         if (user.role === 'TEACHER') {
             router.push(ROUTES.TEACHER.SUBSCRIPTION);
             return;
@@ -47,28 +42,26 @@ export function PublicPricingScreen() {
     };
 
     return (
-        <div className="min-h-screen bg-slate-50 py-20 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-7xl mx-auto">
-                <div className="text-center max-w-3xl mx-auto mb-16">
-                    <h1 className="text-4xl font-extrabold text-slate-900 sm:text-5xl">
+        <div className="min-h-[calc(100vh-4rem)] bg-background py-20 px-4 sm:px-6 lg:px-8">
+            <div className="max-w-[1400px] mx-auto">
+                <div className="text-center max-w-3xl mx-auto mb-16 animate-in slide-in-from-bottom-4 fade-in duration-700">
+                    <h1 className="text-4xl font-black text-foreground sm:text-5xl tracking-tight leading-tight">
                         Đầu tư cho chất lượng giảng dạy
                     </h1>
-                    <p className="mt-4 text-xl text-slate-600">
+                    <p className="mt-4 text-xl text-muted-foreground font-medium">
                         Nền tảng EArena cung cấp công cụ mạnh mẽ giúp bạn xây dựng khóa học chuyên nghiệp, tiếp cận hàng triệu học viên toàn quốc.
                     </p>
                 </div>
 
                 {isError && (
-                    <div className="text-center p-8 bg-red-50 text-red-600 rounded-2xl border border-red-200">
-                        <p className="font-semibold">Không thể tải danh sách gói cước lúc này.</p>
+                    <div className="text-center p-8 bg-destructive/10 text-destructive rounded-2xl border border-destructive/20 max-w-2xl mx-auto">
+                        <p className="font-bold">Không thể tải danh sách gói cước lúc này.</p>
                         <p className="text-sm mt-1">Vui lòng thử lại sau.</p>
                     </div>
                 )}
 
-                {/* Lưới hiển thị Bảng giá */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
                     {isLoading || !isInitialized ? (
-                        // Skeleton Chống FOUC
                         <>
                             <PricingCardSkeleton />
                             <PricingCardSkeleton />
@@ -82,9 +75,9 @@ export function PublicPricingScreen() {
                                 isPopular={plan.code === PricingPlanCode.PRO}
                                 actionButton={
                                     <Button
-                                        className={`w-full h-12 font-bold text-base transition-all ${plan.code === PricingPlanCode.PRO
-                                                ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md'
-                                                : 'bg-slate-900 hover:bg-slate-800 text-white'
+                                        className={`w-full h-14 font-bold text-base rounded-xl transition-all shadow-md ${plan.code === PricingPlanCode.PRO
+                                                ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-primary/20'
+                                                : 'bg-foreground hover:bg-foreground/90 text-background'
                                             }`}
                                         onClick={handleCtaClick}
                                     >

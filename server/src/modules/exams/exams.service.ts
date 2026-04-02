@@ -11,13 +11,15 @@ import { ExamSubmissionsRepository } from './exam-submissions.repository';
 import { UsersService } from '../users/users.service';
 import { ExamMode, ExamType } from './schemas/exam.schema';
 import { PaperUpdateAction } from './dto';
+import { UpdatePaperPointsPayload } from './interfaces/exams.interface';
+import { QuestionType } from '../questions/schemas/question.schema';
 
 export type InitManualExamPayload = {
   title: string;
   description?: string;
   totalScore: number;
+  subjectId: string;
 };
-
 export type UpdatePaperQuestionsPayload = {
   action: PaperUpdateAction;
   questionId?: string;
@@ -45,11 +47,22 @@ export class ExamsService {
 
   async initManualExam(teacherId: string, payload: InitManualExamPayload) {
     const teacher = await this.usersService.findById(teacherId);
+
     if (!teacher || !teacher.subjectIds?.length) {
-      throw new BadRequestException('Giáo viên chưa được phân công môn học nào.');
+      throw new BadRequestException('Giáo viên chưa được phân công môn học nào. Không thể tạo đề.');
     }
 
-    const targetSubjectId = teacher.subjectIds[0];
+    const isAllowedSubject = teacher.subjectIds.some((subject: any) => {
+      const subjectIdStr = (subject._id || subject.id || subject).toString();
+      return subjectIdStr === payload.subjectId;
+    });
+
+    if (!isAllowedSubject) {
+      this.logger.warn(`[Security Alert] Teacher ${teacherId} cố tạo đề cho môn học không được phân công: ${payload.subjectId}`);
+      throw new ForbiddenException('Bạn không có quyền tạo đề thi cho môn học này.');
+    }
+
+    const targetSubjectObjectId = new Types.ObjectId(payload.subjectId);
 
     return this.examsRepo.executeInTransaction(async () => {
       const folder = await this.foldersRepo.createDocument({
@@ -64,7 +77,7 @@ export class ExamsService {
         description: payload.description,
         totalScore: payload.totalScore,
         teacherId: new Types.ObjectId(teacherId),
-        subjectId: targetSubjectId,
+        subjectId: targetSubjectObjectId,
         type: ExamType.PRACTICE,
         mode: ExamMode.STATIC,
         isPublished: false,
@@ -77,29 +90,31 @@ export class ExamsService {
         answerKeys: [],
       });
 
-      this.logger.log(`[Manual Builder] Teacher ${teacherId} created Exam ${exam._id} + Paper 000`);
-      return { examId: exam._id, paperId: paper._id, message: 'Khởi tạo thành công.' };
+      this.logger.log(`[Manual Builder] Teacher ${teacherId} created Exam ${exam._id} (Subject: ${payload.subjectId})`);
+
+      return {
+        message: 'Khởi tạo vỏ đề thi thành công.',
+        examId: exam._id,
+        paperId: paper._id
+      };
     });
   }
 
-  async getPaperDetail(paperId: string, teacherId: string) {
-    if (!Types.ObjectId.isValid(paperId)) throw new BadRequestException('Mã đề không hợp lệ.');
-
+  // =========================================================================
+  // [CTO UPGRADE]: HÀM LẮP RÁP DATA DÙNG CHUNG (HỖ TRỢ ĐA HÌNH FILTER)
+  // =========================================================================
+  private async buildPaperDetailPayload(filter: Record<string, any>) {
     const paperModel = (this.examPapersRepo as any).model;
 
+    // Dùng findOne với filter động thay vì findById cứng nhắc
     const paper = await paperModel
-      .findById(new Types.ObjectId(paperId))
-      .populate('examId', 'teacherId folderId isPublished')
+      .findOne(filter)
+      .populate('examId', 'teacherId folderId isPublished type')
       .populate('questions.attachedMedia', 'url mimetype provider originalName _id')
       .select('+answerKeys')
       .lean();
 
     if (!paper) throw new NotFoundException('Không tìm thấy mã đề.');
-
-    if (paper.examId.teacherId.toString() !== teacherId) {
-      this.logger.warn(`[Security Alert] User ${teacherId} cố truy cập trái phép Paper ${paperId}`);
-      throw new ForbiddenException('Bạn không có quyền xem chi tiết đề thi này.');
-    }
 
     const nestedQuestions: any[] = [];
     const passageMap = new Map<string, any>();
@@ -122,7 +137,7 @@ export class ExamsService {
         if (parentPassage) {
           parentPassage.subQuestions.push(q);
         } else {
-          this.logger.warn(`[Data Integrity Warning] Câu hỏi con ${q.originalQuestionId} bị mồ côi trong đề ${paperId}`);
+          this.logger.warn(`[Data Integrity Warning] Câu hỏi con ${q.originalQuestionId} bị mồ côi trong đề`);
           nestedQuestions.push(q);
         }
       }
@@ -135,12 +150,87 @@ export class ExamsService {
     });
 
     paper.questions = nestedQuestions;
+    return paper;
+  }
+
+  // =========================================================================
+  // API DÀNH CHO TEACHER (Giữ nguyên logic bảo mật, truyền filter là _id)
+  // =========================================================================
+  async getPaperDetail(paperId: string, teacherId: string) {
+    if (!Types.ObjectId.isValid(paperId)) throw new BadRequestException('Mã đề không hợp lệ.');
+
+    // Truyền filter theo paperId
+    const paper = await this.buildPaperDetailPayload({ _id: new Types.ObjectId(paperId) });
+
+    if (paper.examId.teacherId.toString() !== teacherId) {
+      this.logger.warn(`[Security Alert] User ${teacherId} cố truy cập trái phép Paper ${paperId}`);
+      throw new ForbiddenException('Bạn không có quyền xem chi tiết đề thi này.');
+    }
+
+    if (paper.examId.type === ExamType.COURSE_QUIZ) {
+      throw new ForbiddenException('Không thể xem chi tiết cấu trúc đề của bài Quiz thuộc khóa học tại đây.');
+    }
 
     const folderId = paper.examId.folderId?.toString() || null;
     paper.examId = paper.examId._id;
 
     return { ...paper, folderId };
   }
+
+  // =========================================================================
+  // API MỚI DÀNH CHO ADMIN (Query theo examId, Bypass bảo mật)
+  // =========================================================================
+  async getPaperDetailByExamIdForAdmin(examId: string) {
+    if (!Types.ObjectId.isValid(examId)) throw new BadRequestException('ID Đề thi không hợp lệ.');
+
+    // Truyền filter theo examId
+    const paper = await this.buildPaperDetailPayload({ examId: new Types.ObjectId(examId) });
+
+    const folderId = paper.examId.folderId?.toString() || null;
+    paper.examId = paper.examId._id;
+
+    return { ...paper, folderId };
+  }
+
+  // // =========================================================================
+  // // API LẤY CHI TIẾT ĐỀ THI DÀNH CHO TEACHER (CÓ KIỂM TRA QUYỀN SỞ HỮU)
+  // // =========================================================================
+  // async getPaperDetail(paperId: string, teacherId: string) {
+  //   const paper = await this.buildPaperDetailPayload(paperId);
+
+  //   // [SECURITY GUARD 1]: Check Ownership
+  //   if (paper.examId.teacherId.toString() !== teacherId) {
+  //     this.logger.warn(`[Security Alert] User ${teacherId} cố truy cập trái phép Paper ${paperId}`);
+  //     throw new ForbiddenException('Bạn không có quyền xem chi tiết đề thi này.');
+  //   }
+
+  //   // [SECURITY GUARD 2]: Chặn rò rỉ đề ngầm của Course Quiz
+  //   if (paper.examId.type === ExamType.COURSE_QUIZ) {
+  //     throw new ForbiddenException('Không thể xem chi tiết cấu trúc đề của bài Quiz thuộc khóa học tại đây.');
+  //   }
+
+  //   // Format output chuẩn cho Frontend
+  //   const folderId = paper.examId.folderId?.toString() || null;
+  //   paper.examId = paper.examId._id;
+
+  //   return { ...paper, folderId };
+  // }
+
+  // // =========================================================================
+  // // API LẤY CHI TIẾT ĐỀ THI DÀNH CHO ADMIN (BYPASS TOÀN BỘ BẢO MẬT)
+  // // =========================================================================
+  // async getPaperDetailForAdmin(paperId: string) {
+  //   const paper = await this.buildPaperDetailPayload(paperId);
+
+  //   // Admin có quyền tối cao (God Mode), có thể xem mọi bài thi kể cả COURSE_QUIZ
+  //   // Bỏ qua check Ownership và Type.
+
+  //   // Format output chuẩn cho Frontend (Giống hệt Teacher để tái sử dụng UI)
+  //   const folderId = paper.examId.folderId?.toString() || null;
+  //   paper.examId = paper.examId._id;
+
+  //   return { ...paper, folderId };
+  // }
 
   async updatePaperQuestions(paperId: string, teacherId: string, payload: UpdatePaperQuestionsPayload) {
     const { action, questionId, questionIds } = payload;
@@ -338,6 +428,12 @@ export class ExamsService {
     const exam = await (this.examsRepo as any).findByIdSafe(new Types.ObjectId(examId));
     if (!exam) throw new NotFoundException('Đề thi không tồn tại.');
     if (exam.teacherId.toString() !== teacherId) throw new ForbiddenException('Không có quyền thao tác.');
+
+    // [SECURITY GUARD]
+    if (exam.type === ExamType.COURSE_QUIZ) {
+      throw new ForbiddenException('Đề thi ngầm của khóa học được quản lý tự động, không thể Publish thủ công.');
+    }
+
     if (exam.isPublished) throw new BadRequestException('Đề thi này đã được chốt từ trước.');
 
     await (this.examsRepo as any).updateByIdSafe(new Types.ObjectId(examId), { $set: { isPublished: true } });
@@ -346,11 +442,14 @@ export class ExamsService {
     return { message: 'Chốt đề thi thành công! Đề thi đã sẵn sàng đưa vào khóa học.' };
   }
 
-// ... (Bên trong ExamsService)
-
   async getExams(teacherId: string, payload: GetExamsPayload) {
     const { page = 1, limit = 10, search, type, subjectId } = payload;
-    
+
+    // [SECURITY GUARD]: Chặn cứng không cho query trực tiếp COURSE_QUIZ
+    if (type === ExamType.COURSE_QUIZ) {
+      throw new ForbiddenException('Hệ thống không cho phép truy vấn trực tiếp kho đề thi ngầm của khóa học.');
+    }
+
     // Gọi hàm chuyên biệt từ Repo, không dùng as any
     const result = await this.examsRepo.getExamsWithPagination(teacherId, page, limit, search, type, subjectId);
 
@@ -373,16 +472,19 @@ export class ExamsService {
   async updateExam(examId: string, teacherId: string, payload: UpdateExamPayload) {
     if (!Types.ObjectId.isValid(examId)) throw new BadRequestException('Mã đề thi không hợp lệ.');
 
-    // Dùng hàm chuẩn của AbstractRepository
     const exam = await this.examsRepo.findByIdSafe(examId);
 
     if (!exam) throw new NotFoundException('Đề thi không tồn tại.');
     if (exam.teacherId.toString() !== teacherId) throw new ForbiddenException('Bạn không có quyền sửa đề thi này.');
+
+    if (exam.type === ExamType.COURSE_QUIZ) {
+      throw new ForbiddenException('Đây là đề thi ngầm của khóa học. Vui lòng vào giao diện Course Builder để cập nhật.');
+    }
+
     if (exam.isPublished && payload.totalScore) {
       throw new BadRequestException('Đề thi đã được phát hành, không thể thay đổi điểm số tổng.');
     }
 
-    // Tái sử dụng updateByIdSafe thay vì gọi model.findOneAndUpdate
     const updated = await this.examsRepo.updateByIdSafe(examId, { $set: payload });
     return { message: 'Cập nhật thông tin đề thi thành công.', exam: updated };
   }
@@ -394,13 +496,11 @@ export class ExamsService {
       throw new BadRequestException('ID không hợp lệ.');
     }
 
-    // Bỏ as any khi gọi khóa học
     const course = await this.coursesRepo.findByIdSafe(courseId, { select: 'teacherId' });
     if (!course || course.teacherId.toString() !== teacherId) {
       throw new ForbiddenException('Bạn không có quyền xem thống kê của khóa học này.');
     }
 
-    // Tầng Service gọi Repo, mỏng nhẹ, dễ test
     const result = await this.examSubmissionsRepo.getLeaderboardData(courseId, lessonId, page, limit, search);
 
     return {
@@ -422,6 +522,10 @@ export class ExamsService {
     if (!exam) throw new NotFoundException('Đề thi không tồn tại.');
     if (exam.teacherId.toString() !== teacherId) throw new ForbiddenException('Bạn không có quyền xóa đề thi này.');
 
+    if (exam.type === ExamType.COURSE_QUIZ) {
+      throw new ForbiddenException('Đây là đề thi ngầm. Bạn phải xóa Bài học (Lesson) tương ứng trong khóa học để dọn dẹp đề này.');
+    }
+
     if (exam.isPublished) {
       throw new BadRequestException('Đề thi đã được đưa vào khóa học. Không thể xóa để bảo toàn lịch sử.');
     }
@@ -435,5 +539,75 @@ export class ExamsService {
     });
   }
 
+  async updatePaperPoints(paperId: string, teacherId: string, payload: UpdatePaperPointsPayload) {
+    if (!Types.ObjectId.isValid(paperId)) throw new BadRequestException('ID Đề thi không hợp lệ.');
+    const paperObjId = new Types.ObjectId(paperId);
 
+    const paper = await (this.examPapersRepo as any).modelInstance
+      .findById(paperObjId)
+      .populate('examId', 'teacherId isPublished totalScore')
+      .lean()
+      .exec();
+
+    if (!paper) throw new NotFoundException('Mã đề không tồn tại.');
+
+    const exam = paper.examId as any;
+    if (exam.teacherId.toString() !== teacherId) throw new ForbiddenException('Bạn không có quyền sửa đề thi này.');
+    if (exam.isPublished) throw new BadRequestException('Đề thi đã khóa (Published). Không thể sửa điểm.');
+
+    let updatedQuestions = [...paper.questions];
+
+    if (payload.divideEqually) {
+      if (!exam.totalScore || exam.totalScore <= 0) {
+        throw new BadRequestException('Tổng điểm của đề thi (Exam) phải lớn hơn 0 để có thể chia đều.');
+      }
+
+      const answerableQuestions = updatedQuestions.filter(q => q.type !== QuestionType.PASSAGE);
+
+      if (answerableQuestions.length === 0) {
+        throw new BadRequestException('Đề thi chưa có câu hỏi nào để tính điểm.');
+      }
+
+      const pointPerQuestion = Number((exam.totalScore / answerableQuestions.length).toFixed(2));
+
+      updatedQuestions = updatedQuestions.map(q => {
+        if (q.type !== QuestionType.PASSAGE) q.points = pointPerQuestion;
+        return q;
+      });
+    }
+    else if (payload.pointsData && payload.pointsData.length > 0) {
+      const pointsMap = new Map<string, number>();
+      payload.pointsData.forEach(p => pointsMap.set(p.questionId, p.points));
+
+      updatedQuestions = updatedQuestions.map(q => {
+        const qIdStr = q.originalQuestionId.toString();
+        if (pointsMap.has(qIdStr)) {
+          q.points = pointsMap.get(qIdStr)!;
+        }
+        return q;
+      });
+    }
+    else {
+      throw new BadRequestException('Vui lòng chọn cờ "Chia đều điểm" hoặc gửi mảng danh sách điểm cụ thể.');
+    }
+
+    await (this.examPapersRepo as any).updateByIdSafe(paperObjId, {
+      $set: { questions: updatedQuestions }
+    });
+
+    this.logger.log(`[Exam Builder] Teacher ${teacherId} updated points for Paper ${paperId}`);
+
+    return { message: 'Cập nhật điểm số thành công.' };
+  }
+
+
+  async unpublishAllQuizzesByCourse(courseId: string): Promise<void> {
+    const result = await this.examsRepo.modelInstance.updateMany(
+      {
+        type: ExamType.COURSE_QUIZ,
+      },
+      { $set: { isPublished: false } }
+    );
+    this.logger.log(`[Quiz Sync] Unpublished ${result.modifiedCount} quiz exams for course ${courseId}`);
+  }
 }

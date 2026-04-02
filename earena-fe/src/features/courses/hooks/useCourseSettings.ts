@@ -1,9 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { courseService } from '../api/course.service';
 import { courseQueryKeys } from '../api/course-keys';
-import { UpdateCourseDTO, CourseTeacherDetail } from '../types/course.schema';
+import { UpdateCourseDTO, CourseTeacherDetail, CourseDashboardStats } from '../types/course.schema';
 import { toast } from 'sonner';
 import { parseApiError } from '@/shared/lib/error-parser';
+import { useRouter } from 'next/navigation';
+import { ROUTES } from '@/config/routes';
 
 export const useCourseSettings = (courseId: string) => {
   return useQuery({
@@ -34,5 +36,33 @@ export const useUpdateCourse = (courseId: string) => {
       queryClient.invalidateQueries({ queryKey: courseQueryKeys.teacherCourses() });
     },
     onError: (error) => toast.error('Cập nhật thất bại', { description: parseApiError(error).message }),
+  });
+};
+
+export const useCourseDashboardStats = (courseId: string) => {
+  return useQuery({
+    queryKey: courseQueryKeys.teacherDashboardStats(courseId),
+    queryFn: () => courseService.getCourseDashboardStats(courseId),
+    staleTime: 1000 * 60 * 5, 
+  });
+};
+
+export const useDeleteCourse = (courseId: string) => {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+
+  return useMutation({
+    mutationFn: () => courseService.deleteCourse(courseId),
+    onSuccess: (res) => {
+      // Nếu axiosClient bóc mất message, ta dùng câu fallback. Nếu sửa axiosClient rồi thì dùng res.message.
+      const message = res?.message || 'Khóa học đã được xử lý (Xóa hoặc Lưu trữ bảo vệ học viên).';
+      toast.success(message);
+      
+      queryClient.invalidateQueries({ queryKey: courseQueryKeys.teacherCourses() });
+      router.push(ROUTES.TEACHER.COURSES);
+    },
+    onError: (error) => {
+      toast.error('Không thể thao tác', { description: parseApiError(error).message });
+    },
   });
 };

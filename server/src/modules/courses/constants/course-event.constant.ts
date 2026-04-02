@@ -9,6 +9,8 @@ export enum CourseEventPattern {
     COURSE_PURCHASED = 'course.purchased',
     COURSE_SOLD = 'course.sold',
     COURSE_NEW_LESSON = 'course.new_lesson',
+    COURSE_ARCHIVED = 'course.archived',
+    COURSE_STATUS_DEACTIVATED = 'course.status.deactivated',
 }
 
 export interface CourseSubmittedEventPayload {
@@ -71,4 +73,9 @@ export interface CourseNewLessonEventPayload {
     courseTitle: string;
     lessonId: string;
     lessonTitle: string;
+}
+
+export interface CourseDeactivatedEventPayload {
+    courseId: string;
+    reason: 'ARCHIVED' | 'REJECTED';
 }

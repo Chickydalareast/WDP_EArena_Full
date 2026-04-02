@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { questionBankService } from '../api/question-bank.service';
-import { CloneQuestionDTO, BulkCloneQuestionsDTO, BulkDeleteQuestionsDTO, AiQuestionBuilderDTO, OrganizeQuestionsPayload, BulkAutoTagDTO } from '../types/question-bank.schema';
+import { CloneQuestionDTO, BulkCloneQuestionsDTO, BulkDeleteQuestionsDTO, AiQuestionBuilderDTO, OrganizeQuestionsPayload, BulkAutoTagDTO, BulkPublishQuestionsDTO } from '../types/question-bank.schema';
 import { BANK_QUESTIONS_KEY } from './useBankQueries';
 import { ApiError, parseApiError } from '@/shared/lib/error-parser';
 import { QuestionItemDTO } from '@/features/exam-builder/types/exam.schema';
@@ -160,6 +160,25 @@ export const useBulkAutoTag = () => {
         onError: (err: ApiError) => {
             toast.error('Không thể thực hiện yêu cầu', { 
                 description: err.message || 'Lỗi kết nối hoặc tài khoản không hợp lệ.' 
+            });
+        }
+    });
+};
+
+export const useBulkPublishQuestions = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (data: BulkPublishQuestionsDTO) => questionBankService.bulkPublishQuestions(data),
+        onSuccess: (data) => {
+            toast.success('Xuất bản thành công', { 
+                description: `Đã chuyển ${data.publishedCount} câu hỏi sang trạng thái Chính thức.` 
+            });
+            queryClient.invalidateQueries({ queryKey: BANK_QUESTIONS_KEY });
+        },
+        onError: (err: ApiError) => {
+            toast.error('Không thể xuất bản', { 
+                description: err.message || 'Đã có lỗi xảy ra khi kiểm tra dữ liệu.' 
             });
         }
     });

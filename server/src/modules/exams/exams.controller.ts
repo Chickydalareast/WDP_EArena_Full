@@ -16,6 +16,13 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { UserRole } from 'src/common/enums/user-role.enum';
+import { GenerateDynamicExamDto } from './dto/generate-exam.dto';
+import { FillExistingPaperPayload, GenerateDynamicExamPayload, PreviewDynamicExamPayload, PreviewRulePayload } from './interfaces/exam-generator.interface';
+import { FillFromMatrixDto } from './dto/fill-from-matrix.dto';
+import { UpdatePaperPointsDto } from './dto/update-paper-points.dto';
+import { UpdatePaperPointsPayload } from './interfaces/exams.interface';
+import { MatrixRuleDto } from './dto/exam-matrix.dto';
+import { PreviewDynamicExamDto } from './dto/preview-dynamic-exam.dto';
 
 @Controller('exams')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -32,11 +39,11 @@ export class ExamsController {
     @Body() dto: InitManualExamDto,
     @CurrentUser('userId') userId: string,
   ) {
-    // [MAX PING]: Chặn DTO, Đóng gói Payload theo chuẩn Domain
     const payload = {
       title: dto.title,
       description: dto.description,
       totalScore: dto.totalScore,
+      subjectId: dto.subjectId,
     };
     return this.examsService.initManualExam(userId, payload);
   }
@@ -61,17 +68,46 @@ export class ExamsController {
   @Post('generate')
   @Roles(UserRole.TEACHER)
   @HttpCode(HttpStatus.CREATED)
-  async generateFromMatrix(
-    @Body() dto: GenerateMatrixDto,
+  async generateDynamicExam(
+    @Body() dto: GenerateDynamicExamDto,
     @CurrentUser('userId') userId: string,
   ) {
-    const payload = {
+    const payload: GenerateDynamicExamPayload = {
       teacherId: userId,
       title: dto.title,
       totalScore: dto.totalScore,
-      criteria: dto.criteria,
+      matrixId: dto.matrixId,
+      adHocSections: dto.adHocSections as GenerateDynamicExamPayload['adHocSections'],
     };
-    return this.examGeneratorService.generateFromMatrix(payload);
+
+    return this.examGeneratorService.generateDynamicExam(payload);
+  }
+
+  @Post('dynamic/preview')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.TEACHER, UserRole.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async previewDynamicExam(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: PreviewDynamicExamDto,
+  ) {
+    const payload: PreviewDynamicExamPayload = {
+      teacherId: userId,
+      matrixId: dto.matrixId,
+      adHocSections: dto.adHocSections?.map(sec => ({
+        name: sec.name,
+        orderIndex: sec.orderIndex,
+        rules: sec.rules.map(r => ({
+          folderIds: r.folderIds,
+          topicIds: r.topicIds,
+          difficulties: r.difficulties,
+          tags: r.tags,
+          limit: r.limit
+        }))
+      }))
+    };
+
+    return this.examGeneratorService.previewDynamicExam(payload);
   }
 
   @Get()
@@ -81,7 +117,6 @@ export class ExamsController {
     @Query() dto: GetExamsDto,
     @CurrentUser('userId') userId: string,
   ) {
-    // [MAX PING]: Unpack DTO ra Domain Object
     const payload = {
       page: dto.page,
       limit: dto.limit,
@@ -110,7 +145,6 @@ export class ExamsController {
     @Body() dto: UpdateExamDto,
     @CurrentUser('userId') userId: string,
   ) {
-    // [MAX PING]: Tránh leak DTO thẳng vào Service
     const payload = {
       title: dto.title,
       description: dto.description,
@@ -156,5 +190,62 @@ export class ExamsController {
     @CurrentUser('userId') userId: string
   ) {
     return this.examsService.publishExam(examId, userId);
+  }
+
+
+  @Post('manual/papers/:paperId/fill-from-matrix')
+  @Roles(UserRole.TEACHER)
+  @HttpCode(HttpStatus.OK)
+  async fillExistingPaperFromMatrix(
+    @Param('paperId') paperId: string,
+    @Body() dto: FillFromMatrixDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    const payload: FillExistingPaperPayload = {
+      teacherId: userId,
+      paperId: paperId,
+      matrixId: dto.matrixId,
+      adHocSections: dto.adHocSections as FillExistingPaperPayload['adHocSections'],
+    };
+
+    return this.examGeneratorService.fillExistingPaperFromMatrix(payload);
+  }
+
+  @Patch('manual/papers/:paperId/points')
+  @Roles(UserRole.TEACHER)
+  @HttpCode(HttpStatus.OK)
+  async updatePaperPoints(
+    @Param('paperId') paperId: string,
+    @Body() dto: UpdatePaperPointsDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    const payload: UpdatePaperPointsPayload = {
+      divideEqually: dto.divideEqually,
+      pointsData: dto.pointsData,
+    };
+    return this.examsService.updatePaperPoints(paperId, userId, payload);
+  }
+
+  @Post('manual/papers/:paperId/matrix/preview-rule')
+  @Roles(UserRole.TEACHER)
+  @HttpCode(HttpStatus.OK)
+  async previewMatrixRule(
+    @Param('paperId') paperId: string,
+    @Body() dto: MatrixRuleDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    const payload: PreviewRulePayload = {
+      teacherId: userId,
+      paperId: paperId,
+      rule: {
+        folderIds: dto.folderIds,
+        topicIds: dto.topicIds,
+        difficulties: dto.difficulties,
+        tags: dto.tags,
+        limit: dto.limit
+      }
+    };
+
+    return this.examGeneratorService.previewRuleAvailability(payload);
   }
 }

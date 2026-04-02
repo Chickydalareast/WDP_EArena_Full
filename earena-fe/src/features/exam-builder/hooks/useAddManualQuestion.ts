@@ -8,29 +8,32 @@ import { examBuilderService } from '../api/exam-builder.service';
 import { OmitFolderIdDTO } from '../components/ManualQuestionForm';
 import { examQueryKeys } from '../api/query-keys';
 import { ApiError } from '@/shared/lib/error-parser';
+import { FolderNode, FolderResponse } from './useFolders';
 
-// [CTO FIX]: Khử toàn bộ 'any', ép kiểu an toàn khi đệ quy tìm ID Folder
 const findFolderByName = (data: unknown, targetName: string): string | null => {
   if (!data) return null;
-  const parsed = data as Record<string, unknown>;
-  const folders = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.items) ? parsed.items : (Array.isArray(parsed.data) ? parsed.data : []));
+  
+  let folders: FolderNode[] = [];
+  if (Array.isArray(data)) {
+    folders = data;
+  } else if (data && typeof data === 'object') {
+    const resObj = data as FolderResponse;
+    if (Array.isArray(resObj.items)) folders = resObj.items;
+    else if (Array.isArray(resObj.data)) folders = resObj.data;
+  }
   
   if (folders.length === 0) return null;
 
   for (const folder of folders) {
-    if (typeof folder === 'object' && folder !== null) {
-        const f = folder as Record<string, unknown>;
-        if (f.name === targetName) return String(f._id || f.id);
-        if (Array.isArray(f.children) && f.children.length > 0) {
-          const foundId = findFolderByName(f.children, targetName);
-          if (foundId) return foundId;
-        }
+    if (folder.name === targetName) return folder._id;
+    if (Array.isArray(folder.children) && folder.children.length > 0) {
+      const foundId = findFolderByName(folder.children, targetName);
+      if (foundId) return foundId;
     }
   }
   return null;
 };
 
-// Định nghĩa Data Contract an toàn
 interface FolderCreateResponse {
   id?: string;
   _id?: string;
@@ -54,14 +57,13 @@ export const useAddManualQuestion = (paperId: string) => {
       const folderName = `[Tự tạo ngầm] Tài nguyên của mã đề: ${paperId}`;
       let targetFolderId = '';
 
-      // [BƯỚC 1]: SMART FOLDER RESOLUTION
-      const foldersResponse = await axiosClient.get(API_ENDPOINTS.FOLDERS.MY_FOLDERS);
+      const foldersResponse = await axiosClient.get(API_ENDPOINTS.QUESTION_FOLDERS.BASE);
       const existingId = findFolderByName(foldersResponse, folderName);
       
       if (existingId) {
         targetFolderId = existingId; 
       } else {
-        const newFolder = await axiosClient.post(API_ENDPOINTS.FOLDERS.BASE, {
+        const newFolder = await axiosClient.post(API_ENDPOINTS.QUESTION_FOLDERS.BASE, {
           name: folderName,
           parentId: null 
         }) as FolderCreateResponse;
@@ -70,7 +72,6 @@ export const useAddManualQuestion = (paperId: string) => {
 
       if (!targetFolderId) throw new Error('Không thể xác định thư mục lưu trữ');
 
-      // [BƯỚC 2]: TRANSFORMATION & GỌI API TẠO CÂU HỎI
       const LABELS = ['A', 'B', 'C', 'D'];
       const formattedAnswers = questionData.answers.map((ans, index) => ({
         id: LABELS[index],
@@ -85,7 +86,6 @@ export const useAddManualQuestion = (paperId: string) => {
          isDraft: true, 
       }) as QuestionCreateResponse;
 
-      // [CTO FIX]: Fallback ID Parsing - Hứng trọn mọi case BE có thể trả về
       let newQuestionId = '';
       if (questionResponse.insertedIds && Array.isArray(questionResponse.insertedIds) && questionResponse.insertedIds.length > 0) {
         newQuestionId = String(questionResponse.insertedIds[0]);
@@ -95,7 +95,6 @@ export const useAddManualQuestion = (paperId: string) => {
 
       if (!newQuestionId) throw new Error('BE không trả về ID câu hỏi');
 
-      // [BƯỚC 3]: BỐC VÀO VỎ ĐỀ (BƯỚC NÀY KHÔNG CÒN BỊ CHẾT NỮA)
       await examBuilderService.updatePaperQuestions(paperId, {
         action: 'ADD',
         questionId: newQuestionId,

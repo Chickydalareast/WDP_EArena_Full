@@ -8,9 +8,11 @@ import {
     CreateCourseDTO,
     CourseTeacherDetail,
     PublicCourseDetail,
-    UpdateCourseDTO
+    UpdateCourseDTO,
+    CourseDashboardStats
 } from '../types/course.schema';
-import { AiBuilderFormDTO, AiBuilderResponse, CreateLessonDTO, CreateSectionDTO, UpdateLessonDTO, UpdateSectionDTO } from '../types/curriculum.schema';
+import { AiBuilderFormDTO, AiBuilderResponse, CreateLessonDTO, CreateQuizLessonDTO, CreateSectionDTO, UpdateLessonDTO, UpdateQuizLessonDTO, UpdateSectionDTO } from '../types/curriculum.schema';
+import { CreateQuizLessonResponse } from '@/features/exam-builder/types/exam.schema';
 
 export const courseService = {
     getPublicCourses: async (params: Record<string, unknown>): Promise<{ items: CourseBasic[], total: number }> => {
@@ -124,6 +126,47 @@ export const courseService = {
                     'Content-Type': 'multipart/form-data',
                 },
             }
+        );
+    },
+
+    sendHeartbeat: async (payload: { courseId: string; lessonId: string; delta: number; lastPosition: number; isEnded?: boolean }): Promise<void> => {
+        return axiosClient.post<unknown, void>(API_ENDPOINTS.LEARNING.HEARTBEAT, payload);
+    },
+
+    getCourseDashboardStats: async (courseId: string): Promise<CourseDashboardStats> => {
+        return axiosClient.get<unknown, CourseDashboardStats>(
+            API_ENDPOINTS.COURSES.TEACHER_DASHBOARD_STATS(courseId)
+        );
+    },
+
+    getCurriculumView: async (courseId: string): Promise<PublicCourseDetail> => {
+        return axiosClient.get<unknown, PublicCourseDetail>(
+            API_ENDPOINTS.COURSES.TEACHER_CURRICULUM_VIEW(courseId)
+        );
+    },
+
+    deleteCourse: async (courseId: string): Promise<any> => {
+        return axiosClient.delete(API_ENDPOINTS.COURSES.DETAIL(courseId));
+    },
+
+    createQuizLesson: async (payload: CreateQuizLessonDTO): Promise<CreateQuizLessonResponse> => {
+        return axiosClient.post<unknown, CreateQuizLessonResponse>(
+            API_ENDPOINTS.COURSES.QUIZ_BUILDER,
+            payload
+        );
+    },
+
+    updateQuizLesson: async (payload: UpdateQuizLessonDTO): Promise<void> => {
+        return axiosClient.put<unknown, void>(
+            API_ENDPOINTS.COURSES.QUIZ_BUILDER,
+            payload
+        );
+    },
+
+    deleteQuizLesson: async (courseId: string, lessonId: string): Promise<void> => {
+        return axiosClient.delete<unknown, void>(
+            API_ENDPOINTS.COURSES.QUIZ_BUILDER,
+            { params: { courseId, lessonId } }
         );
     },
 };

@@ -22,6 +22,25 @@ export class AdminExamsController {
     });
   }
 
+  // @Patch(':id/publish')
+  // async setPublish(@Param('id') id: string, @Body() dto: AdminSetExamPublishDto) {
+  //   return this.adminService.setExamPublish(id, dto.isPublished);
+  // }
+
+  // @Delete(':id')
+  // async delete(@Param('id') id: string) {
+  //   return this.adminService.deleteExam(id);
+  // }
+
+  @Get(':examId/paper')
+  async getPaperDetailByExamId(@Param('examId') examId: string) {
+    const data = await this.adminService.getExamPaperDetailByExamId(examId);
+    return {
+      message: 'Lấy chi tiết cấu trúc đề thi thành công',
+      data
+    };
+  }
+
   @Patch(':id/publish')
   async setPublish(@Param('id') id: string, @Body() dto: AdminSetExamPublishDto) {
     return this.adminService.setExamPublish(id, dto.isPublished);

@@ -16,18 +16,28 @@ export class GetQuestionsDto {
   limit?: number = 10;
 
   @IsOptional()
-  @IsMongoId({ message: 'ID thư mục không hợp lệ' })
-  folderId?: string;
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @IsArray()
+  @IsMongoId({ each: true, message: 'ID thư mục không hợp lệ' })
+  folderIds?: string[];
 
   @IsOptional()
-  @IsMongoId({ message: 'ID chuyên đề không hợp lệ' })
-  topicId?: string;
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @IsArray()
+  @IsMongoId({ each: true, message: 'ID chuyên đề không hợp lệ' })
+  topicIds?: string[];
 
   @IsOptional()
   @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
   @IsArray()
   @IsEnum(DifficultyLevel, { each: true, message: 'Mức độ khó không hợp lệ' })
   difficultyLevels?: DifficultyLevel[];
+
+  @IsOptional()
+  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
 
   @IsOptional()
   @IsString()

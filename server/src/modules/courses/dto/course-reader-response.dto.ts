@@ -38,6 +38,10 @@ export class LessonResponseDto {
   @Expose()
   @Type(() => MediaResponseDto)
   attachments?: MediaResponseDto[];
+
+  @Expose()
+  @Type(() => LessonProgressResponseDto)
+  progress?: LessonProgressResponseDto | null;
 }
 
 export class SectionResponseDto {
@@ -144,4 +148,10 @@ export class MyCourseReviewDto {
   @Expose() teacherReply: string | null;
   @Expose() repliedAt: Date | null;
   @Expose() createdAt: Date;
+}
+
+export class LessonProgressResponseDto {
+  @Expose() watchTime: number;
+  @Expose() lastPosition: number;
+  @Expose() isCompleted: boolean;
 }

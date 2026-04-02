@@ -4,6 +4,7 @@ export const InitExamSchema = z.object({
   title: z.string().min(1, 'Tiêu đề không được để trống'),
   description: z.string().optional(),
   totalScore: z.number().min(0, 'Tổng điểm không hợp lệ'),
+  subjectId: z.string().min(1, 'Vui lòng chọn môn học cho đề thi này'),
 });
 export type InitExamDTO = z.infer<typeof InitExamSchema>;
 
@@ -28,15 +29,6 @@ export type UpdatePaperDTO = z.infer<typeof UpdatePaperSchema>;
 export interface PublishExamResponse {
   message: string;
 }
-
-// export const GenerateExamSchema = z.object({
-//   title: z.string().min(1),
-//   duration: z.number().min(1),
-//   totalScore: z.number().min(0),
-//   criteria: z.array(z.any()),
-// });
-// export type GenerateExamDTO = z.infer<typeof GenerateExamSchema>;
-
 
 export interface StudentAssignmentItem {
   assignment: {
@@ -74,20 +66,14 @@ export const SubQuestionSchema = z.object({
 });
 export type SubQuestionDTO = z.infer<typeof SubQuestionSchema>;
 
-// ==============================================================
-// 1. BASE SHAPES (Trích xuất các field chung để tái sử dụng, tránh lỗi ZodEffects)
-// ==============================================================
-
-// Tách riêng ruột object để không bị dính ZodEffects từ superRefine
 const BaseQuestionShape = {
   type: z.enum(['MULTIPLE_CHOICE', 'PASSAGE']),
   content: z.string().min(5, 'Nội dung quá ngắn'),
   explanation: z.string().optional(),
-  
-  // [BỔ SUNG] 2 trường phục vụ luồng Draft vs Publish
-  topicId: z.string().optional(), 
-  isDraft: z.boolean().default(true), 
-  
+
+  topicId: z.string().optional(),
+  isDraft: z.boolean().default(true),
+
   difficultyLevel: z.enum(['NB', 'TH', 'VD', 'VDC', 'UNKNOWN']).default('UNKNOWN'),
   tags: z.array(z.string()).optional(),
   answers: z.array(AnswerOptionSchema).optional(),
@@ -95,13 +81,10 @@ const BaseQuestionShape = {
   attachedMedia: z.array(z.string()).default([]),
 };
 
-// Khai báo Base Schema thuần túy
 export const BaseQuestionItemSchema = z.object(BaseQuestionShape);
 export type BaseQuestionInput = z.infer<typeof BaseQuestionItemSchema>;
 
-// Hàm dùng chung cho superRefine để DRY (Don't Repeat Yourself)
 const validateQuestionLogic = (data: BaseQuestionInput, ctx: z.RefinementCtx) => {
-  // --- A. Logic kiểm tra cấu trúc (Structure Logic) ---
   if (data.type === 'PASSAGE') {
     if (!data.subQuestions || data.subQuestions.length === 0) {
       ctx.addIssue({
@@ -127,7 +110,6 @@ const validateQuestionLogic = (data: BaseQuestionInput, ctx: z.RefinementCtx) =>
     }
   }
 
-  // --- B. Logic chuẩn hóa (Business Logic cho Publish Flow) ---
   if (data.isDraft === false) {
     if (!data.topicId || data.topicId.trim() === '') {
       ctx.addIssue({
@@ -145,7 +127,6 @@ const validateQuestionLogic = (data: BaseQuestionInput, ctx: z.RefinementCtx) =>
       });
     }
 
-    // [DEEP CHECK] Quét toàn bộ câu hỏi con của PASSAGE, cấm UNKNOWN
     if (data.type === 'PASSAGE' && data.subQuestions) {
       data.subQuestions.forEach((subQ, index) => {
         if (subQ.difficultyLevel === 'UNKNOWN') {
@@ -160,9 +141,6 @@ const validateQuestionLogic = (data: BaseQuestionInput, ctx: z.RefinementCtx) =>
   }
 };
 
-// ==============================================================
-// 2. SCHEMAS CHO LUỒNG CREATE & BULK
-// ==============================================================
 
 export const QuestionItemSchema = BaseQuestionItemSchema.superRefine(validateQuestionLogic);
 export type QuestionItemDTO = z.infer<typeof QuestionItemSchema>;
@@ -172,15 +150,12 @@ export const BulkCreateQuestionZodSchema = z.object({
   questions: z.array(QuestionItemSchema).min(1, 'Phải có ít nhất 1 câu hỏi/đoạn văn'),
 });
 export type BulkCreateQuestionDTO = z.infer<typeof BulkCreateQuestionZodSchema>;
-// ==============================================================
-// 3. SCHEMAS CHO LUỒNG UPDATE API
-// ==============================================================
 
 export const UpdateSingleQuestionSchema = z.object({
   content: z.string().optional(),
   explanation: z.string().optional(),
-  topicId: z.string().optional(), 
-  isDraft: z.boolean().optional(), 
+  topicId: z.string().optional(),
+  isDraft: z.boolean().optional(),
   difficultyLevel: z.enum(['NB', 'TH', 'VD', 'VDC', 'UNKNOWN']).optional(),
   answers: z.array(AnswerOptionSchema).optional(),
   attachedMedia: z.array(z.string()).optional(),
@@ -216,7 +191,6 @@ export const MatrixCriterionSchema = z.object({
   limit: z.number().min(1, 'Số lượng tối thiểu là 1'),
 });
 
-// 2. Schema DTO gửi xuống BE (Tuân thủ 100% Contract)
 export const GenerateExamSchema = z.object({
   title: z.string().min(1, 'Tiêu đề không được để trống'),
   duration: z.number().min(1, 'Thời gian thi tối thiểu 1 phút'),
@@ -225,16 +199,140 @@ export const GenerateExamSchema = z.object({
 });
 export type GenerateExamDTO = z.infer<typeof GenerateExamSchema>;
 
-// 3. Schema mở rộng dành riêng cho UI Form (chứa field chọn Môn học tạm thời)
 export const GenerateExamFormSchema = GenerateExamSchema.extend({
   subjectId: z.string().min(1, 'Vui lòng chọn môn học để lấy chuyên đề'),
 });
 export type GenerateExamFormValues = z.infer<typeof GenerateExamFormSchema>;
 
-// 4. Response Type từ BE
 export interface GenerateExamResponse {
   examId: string;
   examPaperId: string;
   totalItems: number;
   totalActualQuestions: number;
+}
+
+
+export const MatrixRuleSchema = z.object({
+  limit: z.number().min(1, 'Số lượng tối thiểu là 1'),
+  folderIds: z.array(z.string()).default([]),
+  topicIds: z.array(z.string()).default([]),
+  difficulties: z.array(z.enum(['NB', 'TH', 'VD', 'VDC'])).default([]),
+  tags: z.array(z.string()).default([]),
+});
+export type MatrixRuleDTO = z.infer<typeof MatrixRuleSchema>;
+
+export const MatrixSectionSchema = z.object({
+  name: z.string().min(1, 'Tên phần thi không được để trống'),
+  orderIndex: z.number().min(0),
+  rules: z.array(MatrixRuleSchema).min(1, 'Phải có ít nhất 1 luật bốc câu hỏi'),
+});
+export type MatrixSectionDTO = z.infer<typeof MatrixSectionSchema>;
+
+export const FillFromMatrixFormSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('TEMPLATE'),
+    matrixId: z.string().min(1, 'Vui lòng chọn khuôn mẫu'),
+  }),
+  z.object({
+    mode: z.literal('ADHOC'),
+    adHocSections: z.array(MatrixSectionSchema).min(1, 'Phải có ít nhất 1 phần thi'),
+  }),
+]);
+export type FillFromMatrixFormValues = z.infer<typeof FillFromMatrixFormSchema>;
+
+export type FillFromMatrixDTO =
+  | { matrixId: string }
+  | { adHocSections: MatrixSectionDTO[] };
+
+export interface FillFromMatrixResponse {
+  message: string;
+  addedItems: number;
+  addedActualQuestions: number;
+}
+
+
+export const UpdatePointsSchema = z.union([
+  z.object({
+    divideEqually: z.literal(true),
+  }),
+  z.object({
+    pointsData: z.array(
+      z.object({
+        questionId: z.string().min(1),
+        points: z.number().min(0, 'Điểm không hợp lệ'),
+      })
+    ).min(1, 'Không có dữ liệu điểm'),
+  }),
+]);
+export type UpdatePointsDTO = z.infer<typeof UpdatePointsSchema>;
+
+
+export interface MatrixTemplate {
+  _id: string;
+  title: string;
+  description?: string;
+  teacherId: string;
+  subjectId: string;
+  createdAt: string;
+  sections?: MatrixSectionDTO[];
+}
+
+export interface PaginatedMatrixResponse {
+  items: MatrixTemplate[];
+}
+
+export const ActiveFiltersPayloadSchema = z.object({
+  folderIds: z.array(z.string()).optional(),
+  topicIds: z.array(z.string()).optional(),
+  difficulties: z.array(z.enum(['NB', 'TH', 'VD', 'VDC', 'UNKNOWN'])).optional(),
+  tags: z.array(z.string()).optional(),
+  isDraft: z.boolean().optional(),
+});
+export type ActiveFiltersPayloadDTO = z.infer<typeof ActiveFiltersPayloadSchema>;
+
+export interface ActiveFilterTopic {
+  id: string;
+  name: string;
+}
+
+export interface ActiveFiltersResponse {
+  folderIds: string[];
+  topics: ActiveFilterTopic[];
+  difficulties: string[];
+  tags: string[];
+}
+
+export interface PreviewMatrixRuleResponse {
+  availableQuestionsCount: number;
+}
+
+
+export const DynamicPreviewRequestSchema = z.object({
+  matrixId: z.string().optional(),
+  adHocSections: z.array(MatrixSectionSchema).optional(),
+  
+  name: z.string().min(1, 'Tên phần thi không được để trống').optional(),
+  orderIndex: z.number().min(0).optional(),
+  rules: z.array(MatrixRuleSchema).optional(),
+}).refine(data => 
+  data.matrixId || 
+  (data.adHocSections && data.adHocSections.length > 0) || 
+  (data.rules && data.rules.length > 0), 
+{
+  message: 'Thiếu dữ liệu cấu hình để xem trước đề thi.'
+});
+export type DynamicPreviewRequestDTO = z.infer<typeof DynamicPreviewRequestSchema>;
+
+export interface DynamicPreviewResponse {
+  totalItems: number;
+  totalActualQuestions: number;
+  previewData: {
+    questions: QuestionItemDTO[]; 
+  };
+}
+
+export interface CreateQuizLessonResponse {
+  id: string;
+  title: string;
+  order: number;
 }

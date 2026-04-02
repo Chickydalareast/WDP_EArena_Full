@@ -4,7 +4,8 @@ export type MediaContextType =
     | 'lesson_video'
     | 'lesson_document'
     | 'question'
-    | 'general';
+    | 'general'
+    | 'course_promotional_video';
 
 export interface RequestTicketPayload {
     fileName: string;

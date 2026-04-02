@@ -4,4 +4,5 @@ export interface SyncHeartbeatPayload {
     lessonId: string;
     delta: number;
     lastPosition: number;
+    isEnded?: boolean;
 }

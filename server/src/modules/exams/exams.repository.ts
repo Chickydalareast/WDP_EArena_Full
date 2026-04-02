@@ -15,13 +15,19 @@ export class ExamsRepository extends AbstractRepository<ExamDocument> {
     super(model, connection);
   }
 
-
   async getExamsWithPagination(teacherId: string, page: number, limit: number, search?: string, type?: ExamType, subjectId?: string) {
     const skip = (page - 1) * limit;
     const matchStage: any = { teacherId: new Types.ObjectId(teacherId) };
 
     if (search) matchStage.title = { $regex: search, $options: 'i' };
-    if (type) matchStage.type = type;
+    
+    // [FIX BLIND SPOT]: Xử lý triệt để loại trừ COURSE_QUIZ khỏi danh sách quản lý
+    if (type) {
+      matchStage.type = type;
+    } else {
+      matchStage.type = { $ne: ExamType.COURSE_QUIZ }; // Ẩn hoàn toàn quiz nội bộ khóa học
+    }
+    
     if (subjectId) matchStage.subjectId = new Types.ObjectId(subjectId);
 
     const [result] = await this.model.aggregate([
