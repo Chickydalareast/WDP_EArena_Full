@@ -8,8 +8,7 @@ import { toast } from 'sonner';
 import PersonalInfoSection from './sections/PersonalInfoSection';
 import SecuritySection from './sections/SecuritySection'; 
 
-// [CTO FIX]: Tách Map Data ra khỏi logic Component để code sạch & dễ mở rộng
-const ROLE_MAP = {
+const ROLE_MAP: Record<string, { label: string, className: string }> = {
   STUDENT: { 
     label: 'Học sinh', 
     className: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' 
@@ -53,7 +52,6 @@ export default function ProfileLayout() {
           toast.success('Cập nhật ảnh đại diện thành công');
         },
         onError: () => {
-          // Upload lỗi thì trả về ảnh cũ
           setPreviewUrl(null);
           if (fileInputRef.current) fileInputRef.current.value = '';
         }
@@ -103,16 +101,13 @@ export default function ProfileLayout() {
               {user.fullName || 'Người dùng hệ thống'}
             </h2>
             
-            {/* [CTO FIX]: Dynamic Badges - Sử dụng flex-wrap chống tràn */}
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-2 mt-3">
-              {/* 1. Role Badge */}
               <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${roleDisplay.className}`}>
                 {roleDisplay.label}
               </span>
 
-              {/* 2. Subjects Badges (Chỉ render nếu là Giáo viên và có mảng subjects) */}
               {user.role === 'TEACHER' && user.subjects && user.subjects.length > 0 && (
-                user.subjects.map(subject => (
+                user.subjects.map((subject: any) => (
                   <span 
                     key={subject.id} 
                     className="bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-foreground text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1 border border-primary/20"
@@ -123,7 +118,6 @@ export default function ProfileLayout() {
                 ))
               )}
 
-              {/* 3. Status Badge */}
               <span className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider flex items-center gap-1.5">
                 <span className="size-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
                 Đang hoạt động
