@@ -30,9 +30,11 @@ interface CreateReviewModalProps {
     courseId: string;
     isOpen: boolean;
     onClose: () => void;
+    title?: string;
+    message?: string;
 }
 
-export const CreateReviewModal = ({ courseId, isOpen, onClose }: CreateReviewModalProps) => {
+export const CreateReviewModal = ({ courseId, isOpen, onClose, title, message }: CreateReviewModalProps) => {
     const { mutate: createReview, isPending } = useCreateReview(courseId);
 
     const form = useForm<CreateReviewDTO>({
@@ -47,6 +49,8 @@ export const CreateReviewModal = ({ courseId, isOpen, onClose }: CreateReviewMod
         if (isPending) return; // Chặn đóng khi đang call API
         if (!open) {
             form.reset();
+            // Đóng lại là auto ghi cờ chống làm phiền
+            localStorage.setItem(`has_dismissed_review_${courseId}`, 'true');
             onClose();
         }
     };
@@ -55,6 +59,7 @@ export const CreateReviewModal = ({ courseId, isOpen, onClose }: CreateReviewMod
         createReview(data, {
             onSuccess: () => {
                 form.reset();
+                localStorage.setItem(`has_dismissed_review_${courseId}`, 'true'); // Đã nộp thì khóa vĩnh viễn
                 onClose();
                 // Không cần Invalidate ở đây vì đã xử lý Optimistic Update tập trung ở useCreateReview
             },
@@ -65,9 +70,9 @@ export const CreateReviewModal = ({ courseId, isOpen, onClose }: CreateReviewMod
         <Dialog open={isOpen} onOpenChange={handleOpenChange}>
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
-                    <DialogTitle>Đánh giá khóa học</DialogTitle>
+                    <DialogTitle>{title || 'Đánh giá khóa học'}</DialogTitle>
                     <DialogDescription>
-                        Chia sẻ cảm nhận của bạn để giúp học viên khác hiểu hơn về khóa học này nhé. (Bạn chỉ có thể đánh giá 1 lần duy nhất).
+                        {message || 'Chia sẻ cảm nhận của bạn để giúp học viên khác hiểu hơn về khóa học này nhé. (Bạn chỉ có thể đánh giá 1 lần duy nhất).'}
                     </DialogDescription>
                 </DialogHeader>
 

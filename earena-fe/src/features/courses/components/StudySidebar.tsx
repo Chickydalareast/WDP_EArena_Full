@@ -4,12 +4,13 @@ import { usePathname, useRouter } from 'next/navigation';
 import { SectionPreview, LessonPreview } from '../types/course.schema';
 import { CheckCircle2, PlayCircle, FileText, HelpCircle, Lock } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
 interface StudySidebarProps {
   sections: SectionPreview[];
   currentLessonId: string | null;
-  treeStatus?: 'ACTIVE' | 'EXPIRED' | 'BANNED' | string; 
+  treeStatus?: 'ACTIVE' | 'EXPIRED' | 'BANNED' | string;
+  progressionMode?: 'FREE' | 'STRICT_LINEAR'; // [CTO BỔ SUNG]
 }
 
 type LessonWithFallback = LessonPreview & {
@@ -17,7 +18,7 @@ type LessonWithFallback = LessonPreview & {
   mediaId?: string;
 };
 
-export function StudySidebar({ sections, currentLessonId, treeStatus = 'ACTIVE' }: StudySidebarProps) {
+export function StudySidebar({ sections, currentLessonId, treeStatus = 'ACTIVE', progressionMode = 'FREE' }: StudySidebarProps) {
   const router = useRouter();
   const pathname = usePathname();
   
@@ -29,11 +30,31 @@ export function StudySidebar({ sections, currentLessonId, treeStatus = 'ACTIVE' 
     return initialState;
   });
 
+  // [CTO CORE LOGIC]: Thuật toán Flatten mảng & Tính toán Lock Status (Memoized O(N))
+  const linearLockMap = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    if (progressionMode !== 'STRICT_LINEAR') return map; // Mở khóa toàn bộ nếu là FREE
+
+    const flatLessons = sections.flatMap(sec => sec.lessons);
+    
+    flatLessons.forEach((lesson, index) => {
+      if (index === 0) {
+        map[lesson.id] = false; // Bài đầu tiên luôn mở
+      } else {
+        const prevLesson = flatLessons[index - 1];
+        map[lesson.id] = !prevLesson.isCompleted; // Khóa nếu bài liền trước chưa xong
+      }
+    });
+
+    return map;
+  }, [sections, progressionMode]);
+
   const toggleSection = (sectionId: string) => {
     setOpenSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] }));
   };
 
-  const onLessonSelect = (lessonId: string, isFreePreview: boolean) => {
+  const onLessonSelect = (lessonId: string, isFreePreview: boolean, isLocked: boolean) => {
+    if (isLocked) return; // Chặn onClick tuyệt đối ở tầng JS
     router.push(`${pathname}?lessonId=${lessonId}`, { scroll: false });
   };
 
@@ -55,7 +76,7 @@ export function StudySidebar({ sections, currentLessonId, treeStatus = 'ACTIVE' 
         <div key={section.id} className="border-b border-border">
           <button
             onClick={() => toggleSection(section.id)}
-            className="w-full flex items-center justify-between p-4 bg-muted/10 hover:bg-muted/30 transition-colors text-left"
+            className="w-full flex items-center justify-between p-4 bg-muted/10 hover:bg-muted/30 transition-colors text-left outline-none focus-visible:ring-2 ring-primary inset-ring"
           >
             <span className="font-bold text-sm text-foreground">
               Phần {index + 1}: {section.title}
@@ -70,13 +91,20 @@ export function StudySidebar({ sections, currentLessonId, treeStatus = 'ACTIVE' 
               {section.lessons.map((lesson) => {
                 const isActive = lesson.id === currentLessonId;
                 
+                // Gộp điều kiện khóa: Do Linear Logic hoặc do khóa học hết hạn
+                const isLinearLocked = linearLockMap[lesson.id];
+                const isStatusLocked = treeStatus !== 'ACTIVE' && !lesson.isFreePreview;
+                const isLocked = isLinearLocked || isStatusLocked;
+                
                 return (
                   <button
                     key={lesson.id}
-                    onClick={() => onLessonSelect(lesson.id, lesson.isFreePreview)}
+                    onClick={() => onLessonSelect(lesson.id, lesson.isFreePreview, isLocked)}
+                    disabled={isLocked}
                     className={cn(
                       "flex items-center gap-3 px-4 py-3 text-left transition-colors relative group outline-none",
-                      isActive ? "bg-primary/10" : "hover:bg-muted/50"
+                      isActive ? "bg-primary/10" : "hover:bg-muted/50",
+                      isLocked && "opacity-50 cursor-not-allowed hover:bg-transparent" // UI mờ đi khi bị khóa
                     )}
                   >
                     {isActive && (
@@ -86,15 +114,16 @@ export function StudySidebar({ sections, currentLessonId, treeStatus = 'ACTIVE' 
                     {lesson.isCompleted ? (
                       <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
                     ) : (
-                      <div className="w-5 h-5 rounded-full border border-muted-foreground/40 shrink-0 flex items-center justify-center">
-                         {treeStatus !== 'ACTIVE' && !lesson.isFreePreview && <Lock className="w-3 h-3 text-muted-foreground/40" />}
+                      <div className="w-5 h-5 rounded-full border border-muted-foreground/40 shrink-0 flex items-center justify-center bg-background">
+                         {isLocked && <Lock className="w-3 h-3 text-muted-foreground/60" />}
                       </div>
                     )}
 
                     <div className="flex flex-col flex-1 overflow-hidden">
                       <span className={cn(
                         "text-sm font-medium truncate",
-                        isActive ? "text-primary" : "text-foreground group-hover:text-primary"
+                        isActive ? "text-primary" : "text-foreground group-hover:text-primary",
+                        isLocked && "group-hover:text-foreground text-muted-foreground"
                       )}>
                         {lesson.title}
                       </span>

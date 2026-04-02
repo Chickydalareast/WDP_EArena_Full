@@ -127,4 +127,24 @@ export class EnrollmentsRepository extends AbstractRepository<EnrollmentDocument
 
     return enrollments.map(e => e.userId.toString());
   }
+
+  async getCourseAverageProgress(courseId: string | Types.ObjectId): Promise<number> {
+    const pipeline: PipelineStage[] = [
+      { 
+        $match: { 
+          courseId: new Types.ObjectId(courseId.toString()), 
+          status: EnrollmentStatus.ACTIVE 
+        } 
+      },
+      { 
+        $group: { 
+          _id: null, 
+          avgProgress: { $avg: '$progress' } 
+        } 
+      }
+    ];
+
+    const result = await this.enrollmentModel.aggregate(pipeline).exec();
+    return result.length > 0 ? result[0].avgProgress : 0;
+  }
 }

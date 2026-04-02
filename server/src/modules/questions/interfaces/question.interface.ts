@@ -40,7 +40,7 @@ export interface BulkQuestionItemPayload {
   answers?: AnswerOptionPayload[];
   subQuestions?: BulkSubQuestionPayload[];
   attachedMedia?: string[];
-  
+
   topicId?: string;
   isDraft?: boolean;
 }
@@ -97,13 +97,13 @@ export interface BulkDeleteQuestionPayload {
 export interface QuestionFilterPayload {
   page: number;
   limit: number;
-  folderId?: string;
-  topicId?: string;
+  folderIds?: string[];
+  topicIds?: string[];
   difficultyLevels?: DifficultyLevel[];
+  tags?: string[];
   search?: string;
   isDraft?: boolean;
 }
-
 export interface BulkStandardizeQuestionPayload {
   questionIds: string[];
   topicId: string;
@@ -112,5 +112,30 @@ export interface BulkStandardizeQuestionPayload {
 }
 
 export interface SuggestFolderPayload {
+  questionIds: string[];
+}
+
+export interface GetActiveFiltersPayload {
+  folderIds?: string[];
+  topicIds?: string[];
+  difficulties?: DifficultyLevel[];
+  tags?: string[];
+  isDraft?: boolean;
+}
+
+export interface PrunedTreeNode {
+  id: string;
+  name: string;
+  children: PrunedTreeNode[];
+}
+
+export interface ActiveFiltersResponse {
+  folders: PrunedTreeNode[];
+  topics: PrunedTreeNode[];
+  difficulties: string[];
+  tags: string[];
+}
+
+export interface BulkPublishQuestionPayload {
   questionIds: string[];
 }

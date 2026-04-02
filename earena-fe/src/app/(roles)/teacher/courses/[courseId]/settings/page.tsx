@@ -25,11 +25,11 @@ export default async function CourseSettingsPage({
   return (
     <div className="w-full max-w-[800px] mx-auto p-4 md:p-8 animate-in fade-in duration-300">
       <div className="flex items-center gap-4 mb-8 border-b border-border pb-4">
-        <Link href={ROUTES.TEACHER.COURSES}>
+        {/* <Link href={ROUTES.TEACHER.COURSES}>
           <Button variant="outline" size="icon" className="h-9 w-9 rounded-full">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-        </Link>
+        </Link> */}
         <div>
           <h1 className="text-2xl font-extrabold text-foreground tracking-tight">
             Cài đặt chung

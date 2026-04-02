@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useStudyTree } from '../hooks/useStudyRoom';
 import { StudySidebar } from '../components/StudySidebar';
@@ -19,8 +19,27 @@ export function StudyRoomScreen({ courseId }: { courseId: string }) {
   const currentLessonId = searchParams.get('lessonId');
 
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewPromptData, setReviewPromptData] = useState<{ title?: string; message?: string }>({});
 
   const { data: studyTree, isLoading, isError, error } = useStudyTree(courseId);
+
+  useEffect(() => {
+    const handleReviewPrompt = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      
+      if (detail.courseId === courseId) {
+        const hasDismissed = localStorage.getItem(`has_dismissed_review_${courseId}`);
+        
+        if (!hasDismissed) {
+           window.dispatchEvent(new CustomEvent('core:pause_video'));
+           setIsReviewModalOpen(true);
+        }
+      }
+    };
+    
+    window.addEventListener('core:prompt_review', handleReviewPrompt);
+    return () => window.removeEventListener('core:prompt_review', handleReviewPrompt);
+  }, [courseId]);
 
   if (isLoading) {
     return (
@@ -76,9 +95,9 @@ export function StudyRoomScreen({ courseId }: { courseId: string }) {
       </main>
 
       <aside className="w-full md:w-[350px] lg:w-[400px] h-[50vh] md:h-full border-l border-border bg-card flex flex-col shrink-0">
-        
+
         <div className="p-4 border-b border-border shadow-sm z-10 bg-card space-y-4">
-          
+
           <div>
             <h2 className="font-bold text-lg mb-2 truncate" title="Tiến độ học tập">Tiến độ của bạn</h2>
             <div className="flex items-center gap-3">
@@ -91,30 +110,30 @@ export function StudyRoomScreen({ courseId }: { courseId: string }) {
             {studyTree.myReview ? (
               <div className="bg-muted/30 p-3 rounded-lg border border-border/50">
                 <div className="flex items-center justify-between mb-1">
-                   <span className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Đánh giá của bạn</span>
-                   <StarRating value={studyTree.myReview.rating} readonly size={12} />
+                  <span className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Đánh giá của bạn</span>
+                  <StarRating value={studyTree.myReview.rating} readonly size={12} />
                 </div>
                 {studyTree.myReview.comment && (
-                   <p className="text-sm text-foreground mt-1.5 leading-snug line-clamp-3">
-                     "{studyTree.myReview.comment}"
-                   </p>
+                  <p className="text-sm text-foreground mt-1.5 leading-snug line-clamp-3">
+                    "{studyTree.myReview.comment}"
+                  </p>
                 )}
                 {studyTree.myReview.teacherReply && (
                   <div className="mt-2 p-2 bg-primary/5 rounded border-l-2 border-primary/50 text-xs">
-                    <span className="font-bold text-primary flex items-center gap-1 mb-1"><MessageSquareReply size={12}/> GV phản hồi:</span>
+                    <span className="font-bold text-primary flex items-center gap-1 mb-1"><MessageSquareReply size={12} /> GV phản hồi:</span>
                     <span className="text-muted-foreground">{studyTree.myReview.teacherReply}</span>
                   </div>
                 )}
               </div>
             ) : (
               <div className="flex flex-col gap-1.5">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full h-9 text-sm bg-background border-dashed hover:border-primary/50 hover:bg-primary/5 transition-colors"
                   disabled={studyTree.progress === 0}
                   onClick={() => setIsReviewModalOpen(true)}
                 >
-                  <Star className="w-4 h-4 mr-2 text-yellow-500" /> 
+                  <Star className="w-4 h-4 mr-2 text-yellow-500" />
                   Viết đánh giá khóa học
                 </Button>
                 {studyTree.progress === 0 && (
@@ -127,20 +146,23 @@ export function StudyRoomScreen({ courseId }: { courseId: string }) {
           </div>
 
         </div>
-        
+
         <div className="flex-1 overflow-y-auto scrollbar-thin">
-          <StudySidebar 
-            sections={studyTree.curriculum.sections} 
+          <StudySidebar
+            sections={studyTree.curriculum.sections}
             currentLessonId={activeLessonId}
-            treeStatus={studyTree.status} 
+            treeStatus={studyTree.status}
+            progressionMode={studyTree.progressionMode}
           />
         </div>
       </aside>
 
-      <CreateReviewModal 
+      <CreateReviewModal
         courseId={courseId}
         isOpen={isReviewModalOpen}
         onClose={() => setIsReviewModalOpen(false)}
+        title={reviewPromptData.title}
+        message={reviewPromptData.message}
       />
     </div>
   );

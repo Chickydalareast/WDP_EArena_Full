@@ -16,8 +16,8 @@ import { PricingPlanCode } from '../subscriptions/schemas/pricing-plan.schema';
 import { TransactionStatus } from '../subscriptions/schemas/subscription-transaction.schema';
 import { RedisService } from '../../common/redis/redis.service';
 import { UserRole } from '../../common/enums/user-role.enum';
+import { ExamsService } from '../exams/exams.service';
 
-// [CTO FIX]: Import 2 Repository từ nhà mới (Subscriptions Domain) thay vì Import Schema
 import { PricingPlansRepository } from '../subscriptions/repositories/pricing-plans.repository';
 import { SubscriptionTransactionsRepository } from '../subscriptions/repositories/subscription-transactions.repository';
 
@@ -39,12 +39,13 @@ export class AdminService {
     @InjectModel(Subject.name) private readonly subjectModel: Model<SubjectDocument>,
     @InjectModel(KnowledgeTopic.name) private readonly topicModel: Model<KnowledgeTopicDocument>,
     
-    // [CTO FIX]: Bơm Repository thay vì Model thô
     private readonly pricingPlansRepo: PricingPlansRepository,
     private readonly txRepo: SubscriptionTransactionsRepository,
     
     private readonly redisService: RedisService,
     private readonly coursesRepo: CoursesRepository,
+    
+    private readonly examsService: ExamsService,
   ) {}
 
   async getOverview() {
@@ -453,5 +454,9 @@ export class AdminService {
       revenue: { total: revenue, currency: 'VND', paidOrders },
       note: 'Doanh thu được tổng hợp từ subscription_transactions (PAID).',
     };
+  }
+
+  async getExamPaperDetailByExamId(examId: string) {
+    return this.examsService.getPaperDetailByExamIdForAdmin(examId);
   }
 }

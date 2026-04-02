@@ -6,16 +6,15 @@ import { ExamSubmission, ExamSubmissionDocument, SubmissionStatus } from './sche
 import { RedisService } from 'src/common/redis/redis.service';
 
 @Injectable()
-export class ExamSubmissionsRepository 
-  extends AbstractRepository<ExamSubmissionDocument> 
-  implements OnModuleInit
-{
+export class ExamSubmissionsRepository
+  extends AbstractRepository<ExamSubmissionDocument>
+  implements OnModuleInit {
   protected readonly logger = new Logger(ExamSubmissionsRepository.name);
 
   constructor(
     @InjectModel(ExamSubmission.name) private readonly submissionModel: Model<ExamSubmissionDocument>,
     @InjectConnection() connection: Connection,
-    private readonly redisService: RedisService 
+    private readonly redisService: RedisService
   ) {
     super(submissionModel, connection);
   }
@@ -23,12 +22,9 @@ export class ExamSubmissionsRepository
   async onModuleInit() {
     try {
       this.logger.log('Đang đồng bộ hóa Indexes cho bảng ExamSubmissions...');
-      
-      // Hàm syncIndexes() sẽ so sánh Schema hiện tại và DB. 
-      // Nó sẽ TỰ ĐỘNG XÓA các index cũ (như assignmentId_1_studentId_1) 
-      // và build các index PartialFilter mới mà chúng ta vừa định nghĩa.
+
       await this.submissionModel.syncIndexes();
-      
+
       this.logger.log('Đồng bộ hóa Indexes thành công! Đã dọn sạch các Index rác.');
     } catch (error: any) {
       this.logger.error(`Lỗi khi sync Indexes: ${error.message}`, error.stack);
@@ -36,9 +32,9 @@ export class ExamSubmissionsRepository
   }
 
   async initSubmission(
-    examId: string, 
-    examPaperId: string, 
-    studentId: string, 
+    examId: string,
+    examPaperId: string,
+    studentId: string,
     questionIds: Types.ObjectId[]
   ): Promise<ExamSubmissionDocument> {
     const initialAnswers = questionIds.map(qId => ({
@@ -58,8 +54,8 @@ export class ExamSubmissionsRepository
   }
 
   async atomicAutoSave(
-    submissionId: string, 
-    questionId: string, 
+    submissionId: string,
+    questionId: string,
     selectedAnswerId: string
   ): Promise<boolean> {
     const result = await this.submissionModel.updateOne(
@@ -78,10 +74,9 @@ export class ExamSubmissionsRepository
 
   async saveDraftToRedis(submissionId: string, questionId: string, selectedAnswerId: string): Promise<void> {
     const redisKey = `exam:submission:${submissionId}`;
-    
-    // [CTO FIX] Gọi trực tiếp wrapper method của bạn, không dùng getClient()
+
     await this.redisService.hset(redisKey, questionId, selectedAnswerId);
-    await this.redisService.expire(redisKey, 10800); 
+    await this.redisService.expire(redisKey, 10800);
   }
 
   async getDraftAnswersFromRedis(submissionId: string): Promise<Record<string, string>> {
@@ -92,22 +87,21 @@ export class ExamSubmissionsRepository
   async syncRedisToMongoOnSubmit(submissionId: string, studentId: string): Promise<boolean> {
     const redisKey = `exam:submission:${submissionId}`;
 
-    // [CTO FIX] Dùng hàm hgetall của bạn
     const draftAnswers = await this.redisService.hgetall(redisKey);
-    
+
     if (!draftAnswers || Object.keys(draftAnswers).length === 0) {
-       return this.markAsCompleted(submissionId, studentId);
+      return this.markAsCompleted(submissionId, studentId);
     }
 
     const bulkOps = [];
     for (const [qId, aId] of Object.entries(draftAnswers)) {
       bulkOps.push({
         updateOne: {
-          filter: { 
+          filter: {
             _id: new Types.ObjectId(submissionId),
             studentId: new Types.ObjectId(studentId),
             status: SubmissionStatus.IN_PROGRESS,
-            'answers.questionId': new Types.ObjectId(qId) 
+            'answers.questionId': new Types.ObjectId(qId)
           },
           update: { $set: { 'answers.$.selectedAnswerId': aId } }
         }
@@ -127,22 +121,19 @@ export class ExamSubmissionsRepository
 
   private async markAsCompleted(submissionId: string, studentId: string): Promise<boolean> {
     const result = await this.submissionModel.updateOne(
-      { 
+      {
         _id: new Types.ObjectId(submissionId),
         studentId: new Types.ObjectId(studentId),
-        status: SubmissionStatus.IN_PROGRESS 
+        status: SubmissionStatus.IN_PROGRESS
       },
-      { 
-        $set: { status: SubmissionStatus.COMPLETED, submittedAt: new Date() } 
+      {
+        $set: { status: SubmissionStatus.COMPLETED, submittedAt: new Date() }
       }
     );
     return result.modifiedCount > 0;
   }
 
-  // =========================================================================
-  // LEADERBOARD METHODS
-  // =========================================================================
-  
+
   async getLeaderboardData(courseId: string, lessonId: string, page: number, limit: number, search?: string) {
     const skip = (page - 1) * limit;
     const pipeline: any[] = [
@@ -199,7 +190,6 @@ export class ExamSubmissionsRepository
       }
     );
 
-    // Lưu ý: Đã đổi this.model thành this.submissionModel để đồng bộ với constructor
     const [result] = await this.submissionModel.aggregate(pipeline);
     return {
       items: result?.data || [],
@@ -207,68 +197,22 @@ export class ExamSubmissionsRepository
     };
   }
 
-  // =========================================================================
-  // STUDENT HISTORY & SUBMISSION METHODS (NEW)
-  // =========================================================================
-
-  // Lấy phiên làm bài gần nhất của học viên
   async findLatestSubmission(studentId: string, lessonId: string): Promise<ExamSubmissionDocument | null> {
     return this.submissionModel.findOne({
       studentId: new Types.ObjectId(studentId),
       lessonId: new Types.ObjectId(lessonId)
     })
-    .sort({ attemptNumber: -1 })
-    .lean()
-    .exec() as Promise<ExamSubmissionDocument | null>;
+      .sort({ attemptNumber: -1 })
+      .lean()
+      .exec() as Promise<ExamSubmissionDocument | null>;
   }
 
-  // Lấy lịch sử thi có phân trang (Tối ưu payload, bỏ mảng answers)
-  // async getStudentHistoryData(studentId: string, page: number, limit: number) {
-  //   const skip = (page - 1) * limit;
-  //   const [result] = await this.submissionModel.aggregate([
-  //     { $match: { studentId: new Types.ObjectId(studentId) } },
-  //     { $sort: { createdAt: -1 } },
-  //     {
-  //       $facet: {
-  //         metadata: [{ $count: 'total' }],
-  //         data: [
-  //           { $skip: skip },
-  //           { $limit: limit },
-  //           {
-  //             $lookup: { from: 'courses', localField: 'courseId', foreignField: '_id', as: 'course' }
-  //           },
-  //           {
-  //             $lookup: { from: 'course_lessons', localField: 'lessonId', foreignField: '_id', as: 'lesson' }
-  //           },
-  //           { $unwind: { path: '$course', preserveNullAndEmptyArrays: true } },
-  //           { $unwind: { path: '$lesson', preserveNullAndEmptyArrays: true } },
-  //           {
-  //             $project: {
-  //               answers: 0, // Không lấy chi tiết bài làm để giảm tải
-  //               __v: 0
-  //             }
-  //           }
-  //         ]
-  //       }
-  //     }
-  //   ]);
-
-  //   const total = result.metadata[0]?.total || 0;
-  //   return {
-  //     items: result.data || [],
-  //     meta: { total, page, limit, totalPages: Math.ceil(total / limit) }
-  //   };
-  // }
-
-  // ... (Các hàm khác giữ nguyên)
-
-  // Lấy lịch sử thi có phân trang (Hỗ trợ filter linh hoạt)
   async getStudentHistoryData(studentId: string, page: number, limit: number, courseId?: string, lessonId?: string) {
     const skip = (page - 1) * limit;
 
     // Build Match Stage động
     const matchStage: any = { studentId: new Types.ObjectId(studentId) };
-    
+
     if (courseId) {
       matchStage.courseId = new Types.ObjectId(courseId);
     }
@@ -276,7 +220,8 @@ export class ExamSubmissionsRepository
       matchStage.lessonId = new Types.ObjectId(lessonId);
     }
 
-    const [result] = await this.model.aggregate([
+    // [CTO FIX 1]: Đổi this.model thành this.submissionModel để đảm bảo Type Safety
+    const [result] = await this.submissionModel.aggregate([
       { $match: matchStage },
       { $sort: { createdAt: -1 } },
       {
@@ -305,8 +250,127 @@ export class ExamSubmissionsRepository
     ]);
 
     const total = result.metadata[0]?.total || 0;
+
     return {
-      items: result.data || [],
+      // [CTO FIX 2]: Đổi key 'items' thành 'data' để TransformInterceptor bắt đúng chuẩn IsPreFormattedResponse
+      data: result.data || [],
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) }
+    };
+  }
+
+  async getStudentHistoryOverviewData(
+    studentId: string,
+    page: number,
+    limit: number,
+    courseId?: string
+  ) {
+    const skip = (page - 1) * limit;
+
+    const matchStage: any = { 
+      studentId: new Types.ObjectId(studentId) 
+    };
+
+    if (courseId) {
+      matchStage.courseId = new Types.ObjectId(courseId);
+    }
+
+    const pipeline: any[] = [
+      { $match: matchStage },
+      {
+        $group: {
+          _id: '$lessonId',
+          courseId: { $first: '$courseId' },
+          attemptsUsed: { $max: '$attemptNumber' }, // Lấy số lượt đã dùng lớn nhất
+          bestScore: { $max: '$score' }, // Hàm max tự động bỏ qua null của IN_PROGRESS
+          latestSubmittedAt: { $max: '$submittedAt' }, // Lấy thời gian nộp bài gần nhất
+        }
+      },
+      {
+        $lookup: {
+          from: 'course_lessons',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'lesson'
+        }
+      },
+      { $unwind: { path: '$lesson', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'courses',
+          localField: 'courseId',
+          foreignField: '_id',
+          as: 'course'
+        }
+      },
+      { $unwind: { path: '$course', preserveNullAndEmptyArrays: true } },
+      { $sort: { latestSubmittedAt: -1 } },
+      {
+        $facet: {
+          metadata: [{ $count: 'total' }],
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $project: {
+                _id: 0,
+                lessonId: '$_id',
+                lessonTitle: '$lesson.title',
+                courseId: 1,
+                courseTitle: '$course.title',
+                attemptsUsed: 1,
+                bestScore: 1,
+                latestSubmittedAt: 1,
+                maxAttempts: { $ifNull: ['$lesson.examRules.maxAttempts', 1] },
+                passPercentage: { $ifNull: ['$lesson.examRules.passPercentage', 50] } 
+              }
+            }
+          ]
+        }
+      }
+    ];
+
+    const [result] = await this.submissionModel.aggregate(pipeline);
+    const total = result?.metadata[0]?.total || 0;
+
+    return {
+      data: result?.data || [],
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) }
+    };
+  }
+
+  async getLessonAttemptsData(studentId: string, lessonId: string, page: number, limit: number) {
+    const skip = (page - 1) * limit;
+
+    const pipeline: any[] = [
+      {
+        $match: {
+          studentId: new Types.ObjectId(studentId),
+          lessonId: new Types.ObjectId(lessonId)
+        }
+      },
+      { $sort: { attemptNumber: -1 } },
+      {
+        $facet: {
+          metadata: [{ $count: 'total' }],
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $project: {
+                answers: 0, 
+                __v: 0
+              }
+            }
+          ]
+        }
+      }
+    ];
+
+    const [result] = await this.submissionModel.aggregate(pipeline);
+    const total = result?.metadata[0]?.total || 0;
+
+    return {
+      data: result?.data || [],
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) }
     };
   }

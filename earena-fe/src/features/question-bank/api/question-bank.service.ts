@@ -16,7 +16,9 @@ import type {
     OrganizePreviewResponse,
     OrganizeExecuteResponse,
     BulkAutoTagDTO,
-    BulkAutoTagResponse
+    BulkAutoTagResponse,
+    BulkPublishResponse,
+    BulkPublishQuestionsDTO
 } from '../types/question-bank.schema';
 
 export const questionBankService = {
@@ -42,7 +44,9 @@ export const questionBankService = {
         Object.entries(params).forEach(([key, value]) => {
             if (value !== undefined && value !== null && value !== '') {
                 if (Array.isArray(value)) {
-                    value.forEach(v => queryParams.append(`${key}[]`, String(v)));
+                    if (value.length > 0) {
+                        queryParams.append(key, value.join(','));
+                    }
                 } else {
                     queryParams.append(key, String(value));
                 }
@@ -117,6 +121,13 @@ export const questionBankService = {
     bulkAutoTag: async (data: BulkAutoTagDTO): Promise<BulkAutoTagResponse> => {
         return axiosClient.post<unknown, BulkAutoTagResponse>(
             API_ENDPOINTS.QUESTIONS.BULK_AUTO_TAG, 
+            data
+        );
+    },
+
+    bulkPublishQuestions: async (data: BulkPublishQuestionsDTO): Promise<BulkPublishResponse> => {
+        return axiosClient.patch<unknown, BulkPublishResponse>(
+            API_ENDPOINTS.QUESTIONS.BULK_PUBLISH,
             data
         );
     },

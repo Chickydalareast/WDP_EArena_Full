@@ -18,20 +18,17 @@ export const useFolderTree = () => {
     });
 };
 
-// [UPDATED] Bổ sung tham số isPollingActive với default = false
 export const useBankQuestions = (params: FetchBankQuestionsParams, isPollingActive: boolean = false) => {
     return useQuery({
         queryKey: [...BANK_QUESTIONS_KEY, params],
         queryFn: () => questionBankService.getQuestionsByFolder(params),
         staleTime: 60 * 1000,
-        enabled: !!params.folderId,
-        // [CORE MECHANIC]: Tự động gọi lại API mỗi 15s nếu có Job AI đang chạy
+    
+        enabled: !!params.folderIds && params.folderIds.length > 0,
         refetchInterval: isPollingActive ? 15000 : false,
-        // Khi window mất focus nhưng job đang chạy ngầm, ta vẫn có thể muốn fetch lại
         refetchIntervalInBackground: isPollingActive, 
     });
 };
-
 export const useBulkMoveQuestions = () => {
     const queryClient = useQueryClient();
 
@@ -46,6 +43,8 @@ export const useBulkMoveQuestions = () => {
         }
     });
 };
+
+
 
 // export const useSuggestFolders = (questionIds: string[], isOpen: boolean) => {
 //     return useQuery({

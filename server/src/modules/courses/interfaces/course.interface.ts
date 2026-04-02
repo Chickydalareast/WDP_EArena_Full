@@ -1,5 +1,27 @@
 import { Types } from "mongoose";
-import { ProgressionMode } from "../enums/progression-mode.enum"; // Nhớ import Enum này
+import { ProgressionMode } from "../enums/progression-mode.enum";
+import { DifficultyLevel } from "src/modules/questions/schemas/question.schema";
+
+export interface EmbeddedExamRulePayload {
+  folderIds?: string[];
+  topicIds?: string[];
+  difficulties?: DifficultyLevel[];
+  tags?: string[];
+  limit: number;
+}
+
+export interface EmbeddedExamSectionPayload {
+  name: string;
+  orderIndex: number;
+  rules: EmbeddedExamRulePayload[];
+}
+
+export interface EmbeddedExamConfigPayload {
+  title: string;
+  totalScore: number;
+  matrixId?: string;
+  adHocSections?: EmbeddedExamSectionPayload[];
+}
 
 export interface CreateCoursePayload {
   title: string;
@@ -48,9 +70,10 @@ export type CreateLessonPayload = {
   isFreePreview: boolean;
   primaryVideoId?: string;
   attachments?: string[];
-  examId?: string;
   content: string;
   examRules?: ExamRuleConfigPayload;
+  examId?: string;
+  embeddedExamConfig?: EmbeddedExamConfigPayload;
 };
 
 export type UpdateSectionPayload = {
@@ -69,9 +92,10 @@ export type UpdateLessonPayload = {
   isFreePreview?: boolean;
   primaryVideoId?: string | null;
   attachments?: string[];
-  examId?: string | null;
   content?: string;
   examRules?: ExamRuleConfigPayload;
+  examId?: string | null;
+  embeddedExamConfig?: EmbeddedExamConfigPayload | null;
 };
 
 export type ReorderPayload = {

@@ -7,58 +7,60 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+
 import { CoursesRepository } from '../courses.repository';
 import { SectionsRepository } from '../repositories/sections.repository';
 import { LessonsRepository } from '../repositories/lessons.repository';
+import { MediaRepository } from '../../media/media.repository';
+import { ExamsRepository } from '../../exams/exams.repository';
+import { EnrollmentsRepository } from '../repositories/enrollments.repository';
+
 import { RedisService } from '../../../common/redis/redis.service';
+import { MediaStatus } from '../../media/schemas/media.schema';
+import { CourseStatus } from '../schemas/course.schema';
+import { EnrollmentStatus } from '../schemas/enrollment.schema';
+import { CourseEventPattern, CourseNewLessonEventPayload } from '../constants/course-event.constant';
+
 import {
   CreateSectionPayload,
   CreateLessonPayload,
   UpdateSectionPayload,
   UpdateLessonPayload,
-  ReorderPayload
+  ReorderPayload,
+  EmbeddedExamConfigPayload
 } from '../interfaces/course.interface';
-
-// Import để check IDOR
-import { MediaRepository } from '../../media/media.repository';
-import { MediaStatus } from '../../media/schemas/media.schema';
-// [CTO FIX]: Đã mở comment và import đúng Repository của Exam
-import { ExamsRepository } from '../../exams/exams.repository';
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import { CourseStatus } from '../schemas/course.schema';
-import { CourseEventPattern, CourseNewLessonEventPayload } from '../constants/course-event.constant';
+import { ExamMode, ExamType } from 'src/modules/exams/schemas/exam.schema';
 
 @Injectable()
 export class CurriculumService {
   private readonly logger = new Logger(CurriculumService.name);
 
-constructor(
+  constructor(
     private readonly coursesRepo: CoursesRepository,
     private readonly sectionsRepo: SectionsRepository,
     private readonly lessonsRepo: LessonsRepository,
     private readonly redisService: RedisService,
     private readonly mediaRepo: MediaRepository,
-    private readonly examsRepo: ExamsRepository, 
+    private readonly examsRepo: ExamsRepository,
     private readonly eventEmitter: EventEmitter2,
-  ) {}
+    private readonly enrollmentsRepo: EnrollmentsRepository,
+  ) { }
 
   private async verifyMultipleMediaStrict(mediaIds: (string | null | undefined)[], teacherId: string): Promise<void> {
     const validIdsArray = mediaIds.filter((id): id is string => !!id && Types.ObjectId.isValid(id));
     const uniqueValidIds = Array.from(new Set(validIdsArray));
-    
+
     if (uniqueValidIds.length === 0) return;
 
-    // 2. Query 1 lượt lấy hết files
     const medias = await this.mediaRepo.modelInstance.find({
       _id: { $in: uniqueValidIds.map(id => new Types.ObjectId(id)) }
     }).lean().select('uploadedBy status originalName').exec();
 
-    // 3. Đảm bảo toàn bộ ID truy vấn đều tồn tại thực sự trên DB
     if (medias.length !== uniqueValidIds.length) {
       throw new BadRequestException('Một hoặc nhiều tệp đính kèm không tồn tại trong hệ thống.');
     }
 
-    // 4. Check quyền & trạng thái từng file
     for (const media of medias) {
       if (media.uploadedBy.toString() !== teacherId) {
         this.logger.warn(`[SECURITY ALERT] User ${teacherId} cố gắng gán Media ${media._id} của người khác vào bài học!`);
@@ -70,32 +72,26 @@ constructor(
     }
   }
 
-  // =========================================================================
-  // [CTO UPGRADE]: Động cơ quét bảo mật & check Status của Exam
-  // =========================================================================
   private async verifyExamStrict(examId: string, teacherId: string): Promise<void> {
-    if (!examId) return; // Không truyền examId thì skip hợp lệ
-    
+    if (!examId) return;
+
     if (!Types.ObjectId.isValid(examId)) {
       throw new BadRequestException('Định dạng ID Bài kiểm tra không hợp lệ.');
     }
 
-    // Chỉ query các trường cần thiết để tiết kiệm RAM
-    const exam = await this.examsRepo.findByIdSafe(examId, { 
-      select: 'teacherId isPublished title' 
+    const exam = await this.examsRepo.findByIdSafe(examId, {
+      select: 'teacherId isPublished title'
     });
 
     if (!exam) {
       throw new NotFoundException('Không tìm thấy Bài kiểm tra (Exam) trong hệ thống.');
     }
 
-    // 1. Chống IDOR: Không cho phép xài trộm đề của giáo viên khác
     if (exam.teacherId.toString() !== teacherId) {
       this.logger.warn(`[SECURITY ALERT] User ${teacherId} cố gắng gán Exam ${examId} của người khác vào bài học!`);
       throw new ForbiddenException(`Bài kiểm tra "${exam.title}" không thuộc quyền sở hữu của bạn.`);
     }
 
-    // 2. Chống rác Data: Không cho phép gắn đề thi đang viết nháp
     if (!exam.isPublished) {
       throw new BadRequestException(
         `Bài kiểm tra "${exam.title}" đang ở trạng thái Nháp (Draft). Vui lòng Xuất bản đề thi trước khi gắn vào Khóa học.`
@@ -105,10 +101,10 @@ constructor(
 
   private async validateCourseOwnership(courseId: string, teacherId: string) {
     if (!Types.ObjectId.isValid(courseId)) throw new BadRequestException('ID khóa học không hợp lệ.');
-    
-    const course = await this.coursesRepo.findByIdSafe(courseId, { select: 'teacherId slug status title' });
+
+    const course = await this.coursesRepo.findByIdSafe(courseId, { select: 'teacherId slug status title progressionMode' });
     if (!course) throw new NotFoundException('Không tìm thấy khóa học.');
-    
+
     if (course.teacherId.toString() !== teacherId) {
       throw new ForbiddenException('Bạn không có quyền chỉnh sửa khóa học này.');
     }
@@ -124,16 +120,66 @@ constructor(
     }
   }
 
+  private async checkStructureLock(courseId: string, actionName: string): Promise<void> {
+    const studentCount = await this.enrollmentsRepo.modelInstance.countDocuments({
+      courseId: new Types.ObjectId(courseId),
+      status: EnrollmentStatus.ACTIVE
+    });
+
+    if (studentCount > 0) {
+      throw new ForbiddenException(
+        `Hành động bị từ chối (${actionName})! Không thể xóa phân mảnh cấu trúc (Chương/Bài học) khi khóa học đã có học viên ghi danh. Nếu cần thay thế, vui lòng dùng chức năng Cập Nhật nội dung bên trong Bài Học.`
+      );
+    }
+  }
+
+  private async processEmbeddedExamConfig(
+    teacherId: string,
+    subjectId: Types.ObjectId | undefined,
+    config: EmbeddedExamConfigPayload,
+    existingExamId?: Types.ObjectId
+  ): Promise<Types.ObjectId> {
+
+    const dynamicConfigData = config.matrixId
+      ? { matrixId: config.matrixId }
+      : { adHocSections: config.adHocSections };
+
+    if (existingExamId) {
+      await this.examsRepo.updateByIdSafe(existingExamId, {
+        $set: {
+          title: config.title,
+          totalScore: config.totalScore,
+          dynamicConfig: dynamicConfigData as any,
+        }
+      });
+      return existingExamId;
+    } else {
+      const newExam = await this.examsRepo.createDocument({
+        title: config.title,
+        description: 'Bài kiểm tra tạo tự động từ Course Builder',
+        teacherId: new Types.ObjectId(teacherId),
+        subjectId: subjectId || new Types.ObjectId(),
+        totalScore: config.totalScore,
+        type: ExamType.COURSE_QUIZ,
+        mode: ExamMode.DYNAMIC,
+        isPublished: true,
+        dynamicConfig: dynamicConfigData as any,
+      });
+      this.logger.log(`[Orchestrator] Đã sinh ngầm COURSE_QUIZ ${newExam._id} cho Teacher ${teacherId}`);
+      return newExam._id as Types.ObjectId;
+    }
+  }
+
   async createSection(payload: CreateSectionPayload) {
     const course = await this.validateCourseOwnership(payload.courseId, payload.teacherId);
-    
+
     const MAX_RETRIES = 3;
     let attempt = 0;
 
     while (attempt < MAX_RETRIES) {
       try {
         const nextOrder = await this.sectionsRepo.getNextOrder(payload.courseId);
-        
+
         const sectionData = {
           courseId: new Types.ObjectId(payload.courseId),
           title: payload.title,
@@ -143,7 +189,7 @@ constructor(
 
         const created = await this.sectionsRepo.createDocument(sectionData);
         await this.clearCourseCache(course.slug);
-        
+
         const { _id, ...rest } = created as any;
         return { id: _id.toString(), ...rest };
       } catch (error: any) {
@@ -158,113 +204,9 @@ constructor(
   }
 
 
-async createLesson(payload: CreateLessonPayload) {
-    const course = await this.validateCourseOwnership(payload.courseId, payload.teacherId);
-
-    const mediaIdsToCheck = [payload.primaryVideoId, ...(payload.attachments || [])];
-    await this.verifyMultipleMediaStrict(mediaIdsToCheck, payload.teacherId);
-
-    if (payload.examId) await this.verifyExamStrict(payload.examId, payload.teacherId);
-
-    const section = await this.sectionsRepo.findByIdSafe(payload.sectionId, { select: '_id' });
-    if (!section) throw new NotFoundException('Không tìm thấy Chương/Phần này.');
-
-    const MAX_RETRIES = 3;
-    let attempt = 0;
-
-    while (attempt < MAX_RETRIES) {
-      try {
-        const nextOrder = await this.lessonsRepo.getNextOrder(payload.sectionId);
-        
-        const lessonData = {
-          courseId: new Types.ObjectId(payload.courseId),
-          sectionId: new Types.ObjectId(payload.sectionId),
-          title: payload.title,
-          order: nextOrder,
-          isFreePreview: payload.isFreePreview,
-          primaryVideoId: payload.primaryVideoId ? new Types.ObjectId(payload.primaryVideoId) : undefined,
-          attachments: payload.attachments && payload.attachments.length > 0 ? payload.attachments.map(id => new Types.ObjectId(id)) : [],
-          examId: payload.examId ? new Types.ObjectId(payload.examId) : undefined,
-          examRules: payload.examRules || null,
-          content: payload.content, 
-        };
-
-        const created = await this.lessonsRepo.createDocument(lessonData);
-        await this.clearCourseCache(course.slug);
-        
-        const { _id, ...rest } = created as any;
-        const lessonIdStr = _id.toString();
-
-        if (course.status === CourseStatus.PUBLISHED) {
-            this.eventEmitter.emit(CourseEventPattern.COURSE_NEW_LESSON, {
-                courseId: course._id.toString(),
-                courseTitle: course.title,
-                lessonId: lessonIdStr,
-                lessonTitle: payload.title,
-            } as CourseNewLessonEventPayload);
-        }
-
-        return { id: lessonIdStr, ...rest };
-      } catch (error: any) {
-        if (error.code === 11000) {
-          attempt++;
-          continue;
-        }
-        throw error;
-      }
-    }
-    throw new ConflictException('Hệ thống đang xử lý nhiều thao tác cùng lúc, vui lòng thử lại.');
-  }
-
-
-
-  async updateLesson(payload: UpdateLessonPayload) {
-    const course = await this.validateCourseOwnership(payload.courseId, payload.teacherId);
-    
-    const lesson = await this.lessonsRepo.findByIdSafe(payload.lessonId);
-    if (!lesson || lesson.courseId.toString() !== payload.courseId) {
-      throw new NotFoundException('Bài học không tồn tại trong khóa học này.');
-    }
-
-    // Gộp tất cả media IDs cần kiểm tra
-    const mediaIdsToCheck = [payload.primaryVideoId, ...(payload.attachments || [])];
-    await this.verifyMultipleMediaStrict(mediaIdsToCheck, payload.teacherId);
-
-    if (payload.examId) await this.verifyExamStrict(payload.examId, payload.teacherId);
-
-    const { courseId, lessonId, teacherId, ...updateData } = payload;
-    
-    // Ép kiểu chuẩn xác các trường Object Id, tránh rác data
-    const sanitized: any = {};
-    if (updateData.title !== undefined) sanitized.title = updateData.title;
-    if (updateData.isFreePreview !== undefined) sanitized.isFreePreview = updateData.isFreePreview;
-    if (updateData.content !== undefined) sanitized.content = updateData.content;
-    
-    if (updateData.primaryVideoId !== undefined) {
-      sanitized.primaryVideoId = updateData.primaryVideoId ? new Types.ObjectId(updateData.primaryVideoId) : null;
-    }
-    if (updateData.attachments !== undefined) {
-      sanitized.attachments = updateData.attachments.map(id => new Types.ObjectId(id));
-    }
-    if (updateData.examId !== undefined) {
-      sanitized.examId = updateData.examId ? new Types.ObjectId(updateData.examId) : null;
-    }
-    
-    // [MAX PING - Vá lỗi DB rỗng]: Hứng cấu hình thi cập nhật từ FE
-    if (updateData.examRules !== undefined) {
-      sanitized.examRules = updateData.examRules;
-    }
-
-    const updated = await this.lessonsRepo.updateByIdSafe(lessonId, { $set: sanitized });
-    
-    await this.clearCourseCache(course.slug);
-
-    return { id: (updated as any)._id.toString(), ...updated };
-  }
-
   async updateSection(payload: UpdateSectionPayload) {
     const course = await this.validateCourseOwnership(payload.courseId, payload.teacherId);
-    
+
     const section = await this.sectionsRepo.findByIdSafe(payload.sectionId);
     if (!section || section.courseId.toString() !== payload.courseId) {
       throw new NotFoundException('Chương học không tồn tại trong khóa học này.');
@@ -272,7 +214,7 @@ async createLesson(payload: CreateLessonPayload) {
 
     const { courseId, sectionId, teacherId, ...updateData } = payload;
     const updated = await this.sectionsRepo.updateByIdSafe(sectionId, { $set: updateData });
-    
+
     await this.clearCourseCache(course.slug);
 
     return { message: 'Cập nhật chương học thành công', id: (updated as any)._id.toString(), ...updated };
@@ -280,6 +222,8 @@ async createLesson(payload: CreateLessonPayload) {
 
   async deleteSection(courseId: string, sectionId: string, teacherId: string) {
     const course = await this.validateCourseOwnership(courseId, teacherId);
+
+    await this.checkStructureLock(courseId, 'Xóa Chương học');
 
     if (!Types.ObjectId.isValid(sectionId)) throw new BadRequestException('ID chương học không hợp lệ.');
 
@@ -298,59 +242,174 @@ async createLesson(payload: CreateLessonPayload) {
     return { message: 'Đã xóa Chương và toàn bộ Bài học bên trong thành công.' };
   }
 
-  // async updateLesson(payload: UpdateLessonPayload) {
-  //   const course = await this.validateCourseOwnership(payload.courseId, payload.teacherId);
-    
-  //   const lesson = await this.lessonsRepo.findByIdSafe(payload.lessonId);
-  //   if (!lesson || lesson.courseId.toString() !== payload.courseId) {
-  //     throw new NotFoundException('Bài học không tồn tại trong khóa học này.');
-  //   }
+  async createLesson(payload: CreateLessonPayload) {
+    if (payload.examId && payload.embeddedExamConfig) {
+      throw new BadRequestException('Xung đột dữ liệu: Không thể vừa chọn Đề thi có sẵn, vừa yêu cầu tạo Đề thi mới.');
+    }
 
-  //   // Gộp tất cả media IDs cần kiểm tra
-  //   const mediaIdsToCheck = [payload.primaryVideoId, ...(payload.attachments || [])];
-  //   await this.verifyMultipleMediaStrict(mediaIdsToCheck, payload.teacherId);
+    const course = await this.validateCourseOwnership(payload.courseId, payload.teacherId);
 
-  //   if (payload.examId) await this.verifyExamStrict(payload.examId, payload.teacherId);
+    const mediaIdsToCheck = [payload.primaryVideoId, ...(payload.attachments || [])];
+    await this.verifyMultipleMediaStrict(mediaIdsToCheck, payload.teacherId);
 
-  //   const { courseId, lessonId, teacherId, ...updateData } = payload;
-    
-  //   // [CTO UPGRADE]: Ép kiểu chuẩn xác các trường Object Id, tránh rác data
-  //   const sanitized: any = {};
-  //   if (updateData.title !== undefined) sanitized.title = updateData.title;
-  //   if (updateData.isFreePreview !== undefined) sanitized.isFreePreview = updateData.isFreePreview;
-  //   if (updateData.content !== undefined) sanitized.content = updateData.content;
-    
-  //   if (updateData.primaryVideoId !== undefined) {
-  //     sanitized.primaryVideoId = updateData.primaryVideoId ? new Types.ObjectId(updateData.primaryVideoId) : null;
-  //   }
-  //   if (updateData.attachments !== undefined) {
-  //     sanitized.attachments = updateData.attachments.map(id => new Types.ObjectId(id));
-  //   }
-  //   if (updateData.examId !== undefined) {
-  //     sanitized.examId = updateData.examId ? new Types.ObjectId(updateData.examId) : null;
-  //   }
+    if (payload.examId) await this.verifyExamStrict(payload.examId, payload.teacherId);
 
-  //   const updated = await this.lessonsRepo.updateByIdSafe(lessonId, { $set: sanitized });
-    
-  //   await this.clearCourseCache(course.slug);
+    const section = await this.sectionsRepo.findByIdSafe(payload.sectionId, { select: '_id' });
+    if (!section) throw new NotFoundException('Không tìm thấy Chương/Phần này.');
 
-  //   return { id: (updated as any)._id.toString(), ...updated };
-  // }
+    const MAX_RETRIES = 3;
+    let attempt = 0;
+
+    while (attempt < MAX_RETRIES) {
+      try {
+        const createdLesson = await this.lessonsRepo.executeInTransaction(async () => {
+          const nextOrder = await this.lessonsRepo.getNextOrder(payload.sectionId);
+
+          let finalExamId: Types.ObjectId | undefined = payload.examId ? new Types.ObjectId(payload.examId) : undefined;
+
+          if (payload.embeddedExamConfig) {
+            finalExamId = await this.processEmbeddedExamConfig(
+              payload.teacherId,
+              course.subjectId,
+              payload.embeddedExamConfig
+            );
+          }
+
+          const lessonData = {
+            courseId: new Types.ObjectId(payload.courseId),
+            sectionId: new Types.ObjectId(payload.sectionId),
+            title: payload.title,
+            order: nextOrder,
+            isFreePreview: payload.isFreePreview,
+            primaryVideoId: payload.primaryVideoId ? new Types.ObjectId(payload.primaryVideoId) : undefined,
+            attachments: payload.attachments?.map(id => new Types.ObjectId(id)) || [],
+            examId: finalExamId,
+            examRules: payload.examRules || null,
+            content: payload.content,
+          };
+
+          return await this.lessonsRepo.createDocument(lessonData);
+        });
+
+        await this.clearCourseCache(course.slug);
+
+        const { _id, ...rest } = createdLesson as any;
+        const lessonIdStr = _id.toString();
+
+        if (course.status === CourseStatus.PUBLISHED) {
+          this.eventEmitter.emit(CourseEventPattern.COURSE_NEW_LESSON, {
+            courseId: course._id.toString(),
+            courseTitle: course.title,
+            lessonId: lessonIdStr,
+            lessonTitle: payload.title,
+          } as CourseNewLessonEventPayload);
+        }
+
+        return { id: lessonIdStr, ...rest };
+
+      } catch (error: any) {
+        if (error.code === 11000) {
+          attempt++;
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new ConflictException('Hệ thống đang xử lý nhiều thao tác cùng lúc, vui lòng thử lại.');
+  }
+
+  async updateLesson(payload: UpdateLessonPayload) {
+    if (payload.examId && payload.embeddedExamConfig) {
+      throw new BadRequestException('Xung đột dữ liệu: Không thể truyền cả ID đề thi và cấu hình khởi tạo ngầm.');
+    }
+
+    const course = await this.validateCourseOwnership(payload.courseId, payload.teacherId);
+
+    const lesson = await this.lessonsRepo.findByIdSafe(payload.lessonId, { populate: 'examId' });
+    if (!lesson || lesson.courseId.toString() !== payload.courseId) {
+      throw new NotFoundException('Bài học không tồn tại trong khóa học này.');
+    }
+
+    const mediaIdsToCheck = [payload.primaryVideoId, ...(payload.attachments || [])];
+    await this.verifyMultipleMediaStrict(mediaIdsToCheck, payload.teacherId);
+
+    if (payload.examId) await this.verifyExamStrict(payload.examId, payload.teacherId);
+
+    const updatedLesson = await this.lessonsRepo.executeInTransaction(async () => {
+      let finalExamId: Types.ObjectId | null | undefined = undefined;
+
+      if (payload.examId === null && !payload.embeddedExamConfig) {
+        finalExamId = null;
+      } else if (payload.examId) {
+        finalExamId = new Types.ObjectId(payload.examId);
+      } else if (payload.embeddedExamConfig) {
+        const currentExam = lesson.examId as any;
+        const existingQuizId = (currentExam && currentExam.type === ExamType.COURSE_QUIZ) ? currentExam._id : undefined;
+
+        finalExamId = await this.processEmbeddedExamConfig(
+          payload.teacherId,
+          course.subjectId,
+          payload.embeddedExamConfig,
+          existingQuizId
+        );
+      }
+
+      const sanitized: any = {};
+      if (payload.title !== undefined) sanitized.title = payload.title;
+      if (payload.isFreePreview !== undefined) sanitized.isFreePreview = payload.isFreePreview;
+      if (payload.content !== undefined) sanitized.content = payload.content;
+      if (payload.primaryVideoId !== undefined) sanitized.primaryVideoId = payload.primaryVideoId ? new Types.ObjectId(payload.primaryVideoId) : null;
+      if (payload.attachments !== undefined) sanitized.attachments = payload.attachments?.map(id => new Types.ObjectId(id)) || [];
+      if (payload.examRules !== undefined) sanitized.examRules = payload.examRules;
+      if (finalExamId !== undefined) sanitized.examId = finalExamId;
+
+      return await this.lessonsRepo.updateByIdSafe(payload.lessonId, { $set: sanitized });
+    });
+
+    await this.clearCourseCache(course.slug);
+
+    return { id: (updatedLesson as any)._id.toString(), ...updatedLesson };
+  }
 
   async deleteLesson(courseId: string, lessonId: string, teacherId: string) {
     const course = await this.validateCourseOwnership(courseId, teacherId);
-    const lesson = await this.lessonsRepo.findByIdSafe(lessonId, { select: 'courseId' });
+
+    await this.checkStructureLock(courseId, 'Xóa Bài học');
+
+    const lesson = await this.lessonsRepo.findByIdSafe(lessonId, { populate: 'examId' });
     if (!lesson || lesson.courseId.toString() !== courseId) throw new NotFoundException('Bài học không hợp lệ.');
 
-    await this.lessonsRepo.deleteOneSafe({ _id: new Types.ObjectId(lessonId) });
-    
+    const examObj = lesson.examId as any;
+
+    await this.lessonsRepo.executeInTransaction(async () => {
+      await this.lessonsRepo.deleteOneSafe({ _id: new Types.ObjectId(lessonId) });
+
+      if (examObj && examObj.type === ExamType.COURSE_QUIZ) {
+        await this.examsRepo.deleteOneSafe({ _id: examObj._id });
+        this.logger.log(`[Garbage Collection] Xóa thành công đề ngầm ${examObj._id} đi kèm bài học ${lessonId}`);
+      }
+    });
+
     await this.clearCourseCache(course.slug);
-    
-    return { message: 'Đã xóa bài học.' };
+
+    return { message: 'Đã xóa bài học và các tài nguyên ngầm liên quan.' };
   }
+
 
   async reorderCurriculum(payload: ReorderPayload) {
     const course = await this.validateCourseOwnership(payload.courseId, payload.teacherId);
+
+    if ((course as any).progressionMode === 'STRICT_LINEAR') {
+      const studentCount = await this.enrollmentsRepo.modelInstance.countDocuments({
+        courseId: new Types.ObjectId(payload.courseId),
+        status: EnrollmentStatus.ACTIVE
+      });
+      if (studentCount > 0) {
+        throw new ForbiddenException(
+          'Không thể thay đổi thứ tự bài học (Reorder) do khóa học đang bật cấu hình học Tuần tự (STRICT_LINEAR) và đã có học viên. Việc đảo lộn thứ tự sẽ gây gãy hệ thống tính toán bài học tiếp theo.'
+        );
+      }
+    }
 
     await this.coursesRepo.executeInTransaction(async () => {
       if (payload.sections && payload.sections.length > 0) {

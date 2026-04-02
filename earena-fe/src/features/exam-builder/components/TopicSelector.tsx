@@ -28,7 +28,6 @@ export const TopicSelector = React.memo(({
     const [searchTerm, setSearchTerm] = useState('');
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    // Tìm object topic đang được chọn dựa vào value (ID)
     const selectedTopic = useMemo(() =>
         topics.find(t => t.id === value),
         [topics, value]);
@@ -43,7 +42,6 @@ export const TopicSelector = React.memo(({
         });
     }, [topics, searchTerm]);
 
-    // Xử lý đóng Dropdown khi click ra ngoài vùng component
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -59,46 +57,43 @@ export const TopicSelector = React.memo(({
     const handleSelect = (topicId: string) => {
         onChange(topicId);
         setIsOpen(false);
-        setSearchTerm(''); // Xóa từ khóa search khi đã chọn xong
+        setSearchTerm('');
     };
 
     const handleClear = (e: React.MouseEvent) => {
-        e.stopPropagation(); // Tránh trigger mở dropdown
+        e.stopPropagation(); 
         onChange('');
     };
 
     return (
         <div className="relative w-full" ref={dropdownRef}>
-            {/* NÚT TRIGGER (Giao diện giống thẻ Input thông thường) */}
             <div
                 onClick={() => !disabled && !isLoading && setIsOpen(!isOpen)}
                 className={cn(
-                    "flex min-h-[40px] w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm transition-all",
-                    disabled || isLoading ? "cursor-not-allowed opacity-50 bg-slate-50" : "cursor-pointer hover:bg-slate-50 hover:border-blue-300",
-                    isOpen && "ring-2 ring-blue-500/20 border-blue-500",
+                    "flex min-h-[40px] w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm transition-all",
+                    disabled || isLoading ? "cursor-not-allowed opacity-50 bg-muted" : "cursor-pointer hover:bg-accent hover:border-accent-foreground/20",
+                    isOpen && "ring-2 ring-ring border-primary",
                     className
                 )}
             >
-                {/* --- ĐÃ FIX LỖI VỠ UI --- */}
-                {/* Thêm min-w-0 và block truncate để buộc text phải tự động cắt ngắn */}
-                <div className="flex-1 min-w-0 truncate pr-2 text-left">
+                {/* [ĐÃ FIX TRUNG TÂM]: overflow-hidden kết hợp min-w-0 */}
+                <div className="flex-1 min-w-0 overflow-hidden pr-2 text-left">
                     {isLoading ? (
-                        <span className="text-slate-400 block truncate">Đang tải dữ liệu...</span>
+                        <span className="text-muted-foreground block truncate">Đang tải dữ liệu...</span>
                     ) : selectedTopic ? (
-                        <span className="text-slate-800 font-medium block truncate" title={selectedTopic.path}>
+                        <span className="text-foreground font-medium block truncate" title={selectedTopic.path}>
                             {selectedTopic.path}
                         </span>
                     ) : (
-                        <span className="text-slate-400 block truncate">{placeholder}</span>
+                        <span className="text-muted-foreground block truncate">{placeholder}</span>
                     )}
                 </div>
 
-                {/* Thêm shrink-0 vào icons để không bao giờ bị bóp méo */}
-                <div className="flex items-center gap-1 shrink-0 text-slate-400">
+                <div className="flex items-center gap-1 shrink-0 text-muted-foreground">
                     {selectedTopic && !disabled && (
                         <div
                             onClick={handleClear}
-                            className="p-1 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors shrink-0"
+                            className="p-1 hover:text-destructive hover:bg-destructive/10 rounded-md transition-colors shrink-0"
                         >
                             <X className="w-3.5 h-3.5" />
                         </div>
@@ -107,26 +102,23 @@ export const TopicSelector = React.memo(({
                 </div>
             </div>
 
-            {/* BẢNG DROPDOWN (Tuyệt đối, đè lên các UI khác) */}
             {isOpen && (
-                <div className="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-slate-200 bg-white shadow-lg animate-in fade-in slide-in-from-top-2 duration-200">
-                    {/* Thanh Search dính chặt phía trên */}
-                    <div className="sticky top-0 flex items-center border-b border-slate-100 bg-slate-50/80 backdrop-blur-sm px-3 py-2 rounded-t-md">
-                        <Search className="w-4 h-4 text-slate-400 mr-2 shrink-0" />
+                <div className="absolute top-full left-0 z-50 mt-1 w-full rounded-md border border-border bg-popover text-popover-foreground shadow-lg animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="sticky top-0 flex items-center border-b border-border bg-popover/80 backdrop-blur-sm px-3 py-2 rounded-t-md">
+                        <Search className="w-4 h-4 text-muted-foreground mr-2 shrink-0" />
                         <input
                             type="text"
                             placeholder="Gõ để tìm kiếm chuyên đề..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="flex-1 bg-transparent outline-none text-sm placeholder:text-slate-400 min-w-0"
+                            className="flex-1 bg-transparent outline-none text-sm placeholder:text-muted-foreground min-w-0"
                             autoFocus
                         />
                     </div>
 
-                    {/* Danh sách cuộn */}
-                    <div className="max-h-[250px] overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-slate-200">
+                    <div className="max-h-[250px] overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-border">
                         {filteredTopics.length === 0 ? (
-                            <div className="py-6 text-center text-sm text-slate-500 flex flex-col items-center">
+                            <div className="py-6 text-center text-sm text-muted-foreground flex flex-col items-center">
                                 <BookOpen className="w-6 h-6 mb-2 opacity-20" />
                                 Không tìm thấy chuyên đề phù hợp.
                             </div>
@@ -138,12 +130,11 @@ export const TopicSelector = React.memo(({
                                     className={cn(
                                         "flex items-center justify-between px-3 py-2 text-sm rounded-sm cursor-pointer transition-colors mt-0.5",
                                         value === topic.id
-                                            ? "bg-blue-50 text-blue-700 font-bold"
-                                            : "text-slate-700 hover:bg-slate-100"
+                                            ? "bg-primary/10 text-primary font-bold"
+                                            : "text-foreground hover:bg-accent hover:text-accent-foreground"
                                     )}
                                     title={topic.path}
                                 >
-                                    {/* Thêm flex-1 min-w-0 để danh sách cũng tự động cắt text */}
                                     <span className="flex-1 min-w-0 truncate pr-4">{topic.path}</span>
                                     {value === topic.id && <Check className="w-4 h-4 shrink-0" />}
                                 </div>

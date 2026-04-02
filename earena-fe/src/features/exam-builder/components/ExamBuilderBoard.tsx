@@ -1,52 +1,46 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 
 // --- DND KIT IMPORTS ---
 import {
-  DndContext,
-  DragEndEvent,
-  DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-  useDroppable // 1. THÊM IMPORT useDroppable
+  DndContext, DragEndEvent, DragOverlay, PointerSensor,
+  useSensor, useSensors, closestCenter, useDroppable
 } from '@dnd-kit/core';
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-  arrayMove
-} from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 
 import { usePaperDetail } from '../hooks/usePaperDetail';
 import { useAddBulkManual } from '../hooks/useQuestionMutations';
 import { useUpdatePaper } from '../hooks/useUpdatePaper';
 import { usePublishExam } from '../hooks/usePublishExam';
+import { useUpdatePoints } from '../hooks/useUpdatePoints';
+import { useSession } from '@/features/auth/hooks/useSession';
 
 import { BulkManualQuestionForm } from './BulkManualQuestionForm';
-import { ImportDocxModal } from './ImportDocxModal';
 import { EditQuestionSheet } from './EditQuestionSheet';
 import { SortableQuestionCard } from './SortableQuestionCard';
 import { MiniBankSidebar } from './MiniBankSidebar';
-import { MiniQuestionCard, MiniQuestionCardUI } from './MiniQuestionCard'; // 2. IMPORT THÊM MiniQuestionCardUI DÙNG CHO OVERLAY
+import { MiniQuestionCardUI } from './MiniQuestionCard';
+import { MatrixBuilderDrawer } from './MatrixBuilderDrawer';
 
-import { PopulatedQuestion, AnswerKey } from '../lib/hydration-utils';
+import { PopulatedQuestion } from '../lib/hydration-utils';
 import { Button } from '@/shared/components/ui/button';
-import { PlusCircle, FileUp, ArrowLeft, Loader2, AlertCircle, FileText, Lock, Zap, Database, GripVertical } from 'lucide-react';
+import { PlusCircle, ArrowLeft, Loader2, FileText, Lock, Zap, Database, GripVertical, Settings2, Calculator, Save } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/shared/lib/utils';
 
-// 3. TẠO COMPONENT BỌC DROPPABLE ĐỂ TRÁNH LỖI REACT CONTEXT 
-// (Vì useDroppable phải được gọi bên trong <DndContext>)
-function DroppableBoardArea({ id, children, className }: { id: string, children: React.ReactNode, className?: string }) {
+// Merge Refs Component
+const DroppableBoardArea = React.forwardRef<HTMLDivElement, { id: string, children: React.ReactNode, className?: string }>(({ id, children, className }, forwardedRef) => {
   const { setNodeRef } = useDroppable({ id });
-  return (
-    <div ref={setNodeRef} className={className}>
-      {children}
-    </div>
-  );
-}
+  const setRefs = useCallback((node: HTMLDivElement | null) => {
+    setNodeRef(node);
+    if (typeof forwardedRef === 'function') forwardedRef(node);
+    else if (forwardedRef) forwardedRef.current = node;
+  }, [setNodeRef, forwardedRef]);
+  return <div ref={setRefs} className={className}>{children}</div>;
+});
+DroppableBoardArea.displayName = 'DroppableBoardArea';
 
 export function ExamBuilderBoard() {
   const router = useRouter();
@@ -55,26 +49,63 @@ export function ExamBuilderBoard() {
 
   const urlExamId = params.examId as string;
   const paperId = searchParams.get('paperId');
-  const isPublished = searchParams.get('isPublished') === 'true';
 
-  const [activeMode, setActiveMode] = useState<'NONE' | 'MANUAL' | 'IMPORT' | 'BANK'>('NONE');
+  const { user } = useSession();
+
+  const { data: paperResponse, isLoading } = usePaperDetail(paperId || '');
+  // @ts-ignore
+  const paper = paperResponse?.data || paperResponse;
+
+  const isPublished = paper?.examId?.isPublished ?? (searchParams.get('isPublished') === 'true');
+  const subjectId = paper?.examId?.subjectId || user?.subjects?.[0]?.id;
+
+  const { mutate: addBulkManual, isPending: isAddingBulk } = useAddBulkManual(paperId || '');
+  const { mutate: updatePaper, isPending: isUpdatingPaper } = useUpdatePaper(paperId || '');
+  const { mutate: publishExam, isPending: isPublishing } = usePublishExam(paperId || '');
+  const { mutate: updatePoints, isPending: isUpdatingPoints } = useUpdatePoints(paperId || '');
+
+  // Cập nhật State: Xóa bỏ IMPORT
+  const [activeMode, setActiveMode] = useState<'NONE' | 'MANUAL' | 'BANK'>('NONE');
+  const [isMatrixDrawerOpen, setIsMatrixDrawerOpen] = useState(false);
   const [selectedEditQuestion, setSelectedEditQuestion] = useState<PopulatedQuestion | null>(null);
 
-  const { data: paper, isLoading } = usePaperDetail(paperId || '');
-  
-  const { mutate: addBulkManual, isPending: isAddingBulk } = useAddBulkManual(paperId || '');
-  const { mutate: updatePaper } = useUpdatePaper(paperId || '');
-  const { mutate: publishExam, isPending: isPublishing } = usePublishExam(paperId || '');
+  const [draftPoints, setDraftPoints] = useState<Record<string, number>>({});
+  const isDirty = Object.keys(draftPoints).length > 0;
 
-  // --- LOCAL STATE CHO OPTIMISTIC DND REORDER ---
   const [localQuestions, setLocalQuestions] = useState<PopulatedQuestion[]>([]);
   const [activeDragItem, setActiveDragItem] = useState<any | null>(null);
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const previousQuestionsCount = useRef(0);
+  const isInitialRender = useRef(true);
+
   useEffect(() => {
-    if (paper?.questions) {
+    if (paper?.questions && !activeDragItem && !isUpdatingPaper) {
       setLocalQuestions(paper.questions);
     }
-  }, [paper?.questions]);
+  }, [paper?.questions, activeDragItem, isUpdatingPaper]);
+
+  useEffect(() => {
+    if (isInitialRender.current) {
+      if (localQuestions.length > 0) {
+        previousQuestionsCount.current = localQuestions.length;
+        isInitialRender.current = false;
+      }
+      return;
+    }
+
+    if (localQuestions.length > previousQuestionsCount.current) {
+      setTimeout(() => {
+        if (scrollRef.current) {
+          scrollRef.current.scrollTo({
+            top: scrollRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }, 300);
+    }
+    previousQuestionsCount.current = localQuestions.length;
+  }, [localQuestions.length]);
 
   const displayQuestions = useMemo(() => {
     let globalCounter = 1;
@@ -88,203 +119,219 @@ export function ExamBuilderBoard() {
   }, [localQuestions]);
 
   const existingQuestionIds = useMemo(() => localQuestions.map(q => q.originalQuestionId), [localQuestions]);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5, 
-      },
-    })
-  );
+  const handlePointChange = useCallback((id: string, value: number, originalPoints?: number) => {
+    setDraftPoints(prev => {
+      const newDraft = { ...prev };
+      if (Number.isNaN(value) || value < 0 || value === originalPoints) {
+        delete newDraft[id];
+      } else {
+        newDraft[id] = value;
+      }
+      return newDraft;
+    });
+  }, []);
 
-  const handleDragStart = (event: any) => {
-    if (isPublished) return;
-    setActiveDragItem(event.active);
+  const handleSavePoints = () => {
+    const pointsData = Object.entries(draftPoints).map(([id, p]) => ({ questionId: id, points: p }));
+    updatePoints({ pointsData }, { onSuccess: () => setDraftPoints({}) });
   };
 
+  const handleAutoDividePoints = () => {
+    if (confirm('Hệ thống sẽ tự động tính toán và phân bổ điểm đều cho tất cả câu hỏi. Bạn có chắc chắn?')) {
+      updatePoints({ divideEqually: true }, { onSuccess: () => setDraftPoints({}) });
+    }
+  };
+
+  const handleOpenMatrix = () => {
+    if (isDirty) return toast.warning('Cảnh báo: Dữ liệu chưa lưu', { description: 'Vui lòng Cập Nhật Điểm trước khi tạo từ Ma trận.' });
+    if (!subjectId) return toast.error('Lỗi dữ liệu', { description: 'Đề thi thiếu dữ liệu Môn học. Không thể gọi Ma trận.' });
+    setIsMatrixDrawerOpen(true);
+  };
+
+  const handleDragStart = (event: any) => { if (!isPublished) setActiveDragItem(event.active); };
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveDragItem(null);
-
-    if (!over) return;
+    if (!over || isPublished) return;
 
     const activeId = String(active.id);
     const overId = String(over.id);
 
-    // KÉO TỪ NGÂN HÀNG VÀO TỜ ĐỀ
     if (activeId.startsWith('bank-')) {
       const bankQuestion = active.data.current?.questionData;
       if (!bankQuestion) return;
-
       const qId = bankQuestion._id || bankQuestion.id;
-      if (existingQuestionIds.includes(qId)) return toast.error('Câu hỏi này đã có trong đề');
+      if (existingQuestionIds.includes(qId)) return toast.error('Câu hỏi này đã tồn tại trong đề thi.');
 
       setLocalQuestions(prev => [...prev, bankQuestion]);
-
-      updatePaper({
-        action: 'ADD',
-        questionId: qId,
-        questionData: { ...bankQuestion, originalQuestionId: qId }
-      });
+      updatePaper({ action: 'ADD', questionId: qId, questionData: { ...bankQuestion, originalQuestionId: qId } });
       return;
     }
 
-    // SẮP XẾP LẠI TRONG TỜ ĐỀ (Bỏ qua nếu thả vào vùng trống ngoài các thẻ câu hỏi)
     if (activeId !== overId && overId !== 'exam-board-droppable-area') {
       const oldIndex = localQuestions.findIndex(q => q.originalQuestionId === activeId);
       const newIndex = localQuestions.findIndex(q => q.originalQuestionId === overId);
-
       if (oldIndex === -1 || newIndex === -1) return;
 
       const newQuestionsArray = arrayMove(localQuestions, oldIndex, newIndex);
       setLocalQuestions(newQuestionsArray);
-
-      const rootIds = newQuestionsArray.map(q => q.originalQuestionId);
-      updatePaper({ action: 'REORDER', questionIds: rootIds });
+      updatePaper({ action: 'REORDER', questionIds: newQuestionsArray.map(q => q.originalQuestionId) });
     }
   };
 
-  const handleRemove = (questionId?: string) => {
-    if (!questionId) {
-      toast.error('Lỗi dữ liệu', { description: 'Không tìm thấy ID câu hỏi để xóa.' });
-      return;
-    }
+  const handleRemove = useCallback((questionId?: string) => {
+    if (!questionId) return;
+    setLocalQuestions(prev => prev.filter(q => q.originalQuestionId !== questionId));
+    updatePaper({ action: 'REMOVE', questionId: questionId });
+  }, [updatePaper]);
 
-    setLocalQuestions((prev) => prev.filter((q) => q.originalQuestionId !== questionId));
-
-    updatePaper({
-      action: 'REMOVE',
-      questionId: questionId,
-    });
-  };
-
-  if (!paperId || paperId === 'undefined') return <div className="p-12 text-center text-red-500">Đường dẫn không hợp lệ!</div>;
-  if (isLoading) return <div className="flex flex-col items-center p-20"><Loader2 className="animate-spin w-10 h-10 text-blue-500" /></div>;
+  if (!paperId || paperId === 'undefined') return <div className="p-12 text-center text-destructive font-medium">Đường dẫn không hợp lệ!</div>;
+  if (isLoading) return <div className="flex flex-col items-center justify-center p-20 min-h-[50vh]"><Loader2 className="animate-spin w-10 h-10 text-primary" /></div>;
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
 
-      <div className={`flex flex-col h-[calc(100vh-4rem)] ${activeMode === 'BANK' ? 'overflow-hidden' : 'overflow-y-auto pb-32 max-w-5xl mx-auto'}`}>
+      {/* TĂNG CHIỀU RỘNG LÊN MAX-W-1400PX */}
+      <div className={`flex flex-col h-[calc(100vh-4rem)] ${activeMode === 'BANK' ? 'overflow-hidden' : 'overflow-y-auto pb-32 max-w-[1400px] w-full mx-auto'}`}>
 
-        <header className="shrink-0 z-20 bg-white/80 backdrop-blur-md border shadow-sm p-4 m-4 rounded-2xl flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+        {/* HEADER TOOLBAR ĐÃ ĐƯỢC LÀM SẠCH */}
+        <header className="shrink-0 z-20 bg-background/80 backdrop-blur-md border border-border shadow-sm p-4 m-4 rounded-2xl flex flex-col xl:flex-row gap-4 justify-between items-start xl:items-center">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => router.push('/teacher/exams')}><ArrowLeft className="w-5 h-5" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => router.push('/teacher/exams')} className="text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-xl font-black text-slate-800">Không gian Soạn Đề</h1>
-                {isPublished && <span className="bg-red-100 text-red-700 border border-red-200 px-3 py-1 rounded-full text-xs font-bold"><Lock className="w-3 h-3 inline mr-1" /> ĐÃ CHỐT</span>}
+                <h1 className="text-xl font-bold text-foreground tracking-tight">Không Gian Soạn Đề</h1>
+                {isPublished && (
+                  <span className="bg-primary/10 text-primary border border-primary/20 px-3 py-1 rounded-full text-xs font-semibold flex items-center">
+                    <Lock className="w-3 h-3 mr-1" /> ĐÃ XUẤT BẢN
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3 items-center w-full xl:w-auto">
+            
+            {/* NHÓM CÔNG CỤ SOẠN THẢO (THIẾT KẾ DẠNG TOOLBAR SEGMENTED) */}
             {!isPublished && (
-              <>
-                <Button variant={activeMode === 'BANK' ? 'default' : 'outline'} onClick={() => setActiveMode(activeMode === 'BANK' ? 'NONE' : 'BANK')} className={activeMode === 'BANK' ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-50'}>
-                  <Database className="w-4 h-4 mr-2" /> {activeMode === 'BANK' ? 'Đóng Ngân hàng' : 'Mở Ngân hàng'}
+              <div className="flex flex-wrap items-center gap-1 bg-secondary/40 p-1.5 rounded-xl border border-border">
+                <Button variant="ghost" size="sm" onClick={handleAutoDividePoints} disabled={isUpdatingPoints} className="font-medium text-muted-foreground hover:text-foreground">
+                  <Calculator className="w-4 h-4 mr-2" /> Phân Bổ Điểm
                 </Button>
-
-                <Button variant={activeMode === 'MANUAL' ? 'secondary' : 'outline'} onClick={() => setActiveMode(activeMode === 'MANUAL' ? 'NONE' : 'MANUAL')} className="font-bold border-blue-200 text-blue-600"><PlusCircle className="w-4 h-4 mr-2" /> Thêm tay</Button>
-                <Button variant={activeMode === 'IMPORT' ? 'secondary' : 'outline'} onClick={() => setActiveMode(activeMode === 'IMPORT' ? 'NONE' : 'IMPORT')} className="font-bold border-purple-200 text-purple-600"><FileUp className="w-4 h-4 mr-2" /> Import Word</Button>
-
-                <Button onClick={() => publishExam(paper?.examId?._id || urlExamId)} disabled={isPublishing || localQuestions.length === 0} className="font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-lg">
-                  {isPublishing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />} Chốt Đề
+                <div className="w-px h-5 bg-border mx-1 hidden sm:block"></div>
+                
+                <Button variant={activeMode === 'MANUAL' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveMode(activeMode === 'MANUAL' ? 'NONE' : 'MANUAL')} className="font-medium">
+                  <PlusCircle className="w-4 h-4 mr-2" /> Thêm Thủ Công
                 </Button>
-              </>
+                
+                <Button variant={activeMode === 'BANK' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveMode(activeMode === 'BANK' ? 'NONE' : 'BANK')} className="font-medium">
+                  <Database className="w-4 h-4 mr-2" /> Từ Ngân Hàng
+                </Button>
+                
+                <Button variant="ghost" size="sm" onClick={handleOpenMatrix} className="font-medium">
+                  <Settings2 className="w-4 h-4 mr-2" /> Tạo Từ Ma Trận
+                </Button>
+              </div>
             )}
+
+            {/* NHÓM HÀNH ĐỘNG CHÍNH */}
+            <div className="flex items-center gap-2 ml-auto xl:ml-2">
+              {isDirty && !isPublished && (
+                <Button variant="default" onClick={handleSavePoints} disabled={isUpdatingPoints} className="animate-in fade-in zoom-in font-semibold shadow-sm">
+                  {isUpdatingPoints ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />} Cập Nhật Điểm ({Object.keys(draftPoints).length})
+                </Button>
+              )}
+
+              {!isPublished && (
+                <Button variant="default" onClick={() => publishExam(paper?.examId?._id || urlExamId)} disabled={isPublishing || localQuestions.length === 0} className="font-semibold shadow-sm">
+                  {isPublishing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Zap className="w-4 h-4 mr-2" />} Phát Hành Đề Thi
+                </Button>
+              )}
+            </div>
           </div>
         </header>
 
-        {/* BLOCK RENDER FORM */}
+        {/* VÙNG INSERT MANUALLY */}
         {!isPublished && activeMode === 'MANUAL' && (
-          <div className="px-4 mb-4">
-            <BulkManualQuestionForm 
-              mode="QUICK_EXAM"
-              isPending={isAddingBulk}
-              onSave={(newQs) => { 
-                addBulkManual(
-                  { questionsData: newQs, folderId: paper?.folderId || '' },
-                  {
-                    onSuccess: () => {
-                      setActiveMode('NONE');
-                    }
-                  }
-                );
-              }} 
-              onCancel={() => setActiveMode('NONE')} 
-            />
+          <div className="px-4 mb-4 animate-in slide-in-from-top-4 fade-in">
+            <BulkManualQuestionForm mode="QUICK_EXAM" isPending={isAddingBulk} onSave={(newQs) => { addBulkManual({ questionsData: newQs, folderId: paper?.folderId || '' }, { onSuccess: () => setActiveMode('NONE') }); }} onCancel={() => setActiveMode('NONE')} />
           </div>
         )}
-        
-        {!isPublished && activeMode === 'IMPORT' && (
-          <div className="px-4 mb-4 relative"><ImportDocxModal paperId={paperId} /><Button variant="ghost" className="absolute top-2 right-2 text-slate-400" onClick={() => setActiveMode('NONE')}>Đóng</Button></div>
-        )}
 
-        <div className={`flex flex-1 overflow-hidden transition-all ${activeMode === 'BANK' ? 'px-0' : 'px-4'}`}>
+        <div className={`flex flex-1 overflow-hidden transition-all duration-300 ${activeMode === 'BANK' ? 'px-0' : 'px-4'}`}>
 
-          <div className={`h-full overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 transition-all ${activeMode === 'BANK' ? 'w-[70%] px-6 pb-20 border-r bg-slate-50/50' : 'w-full'}`}>
-            <div className="flex items-center gap-2 text-slate-400 mb-4"><FileText className="w-5 h-5" /><h2 className="font-bold uppercase tracking-widest text-sm">Cấu trúc tờ đề ({localQuestions.length} câu)</h2></div>
+          {/* VÙNG CHỨA CÂU HỎI */}
+          <div className={cn(
+            "h-full overflow-y-auto scrollbar-thin scrollbar-thumb-border transition-all duration-300",
+            activeMode === 'BANK' ? "w-[70%] px-6 pb-20 border-r border-border bg-slate-50/30" : "w-full"
+          )}>
+            <div className="flex items-center gap-2 text-muted-foreground mb-4 ml-2 mt-2">
+              <FileText className="w-5 h-5" />
+              <h2 className="font-bold uppercase tracking-widest text-sm">Cấu Trúc Đề Thi ({localQuestions.length} câu)</h2>
+            </div>
 
-            <SortableContext
-              items={displayQuestions.map((q, index) => String(q.originalQuestionId || q._id || `fallback-${index}`))}
-              strategy={verticalListSortingStrategy}
-            >
-              {/* 4. SỬ DỤNG DroppableBoardArea THAY CHO <div> THƯỜNG, ĐẶT min-h-[500px] */}
-              <DroppableBoardArea id="exam-board-droppable-area" className="flex-1 overflow-y-auto p-6 space-y-4 min-h-[500px]">
+            <SortableContext items={displayQuestions.map((q, i) => String(q.originalQuestionId || q._id || `fallback-${i}`))} strategy={verticalListSortingStrategy}>
+              <DroppableBoardArea id="exam-board-droppable-area" ref={scrollRef} className="flex-1 overflow-y-auto p-2 pb-12 space-y-4 min-h-[500px]">
                 {displayQuestions.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-slate-400 opacity-60">
-                    <FileText className="w-16 h-16 mb-4" />
-                    <p>Chưa có câu hỏi nào trong đề thi.</p>
-                    <p className="text-sm">Hãy chọn câu hỏi từ Ngân hàng hoặc Thêm mới</p>
+                  <div className="flex flex-col items-center justify-center h-full text-muted-foreground opacity-60">
+                    <FileText className="w-16 h-16 mb-4 opacity-50" />
+                    <p className="font-medium">Chưa có câu hỏi nào trong đề thi.</p>
                   </div>
                 ) : (
-                  displayQuestions.map((q, index) => {
-
-                    const safeKey = String(q.originalQuestionId || q._id || `fallback-${index}`);
-
-                    return (
-                      <SortableQuestionCard
-                        key={safeKey}
-                        question={q}
-                        answerKeys={paper?.answerKeys || []}
-                        isPublished={isPublished}
-                        onEdit={() => setSelectedEditQuestion(q)}
-                        onRemove={() => handleRemove(q.originalQuestionId)}
-                      />
-                    );
-                  })
+                  displayQuestions.map((q, index) => (
+                    <SortableQuestionCard
+                      key={String(q.originalQuestionId || q._id || `fallback-${index}`)}
+                      question={q}
+                      answerKeys={paper?.answerKeys || []}
+                      isPublished={isPublished}
+                      draftPoints={draftPoints}
+                      onPointChange={handlePointChange}
+                      onEdit={() => setSelectedEditQuestion(q)}
+                      onRemove={handleRemove}
+                    />
+                  ))
                 )}
               </DroppableBoardArea>
             </SortableContext>
           </div>
 
           {activeMode === 'BANK' && (
-            <div className="w-[30%] h-full shrink-0 bg-white animate-in slide-in-from-right-10 duration-300">
+            <div className="w-[30%] h-full shrink-0 bg-background animate-in slide-in-from-right-10 duration-300 border-l border-border shadow-[-10px_0_20px_rgba(0,0,0,0.02)]">
               <MiniBankSidebar existingQuestionIds={existingQuestionIds} />
             </div>
           )}
         </div>
-
       </div>
 
       <DragOverlay dropAnimation={{ duration: 250, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
         {activeDragItem ? (
           activeDragItem.id.toString().startsWith('bank-') ? (
-            <div className="opacity-95 scale-105 rotate-2 cursor-grabbing pointer-events-none w-80 shadow-2xl">
-              {/* 5. DÙNG MiniQuestionCardUI TRONG OVERLAY ĐỂ KHÔNG BỊ XUNG ĐỘT HOOK */}
+            <div className="opacity-95 scale-105 rotate-2 pointer-events-none w-80 shadow-2xl rounded-xl overflow-hidden border border-primary/20">
               <MiniQuestionCardUI question={activeDragItem.data.current?.questionData} />
             </div>
           ) : (
-            <div className="opacity-80 scale-105 cursor-grabbing pointer-events-none bg-white border-2 border-blue-400 p-6 rounded-2xl shadow-2xl">
-              <div className="flex items-center gap-3 text-blue-600 font-bold">
-                <GripVertical className="w-5 h-5" /> Đang di chuyển câu hỏi...
-              </div>
+            <div className="opacity-90 scale-105 pointer-events-none bg-background border-2 border-primary/50 p-6 rounded-2xl shadow-2xl flex items-center gap-3 text-primary font-bold">
+              <GripVertical className="w-5 h-5" /> Đang di chuyển...
             </div>
           )
         ) : null}
       </DragOverlay>
 
       <EditQuestionSheet question={selectedEditQuestion} answerKeys={paper?.answerKeys || []} paperId={paperId || ''} onClose={() => setSelectedEditQuestion(null)} />
+
+      {subjectId && (
+        <MatrixBuilderDrawer
+          isOpen={isMatrixDrawerOpen}
+          onClose={() => setIsMatrixDrawerOpen(false)}
+          paperId={paperId || ''}
+          subjectId={subjectId}
+        />
+      )}
+
     </DndContext>
   );
 }

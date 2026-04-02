@@ -19,18 +19,17 @@ export function TransactionConfirmModal() {
     const { isOpen, payload, closeConfirm } = useTransactionConfirmStore();
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // Fallback an toàn nếu state rỗng (mặc dù isOpen đã chặn render content)
     if (!payload) return null;
 
     const { title, description, actionType, amount, currentBalance, onConfirm } = payload;
 
-    // Domain logic tính toán hiển thị
     const isDeduction = actionType === 'WITHDRAW' || actionType === 'PAYMENT';
     const newBalance = isDeduction ? currentBalance - amount : currentBalance + amount;
 
     const amountSign = isDeduction ? '-' : '+';
-    const amountColor = isDeduction ? 'text-red-600' : 'text-green-600';
-    const bgBadgeColor = isDeduction ? 'bg-red-50' : 'bg-green-50';
+    // Đỏ cho trừ tiền, Xanh lá cho cộng tiền (Semantic Colors)
+    const amountColor = isDeduction ? 'text-destructive' : 'text-green-600 dark:text-green-500';
+    const bgBadgeColor = isDeduction ? 'bg-destructive/10' : 'bg-green-100 dark:bg-green-900/30';
 
     const formatVND = (value: number) =>
         new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
@@ -44,11 +43,10 @@ export function TransactionConfirmModal() {
             console.error('Transaction Failed:', error);
             toast.error('Giao dịch thất bại', { description: 'Đã có lỗi xảy ra, vui lòng thử lại.' });
         } finally {
-            setIsProcessing(false); // Luôn nhả lock dù thành công hay thất bại
+            setIsProcessing(false);
         }
     };
 
-    // Ngăn chặn tắt Modal khi đang call API
     const handleOpenChange = (open: boolean) => {
         if (isProcessing) return;
         if (!open) closeConfirm();
@@ -56,76 +54,75 @@ export function TransactionConfirmModal() {
 
     return (
         <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-            {/* onInteractOutside cũng cần bị block khi isProcessing */}
             <DialogContent
                 className="sm:max-w-md"
                 onInteractOutside={(e) => { if (isProcessing) e.preventDefault(); }}
             >
                 <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2 text-xl border-b pb-3">
-                        <ShieldCheck className="w-6 h-6 text-indigo-600" />
+                    <DialogTitle className="flex items-center gap-2 text-xl border-b border-border pb-4 font-black text-foreground">
+                        <ShieldCheck className="w-7 h-7 text-primary" />
                         {title}
                     </DialogTitle>
                     {description && (
-                        <DialogDescription className="pt-2 text-sm text-slate-600">
+                        <DialogDescription className="pt-3 text-sm font-medium">
                             {description}
                         </DialogDescription>
                     )}
                 </DialogHeader>
 
-                <div className="py-4 space-y-4">
+                <div className="py-2 space-y-4">
                     {/* Bill Summary Box */}
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 shadow-inner">
-                        <div className="flex justify-between items-center text-sm font-medium text-slate-500">
+                    <div className="bg-secondary/40 border border-border rounded-2xl p-5 space-y-4 shadow-inner">
+                        <div className="flex justify-between items-center text-sm font-bold text-muted-foreground">
                             <span>Số dư hiện tại</span>
-                            <span className="text-slate-800">{formatVND(currentBalance)}</span>
+                            <span className="text-foreground text-base">{formatVND(currentBalance)}</span>
                         </div>
 
-                        <div className={cn("flex justify-between items-center text-base font-bold p-2 rounded-lg", bgBadgeColor, amountColor)}>
+                        <div className={cn("flex justify-between items-center text-lg font-black p-3 rounded-xl", bgBadgeColor, amountColor)}>
                             <span>Số tiền giao dịch</span>
                             <span>{amountSign}{formatVND(amount)}</span>
                         </div>
 
-                        <div className="pt-3 border-t border-slate-200 flex justify-between items-center">
-                            <span className="text-sm font-semibold text-slate-700">Số dư dự kiến</span>
-                            <div className="flex items-center gap-2 text-lg font-bold text-indigo-700">
-                                <ArrowRight className="w-4 h-4 text-slate-400" />
+                        <div className="pt-4 border-t border-border flex justify-between items-center">
+                            <span className="text-sm font-bold text-foreground">Số dư dự kiến</span>
+                            <div className="flex items-center gap-2 text-xl font-black text-primary">
+                                <ArrowRight className="w-5 h-5 text-muted-foreground" />
                                 {formatVND(newBalance)}
                             </div>
                         </div>
                     </div>
 
                     {actionType === 'WITHDRAW' && (
-                        <div className="flex gap-2 text-sm text-amber-700 bg-amber-50 p-3 rounded-lg border border-amber-200">
+                        <div className="flex gap-3 text-sm font-medium text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-200 dark:border-amber-800/50">
                             <AlertCircle className="w-5 h-5 shrink-0" />
                             <p>Số tiền này sẽ được trừ khỏi ví và đóng băng chờ Admin duyệt.</p>
                         </div>
                     )}
                     {actionType === 'PAYMENT' && (
-                        <div className="flex gap-2 text-sm text-blue-700 bg-blue-50 p-3 rounded-lg border border-blue-200">
+                        <div className="flex gap-3 text-sm font-medium text-destructive bg-destructive/10 p-4 rounded-xl border border-destructive/20">
                             <AlertCircle className="w-5 h-5 shrink-0" />
                             <p>Giao dịch mua khóa học không thể hoàn tác. Bạn chắc chắn chứ?</p>
                         </div>
                     )}
                 </div>
 
-                <DialogFooter className="flex-col sm:flex-row gap-2 pt-2">
+                <DialogFooter className="flex-col sm:flex-row gap-3 pt-4 border-t border-border mt-2">
                     <Button
                         variant="outline"
                         onClick={closeConfirm}
                         disabled={isProcessing}
-                        className="w-full sm:w-auto font-medium"
+                        className="w-full sm:w-auto font-bold rounded-xl h-11"
                     >
                         Hủy bỏ
                     </Button>
                     <Button
                         onClick={handleConfirm}
                         disabled={isProcessing}
-                        className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold min-w-[140px]"
+                        className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-primary-foreground font-bold min-w-[140px] rounded-xl h-11 shadow-lg shadow-primary/20 transition-transform active:scale-95"
                     >
                         {isProcessing ? (
                             <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                                 Đang xử lý...
                             </>
                         ) : (

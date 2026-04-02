@@ -24,7 +24,6 @@ export function DepositModal() {
   const openConfirm = useTransactionConfirmStore((state) => state.openConfirm);
   const balance = useAuthStore((state) => state.user?.balance ?? 0);
   
-  // Đổi sang mutateAsync để đợi kết quả trả về trong Modal Xác nhận
   const { mutateAsync: processDepositAsync, isPending } = useMockDeposit();
 
   const {
@@ -46,7 +45,6 @@ export function DepositModal() {
   }, [isDepositModalOpen, requiredAmount, setValue]);
 
   const onSubmit = (data: DepositFormDTO) => {
-    // Intercept: Chặn luồng nạp trực tiếp, mở bảng Tóm tắt giao dịch
     openConfirm({
       title: 'Xác nhận nạp tiền',
       description: 'Bạn đang yêu cầu nạp thêm tiền vào ví hệ thống.',
@@ -54,8 +52,6 @@ export function DepositModal() {
       amount: data.amount,
       currentBalance: balance,
       onConfirm: async () => {
-        // Gọi API nạp tiền. Dùng .then để chỉ reset form khi thành công.
-        // Dùng .catch để nuốt lỗi, nhường việc toast lỗi cho hook useMockDeposit.
         await processDepositAsync(data.amount)
           .then(() => reset())
           .catch(() => {});
@@ -67,24 +63,24 @@ export function DepositModal() {
     <Dialog open={isDepositModalOpen} onOpenChange={(isOpen) => !isOpen && closeDepositModal()}>
       <DialogContent className="sm:max-w-md" onInteractOutside={(e) => { if (isPending) e.preventDefault(); }}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Wallet className="text-blue-600 w-6 h-6" />
+          <DialogTitle className="flex items-center gap-2 text-xl font-bold">
+            <Wallet className="text-primary w-6 h-6" />
             Nạp tiền vào hệ thống
           </DialogTitle>
-          <DialogDescription>
-            Số dư hiện tại: <strong className="text-blue-600">{balance.toLocaleString()}đ</strong>
+          <DialogDescription className="pt-2">
+            Số dư hiện tại: <strong className="text-primary text-base">{balance.toLocaleString()}đ</strong>
             {requiredAmount > 0 && (
-              <span className="block mt-1 text-amber-600 bg-amber-50 p-2 rounded-md border border-amber-100">
+              <span className="block mt-3 text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-xl border border-amber-200 dark:border-amber-800/50">
                 Bạn cần nạp thêm ít nhất <strong>{requiredAmount.toLocaleString()}đ</strong> để thực hiện giao dịch này.
               </span>
             )}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-4">
-          <div className="space-y-2">
-            <label htmlFor="amount" className="text-sm font-semibold text-slate-700">
-              Nhập số tiền cần nạp (VND) <span className="text-red-500">*</span>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-2">
+          <div className="space-y-3">
+            <label htmlFor="amount" className="text-sm font-bold text-foreground">
+              Nhập số tiền cần nạp (VND) <span className="text-destructive">*</span>
             </label>
             <Input
               id="amount"
@@ -92,10 +88,10 @@ export function DepositModal() {
               placeholder="VD: 100000"
               disabled={isPending}
               {...register('amount')}
-              className={`h-11 text-lg font-medium ${errors.amount ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+              className={`h-12 text-lg font-bold rounded-xl ${errors.amount ? 'border-destructive focus-visible:ring-destructive' : 'focus-visible:ring-primary'}`}
             />
             {errors.amount && (
-              <p className="text-[12px] font-medium text-red-500">{errors.amount.message}</p>
+              <p className="text-xs font-bold text-destructive">{errors.amount.message}</p>
             )}
           </div>
 
@@ -104,7 +100,7 @@ export function DepositModal() {
               <button
                 key={amt}
                 type="button"
-                className="text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-blue-100 hover:text-blue-700 py-2 rounded-md transition-colors border border-slate-200"
+                className="text-sm font-bold text-foreground bg-secondary hover:bg-primary/10 hover:text-primary py-2.5 rounded-lg transition-colors border border-border hover:border-primary/30"
                 onClick={() => setValue('amount', amt, { shouldValidate: true })}
                 disabled={isPending}
               >
@@ -113,11 +109,11 @@ export function DepositModal() {
             ))}
           </div>
 
-          <div className="flex justify-end gap-3 w-full pt-4 border-t border-border">
-            <Button type="button" variant="ghost" onClick={closeDepositModal} disabled={isPending}>
+          <div className="flex justify-end gap-3 w-full pt-6 border-t border-border">
+            <Button type="button" variant="outline" className="rounded-xl font-bold" onClick={closeDepositModal} disabled={isPending}>
               Hủy bỏ
             </Button>
-            <Button type="submit" disabled={isPending} className="min-w-[140px] bg-blue-600 hover:bg-blue-700 text-white shadow-md transition-transform active:scale-95">
+            <Button type="submit" disabled={isPending} className="min-w-[140px] rounded-xl font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 transition-transform active:scale-95">
               {isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -125,7 +121,7 @@ export function DepositModal() {
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="mr-2 h-4 w-4" /> Tiếp tục
+                  <ShieldCheck className="mr-2 h-5 w-5" /> Tiếp tục
                 </>
               )}
             </Button>

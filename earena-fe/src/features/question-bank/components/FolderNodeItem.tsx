@@ -14,8 +14,10 @@ interface FolderNodeItemProps {
 }
 
 export const FolderNodeItem = React.memo(({ node, level = 0, onAction }: FolderNodeItemProps) => {
+    // [CTO RESTORE]: Quay lại dùng Navigation State
     const selectedFolderId = useQuestionBankStore(state => state.selectedFolderId);
     const setSelectedFolderId = useQuestionBankStore(state => state.setSelectedFolderId);
+    
     const expandedFolderIds = useQuestionBankStore(state => state.expandedFolderIds);
     const toggleFolderExpand = useQuestionBankStore(state => state.toggleFolderExpand);
 
@@ -24,11 +26,12 @@ export const FolderNodeItem = React.memo(({ node, level = 0, onAction }: FolderN
     const hasChildren = node.children && node.children.length > 0;
 
     const handleToggle = (e: React.MouseEvent) => {
-        e.stopPropagation(); // Chặn select folder khi bấm mũi tên
+        e.stopPropagation(); 
         toggleFolderExpand(node._id);
     };
 
     const handleSelect = () => {
+        // Chỉ việc click để vào thư mục, không toggle mảng phức tạp
         setSelectedFolderId(node._id);
     };
 
@@ -37,13 +40,12 @@ export const FolderNodeItem = React.memo(({ node, level = 0, onAction }: FolderN
             <div
                 className={cn(
                     "group flex items-center justify-between py-1.5 px-2 rounded-lg cursor-pointer transition-colors mt-0.5 text-sm font-medium",
-                    isSelected ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100",
+                    isSelected ? "bg-primary/10 text-primary" : "text-slate-700 hover:bg-slate-100",
                 )}
                 style={{ paddingLeft: `${level * 16 + 8}px` }}
                 onClick={handleSelect}
             >
                 <div className="flex items-center gap-1.5 truncate flex-1">
-                    {/* Mũi tên Expand/Collapse */}
                     <div
                         className={cn("w-5 h-5 flex items-center justify-center rounded hover:bg-slate-200 transition-colors", !hasChildren && "invisible")}
                         onClick={handleToggle}
@@ -51,17 +53,15 @@ export const FolderNodeItem = React.memo(({ node, level = 0, onAction }: FolderN
                         {isExpanded ? <ChevronDown className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
                     </div>
 
-                    {/* Icon Folder */}
                     {isExpanded && hasChildren ? (
-                        <FolderOpen className={cn("w-4 h-4 shrink-0", isSelected ? "text-blue-600" : "text-amber-500")} />
+                        <FolderOpen className={cn("w-4 h-4 shrink-0", isSelected ? "text-primary" : "text-amber-500")} />
                     ) : (
-                        <Folder className={cn("w-4 h-4 shrink-0", isSelected ? "text-blue-600" : "text-amber-500")} />
+                        <Folder className={cn("w-4 h-4 shrink-0", isSelected ? "text-primary" : "text-amber-500")} />
                     )}
 
                     <span className="truncate">{node.name}</span>
                 </div>
 
-                {/* Action Menu (3 chấm) - Chỉ hiện khi hover */}
                 <div className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={e => e.stopPropagation()}>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -76,7 +76,7 @@ export const FolderNodeItem = React.memo(({ node, level = 0, onAction }: FolderN
                             <DropdownMenuItem onClick={() => onAction('EDIT', node)}>
                                 <Edit className="w-4 h-4 mr-2" /> Đổi tên
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onAction('DELETE', node)} className="text-red-600 focus:text-red-600">
+                            <DropdownMenuItem onClick={() => onAction('DELETE', node)} className="text-destructive focus:text-destructive">
                                 <Trash2 className="w-4 h-4 mr-2" /> Xóa thư mục
                             </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -84,16 +84,10 @@ export const FolderNodeItem = React.memo(({ node, level = 0, onAction }: FolderN
                 </div>
             </div>
 
-            {/* RENDER CON ĐỆ QUY */}
             {isExpanded && hasChildren && (
                 <div className="w-full">
                     {node.children!.map(childNode => (
-                        <FolderNodeItem
-                            key={childNode._id}
-                            node={childNode}
-                            level={level + 1}
-                            onAction={onAction}
-                        />
+                        <FolderNodeItem key={childNode._id} node={childNode} level={level + 1} onAction={onAction} />
                     ))}
                 </div>
             )}

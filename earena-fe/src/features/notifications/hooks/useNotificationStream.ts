@@ -56,25 +56,32 @@ export const useNotificationStream = (isAuthenticated: boolean) => {
                 const newNotif = rawData as INotification;
                 addRealtimeNotification(newNotif);
 
-                // =========================================================
-                // [CTO FIX - EVENT ROUTER]: ĐỊNH TUYẾN SỰ KIỆN REAL-TIME
-                // =========================================================
                 if (newNotif.type === 'SYSTEM' && newNotif.payload?.metadata?.event === 'AUTO_TAG_BATCH_COMPLETED') {
-                    // Ép kiểu an toàn (Zero Any)
                     const aiMeta = newNotif.payload.metadata as unknown as IAiBatchCompletedEvent;
                     
-                    // Kích hoạt trực tiếp State. Không bao giờ dính dữ liệu lịch sử.
                     useQuestionBankStore.getState().processAiBatchEvent(
                         aiMeta.batchNum,
                         aiMeta.totalBatches,
                         aiMeta.processedQuestions
                     );
                     
-                    return; // Return luôn, chặn Toast hệ thống vô nghĩa
+                    return;
                 }
-                // =========================================================
 
-                // Chỉ hiện Toast cho các thông báo thông thường khác
+                const payloadObj = newNotif.payload as Record<string, unknown> | undefined;
+                const action = payloadObj?.action as string | undefined;
+
+                if (newNotif.type === 'COURSE' && action?.startsWith('PROMPT_REVIEW')) {
+                    window.dispatchEvent(new CustomEvent('core:prompt_review', {
+                        detail: {
+                            courseId: payloadObj?.courseId as string,
+                            title: newNotif.title,
+                            message: newNotif.message
+                        }
+                    }));
+                    return;
+                }
+
                 if (newNotif.type !== 'SYSTEM' || !newNotif.payload?.metadata?.event) {
                     toast(newNotif.title || 'Thông báo mới', {
                         description: newNotif.message || '',

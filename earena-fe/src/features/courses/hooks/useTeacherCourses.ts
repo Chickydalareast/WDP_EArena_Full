@@ -22,13 +22,13 @@ export const useCreateCourse = () => {
     return useMutation({
         mutationFn: (payload: CreateCourseDTO) => courseService.createCourse(payload),
         onSuccess: (newCourse) => {
-            toast.success('Tạo khóa học thành công!', {
-                description: 'Bạn có thể bắt đầu thiết kế cây bài giảng ngay bây giờ.',
+            toast.success('Khởi tạo khóa học thành công!', {
+                description: 'Vui lòng hoàn tất cài đặt thông tin và tải lên ảnh bìa/video giới thiệu.',
             });
             
             queryClient.invalidateQueries({ queryKey: courseQueryKeys.teacherCourses() });
 
-            router.push(ROUTES.TEACHER.COURSE_BUILDER(newCourse.id));
+            router.push(ROUTES.TEACHER.COURSE_SETTINGS(newCourse.id));
         },
         onError: (error) => {
             toast.error('Lỗi khởi tạo khóa học', { description: parseApiError(error).message });

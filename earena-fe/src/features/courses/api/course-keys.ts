@@ -21,4 +21,7 @@ export const courseQueryKeys = {
     teacherDetail: (courseId: string) => [...courseQueryKeys.teacherDetails(), courseId] as const,
 
     teacherCourses: () => [...courseQueryKeys.all, 'teacher', 'me'] as const,
+    
+    teacherDashboardStats: (courseId: string) => [...courseQueryKeys.teacherDetails(), courseId, 'stats'] as const,
+    teacherCurriculumView: (courseId: string) => [...courseQueryKeys.teacherDetails(), courseId, 'curriculum-view'] as const,
 };

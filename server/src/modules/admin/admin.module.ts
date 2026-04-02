@@ -28,6 +28,7 @@ import { AdminCoursesService } from './services/admin-courses.service';
 import { WalletsModule } from '../wallets/wallets.module'; 
 
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module'; 
+import { ExamsModule } from '../exams/exams.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
     CoursesModule,
     WalletsModule,
     SubscriptionsModule,
+    ExamsModule
   ],
   controllers: [
     AdminDashboardController,

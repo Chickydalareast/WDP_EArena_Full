@@ -7,18 +7,20 @@ import { Types } from 'mongoose';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { LessonProgressRepository } from '../repositories/lesson-progress.repository';
 import { LessonsRepository } from '../repositories/lessons.repository';
+import { EnrollmentsService } from '../services/enrollments.service';
 import { ProgressEventPattern, LessonCompletedEventPayload } from '../constants/progress-event.constant';
 
 @Processor('learning-tracking')
 export class HeartbeatSyncProcessor extends WorkerHost {
   private readonly logger = new Logger(HeartbeatSyncProcessor.name);
-  private readonly COMPLETION_THRESHOLD = 0.9; // Yêu cầu xem đủ 90% video
+  private readonly COMPLETION_THRESHOLD = 0.9;
 
   constructor(
     @Inject('REDIS_CLIENT') private readonly redisClient: Redis,
     private readonly progressRepo: LessonProgressRepository,
     private readonly lessonsRepo: LessonsRepository,
     private readonly eventEmitter: EventEmitter2,
+    private readonly enrollmentsService: EnrollmentsService,
   ) {
     super();
   }
@@ -63,22 +65,32 @@ export class HeartbeatSyncProcessor extends WorkerHost {
 
             const video = lessonDoc?.primaryVideoId as any;
             duration = (video && typeof video.duration === 'number') ? video.duration : 0;
+
+            if (duration === 0) {
+              this.logger.warn(`[DATA BLIND SPOT]: Video của Bài học ${lessonId} bị thiếu trường 'duration' trong DB Media! Đang kích hoạt Fallback 10 giây để test.`);
+              duration = 10;
+            }
+
             lessonDurationCache.set(lessonId, duration);
           }
 
-          if (duration > 0 && updatedProgress.watchTime >= duration * this.COMPLETION_THRESHOLD) {
+          if (updatedProgress.watchTime >= duration * this.COMPLETION_THRESHOLD) {
             await this.progressRepo.updateByIdSafe(
               updatedProgress._id as Types.ObjectId,
               { $set: { isCompleted: true, completedAt: new Date() } }
             );
 
-            this.logger.log(`[Heartbeat] User ${userId} đã hoàn thành Video Bài ${lessonId}`);
+            this.logger.log(`🎉 [Heartbeat] User ${userId} đã hoàn thành Video Bài ${lessonId}`);
+
+            try {
+              await this.enrollmentsService.markLessonCompleted({ userId, courseId, lessonId });
+              this.logger.log(`[Heartbeat] Đã đồng bộ % Progress khóa học cho User ${userId}`);
+            } catch (enrollErr: any) {
+              this.logger.error(`[Heartbeat] Lỗi cập nhật Enrollment: ${enrollErr.message}`);
+            }
 
             this.eventEmitter.emit(ProgressEventPattern.LESSON_COMPLETED, {
-              userId,
-              courseId,
-              lessonId,
-              isFirstCompletion: true
+              userId, courseId, lessonId, isFirstCompletion: true
             } as LessonCompletedEventPayload);
           }
         }

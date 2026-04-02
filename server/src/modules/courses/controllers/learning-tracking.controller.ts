@@ -22,10 +22,10 @@ export class LearningTrackingController {
             lessonId: dto.lessonId,
             delta: dto.delta,
             lastPosition: dto.lastPosition,
+            isEnded: dto.isEnded,
         };
 
         await this.trackingService.recordHeartbeat(payload);
-
         return { message: 'ACK' };
     }
 }

@@ -60,7 +60,6 @@ export const adminService = {
     return axiosClient.delete(API_ENDPOINTS.ADMIN.USER(id));
   },
 
-  // Exams
   listExams: async (params: {
     page?: number;
     limit?: number;
@@ -70,6 +69,11 @@ export const adminService = {
   }): Promise<PageResult<AdminExam>> => {
     return axiosClient.get(API_ENDPOINTS.ADMIN.EXAMS, { params });
   },
+  
+  getExamPaperDetailByExamId: async (examId: string): Promise<unknown> => {
+    return axiosClient.get(API_ENDPOINTS.ADMIN.EXAM_PAPER_DETAIL_BY_EXAM(examId));
+  },
+
   setExamPublish: async (id: string, isPublished: boolean) => {
     return axiosClient.patch(API_ENDPOINTS.ADMIN.EXAM_PUBLISH(id), { isPublished });
   },
@@ -77,7 +81,6 @@ export const adminService = {
     return axiosClient.delete(`${API_ENDPOINTS.ADMIN.EXAMS}/${id}`);
   },
 
-  // Questions
   listQuestions: async (params: {
     page?: number;
     limit?: number;

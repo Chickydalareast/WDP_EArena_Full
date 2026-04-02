@@ -71,3 +71,5 @@ export class ExamPaper {
 }
 
 export const ExamPaperSchema = SchemaFactory.createForClass(ExamPaper);
+
+ExamPaperSchema.index({ examId: 1, submissionId: 1 });

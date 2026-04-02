@@ -21,7 +21,11 @@ import {
   BulkDeleteQuestionPayload,
   QuestionFilterPayload,
   BulkStandardizeQuestionPayload,
-  SuggestFolderPayload
+  SuggestFolderPayload,
+  GetActiveFiltersPayload,
+  PrunedTreeNode,
+  ActiveFiltersResponse,
+  BulkPublishQuestionPayload
 } from './interfaces/question.interface';
 import { DIFFICULTY_NAME_MAP } from './constants/question.constant';
 import { QuestionOrganizerEngine } from './engines/question-organizer.engine';
@@ -472,35 +476,29 @@ export class QuestionsService {
     });
   }
 
+  private async expandHierarchyIds(repo: any, inputIds?: string[]): Promise<string[] | undefined> {
+    if (!inputIds || inputIds.length === 0) return undefined;
+
+    const objIds = inputIds.map(id => new Types.ObjectId(id));
+    const childNodes = await repo.modelInstance
+      .find({ ancestors: { $in: objIds } })
+      .select('_id')
+      .lean()
+      .exec();
+
+    return [...new Set([...inputIds, ...childNodes.map((n: any) => n._id.toString())])];
+  }
+
   async getQuestionsPaginated(userId: string, payload: QuestionFilterPayload) {
-    let targetFolderIds: string[] | undefined = undefined;
+    const expandedFolderIds = await this.expandHierarchyIds(this.foldersRepo, payload.folderIds);
+    const expandedTopicIds = await this.expandHierarchyIds(this.topicsRepo, payload.topicIds);
 
-    if (payload.folderId) {
-      const folderObjId = new Types.ObjectId(payload.folderId);
-
-      const relatedFolders = await (this.foldersRepo as any).modelInstance
-        .find({
-          $or: [
-            { _id: folderObjId },
-            { ancestors: folderObjId }
-          ]
-        })
-        .select('_id')
-        .lean()
-        .exec();
-
-      targetFolderIds = relatedFolders.map((f: any) => f._id.toString());
-
-      if (targetFolderIds?.length === 0) {
-        return { items: [], meta: { total: 0, page: payload.page, limit: payload.limit, totalPages: 0 } };
-      }
-    }
-
-    const { folderId, ...restPayload } = payload;
+    const { folderIds, topicIds, ...restPayload } = payload;
 
     return this.questionsRepository.getQuestionsPaginated(userId, {
       ...restPayload,
-      folderIds: targetFolderIds
+      folderIds: expandedFolderIds,
+      topicIds: expandedTopicIds
     });
   }
 
@@ -931,13 +929,11 @@ export class QuestionsService {
   }
 
   async dispatchAutoTagJob(teacherId: string, payload: { questionIds: string[] }) {
-    // 1. Validate Ownership: Chặn đứng rác hoặc ID ảo
     const validCount = await this.questionsRepository.countValidQuestions(payload.questionIds, teacherId);
     if (validCount !== payload.questionIds.length) {
       throw new ForbiddenException('Một hoặc nhiều câu hỏi không tồn tại, bị lưu trữ hoặc bạn không có quyền sở hữu.');
     }
 
-    // 2. Trích xuất Subject ID của Giáo viên (Kế thừa logic từ AI Builder)
     const teacher = await this.usersService.findById(teacherId);
     if (!teacher || !teacher.subjectIds || teacher.subjectIds.length === 0) {
       throw new BadRequestException('Tài khoản của bạn chưa được phân công giảng dạy bộ môn nào. Vui lòng liên hệ Admin.');
@@ -968,6 +964,228 @@ export class QuestionsService {
     return {
       message: 'Yêu cầu AI phân tích thuộc tính đã được đưa vào hệ thống xử lý ngầm. Vui lòng kiểm tra lại sau ít phút.',
       jobDispatched: true
+    };
+  }
+
+  private buildPrunedTree(nodes: any[]): PrunedTreeNode[] {
+    const map = new Map<string, PrunedTreeNode>();
+    const roots: PrunedTreeNode[] = [];
+
+    nodes.forEach(node => {
+      map.set(node._id.toString(), {
+        id: node._id.toString(),
+        name: node.name,
+        children: []
+      });
+    });
+
+    nodes.forEach(node => {
+      const current = map.get(node._id.toString())!;
+      if (node.parentId) {
+        const parent = map.get(node.parentId.toString());
+        if (parent) {
+          parent.children.push(current);
+        } else {
+          roots.push(current);
+        }
+      } else {
+        roots.push(current);
+      }
+    });
+
+    return roots;
+  }
+
+  async getActiveFilters(ownerId: string, payload: GetActiveFiltersPayload): Promise<ActiveFiltersResponse> {
+    const expandedPayload: GetActiveFiltersPayload = {
+      ...payload,
+      folderIds: await this.expandHierarchyIds(this.foldersRepo, payload.folderIds),
+      topicIds: await this.expandHierarchyIds(this.topicsRepo, payload.topicIds)
+    };
+
+    const rawMetadata = await this.questionsRepository.getActiveFiltersMetadata(ownerId, expandedPayload);
+
+    let finalFoldersTree: PrunedTreeNode[] = [];
+    if (rawMetadata.folderIds.length > 0) {
+      const leafObjIds = rawMetadata.folderIds.map((id: string) => new Types.ObjectId(id));
+
+      const leafNodes = await (this.foldersRepo as any).modelInstance
+        .find({ _id: { $in: leafObjIds } })
+        .select('ancestors')
+        .lean()
+        .exec();
+
+      const allRequiredIds = new Set<string>(rawMetadata.folderIds);
+      leafNodes.forEach((node: any) => {
+        node.ancestors?.forEach((a: Types.ObjectId) => allRequiredIds.add(a.toString()));
+      });
+
+      const allNodes = await (this.foldersRepo as any).modelInstance
+        .find({ _id: { $in: Array.from(allRequiredIds).map(id => new Types.ObjectId(id)) } })
+        .select('_id name parentId')
+        .lean()
+        .exec();
+
+      finalFoldersTree = this.buildPrunedTree(allNodes);
+    }
+
+    let finalTopicsTree: PrunedTreeNode[] = [];
+    if (rawMetadata.topicIds.length > 0) {
+      const leafObjIds = rawMetadata.topicIds.map((id: string) => new Types.ObjectId(id));
+
+      const leafNodes = await (this.topicsRepo as any).modelInstance
+        .find({ _id: { $in: leafObjIds } })
+        .select('ancestors')
+        .lean()
+        .exec();
+
+      const allRequiredIds = new Set<string>(rawMetadata.topicIds);
+      leafNodes.forEach((node: any) => {
+        node.ancestors?.forEach((a: Types.ObjectId) => allRequiredIds.add(a.toString()));
+      });
+
+      const allNodes = await (this.topicsRepo as any).modelInstance
+        .find({ _id: { $in: Array.from(allRequiredIds).map(id => new Types.ObjectId(id)) } })
+        .select('_id name parentId')
+        .lean()
+        .exec();
+
+      finalTopicsTree = this.buildPrunedTree(allNodes);
+    }
+
+    return {
+      folders: finalFoldersTree,
+      topics: finalTopicsTree,
+      difficulties: rawMetadata.difficulties,
+      tags: rawMetadata.tags
+    };
+  }
+
+  async bulkPublishQuestions(ownerId: string, payload: BulkPublishQuestionPayload) {
+    const { questionIds } = payload;
+    const uniqueIds = [...new Set(questionIds)];
+    const objectIds = uniqueIds.map(id => new Types.ObjectId(id));
+
+    const questions = await (this.questionsRepository as any).model
+      .find({ _id: { $in: objectIds }, ownerId: new Types.ObjectId(ownerId) })
+      .select('_id type topicId difficultyLevel parentPassageId isDraft')
+      .lean()
+      .exec();
+
+    if (questions.length !== uniqueIds.length) {
+      throw new BadRequestException('Một số câu hỏi không tồn tại, đã bị xóa hoặc bạn không có quyền sở hữu.');
+    }
+
+    const invalidRoots = questions.filter((q: any) =>
+      !q.parentPassageId &&
+      (!q.topicId || q.difficultyLevel === DifficultyLevel.UNKNOWN)
+    );
+
+    if (invalidRoots.length > 0) {
+      throw new BadRequestException(
+        `Không thể xuất bản! Có ${invalidRoots.length} câu hỏi gốc chưa được gán Chuyên đề hoặc Mức độ nhận thức. Vui lòng chuẩn hóa trước khi xuất bản.`
+      );
+    }
+
+    return this.questionsRepository.executeInTransaction(async () => {
+      const questionModel = (this.questionsRepository as any).model;
+      const session = (this.questionsRepository as any).currentSession;
+
+      const updateResult = await questionModel.updateMany(
+        { _id: { $in: objectIds } },
+        { $set: { isDraft: false } },
+        { session }
+      );
+
+      const passageIds = questions
+        .filter((q: any) => q.type === QuestionType.PASSAGE)
+        .map((q: any) => q._id);
+
+      let childrenUpdated = 0;
+      if (passageIds.length > 0) {
+        const childUpdateRes = await questionModel.updateMany(
+          { parentPassageId: { $in: passageIds } },
+          { $set: { isDraft: false } },
+          { session }
+        );
+        childrenUpdated = childUpdateRes.modifiedCount;
+      }
+
+      this.logger.log(`[Bulk Publish] User ${ownerId} published ${updateResult.modifiedCount} questions and ${childrenUpdated} sub-questions.`);
+
+      return {
+        message: `Đã xuất bản thành công ${updateResult.modifiedCount} câu hỏi.`,
+        publishedCount: updateResult.modifiedCount + childrenUpdated
+      };
+    });
+  }
+
+  async getActiveFiltersForQuizBuilder(
+    ownerId: string,
+    payload: GetActiveFiltersPayload,
+  ): Promise<ActiveFiltersResponse> {
+    const expandedPayload: GetActiveFiltersPayload = {
+      ...payload,
+      folderIds: await this.expandHierarchyIds(this.foldersRepo, payload.folderIds),
+      topicIds: await this.expandHierarchyIds(this.topicsRepo, payload.topicIds),
+    };
+
+    const rawMetadata = await this.questionsRepository.getPublishedActiveFiltersMetadata(
+      ownerId,
+      expandedPayload,
+    );
+
+    let finalFoldersTree: PrunedTreeNode[] = [];
+    if (rawMetadata.folderIds.length > 0) {
+      const leafObjIds = rawMetadata.folderIds.map((id: string) => new Types.ObjectId(id));
+      const leafNodes = await (this.foldersRepo as any).modelInstance
+        .find({ _id: { $in: leafObjIds } })
+        .select('ancestors')
+        .lean()
+        .exec();
+
+      const allRequiredIds = new Set<string>(rawMetadata.folderIds);
+      leafNodes.forEach((node: any) => {
+        node.ancestors?.forEach((a: Types.ObjectId) => allRequiredIds.add(a.toString()));
+      });
+
+      const allNodes = await (this.foldersRepo as any).modelInstance
+        .find({ _id: { $in: Array.from(allRequiredIds).map(id => new Types.ObjectId(id)) } })
+        .select('_id name parentId')
+        .lean()
+        .exec();
+
+      finalFoldersTree = this.buildPrunedTree(allNodes);
+    }
+
+    let finalTopicsTree: PrunedTreeNode[] = [];
+    if (rawMetadata.topicIds.length > 0) {
+      const leafObjIds = rawMetadata.topicIds.map((id: string) => new Types.ObjectId(id));
+      const leafNodes = await (this.topicsRepo as any).modelInstance
+        .find({ _id: { $in: leafObjIds } })
+        .select('ancestors')
+        .lean()
+        .exec();
+
+      const allRequiredIds = new Set<string>(rawMetadata.topicIds);
+      leafNodes.forEach((node: any) => {
+        node.ancestors?.forEach((a: Types.ObjectId) => allRequiredIds.add(a.toString()));
+      });
+
+      const allNodes = await (this.topicsRepo as any).modelInstance
+        .find({ _id: { $in: Array.from(allRequiredIds).map(id => new Types.ObjectId(id)) } })
+        .select('_id name parentId')
+        .lean()
+        .exec();
+
+      finalTopicsTree = this.buildPrunedTree(allNodes);
+    }
+
+    return {
+      folders: finalFoldersTree,
+      topics: finalTopicsTree,
+      difficulties: rawMetadata.difficulties,
+      tags: rawMetadata.tags,
     };
   }
 }

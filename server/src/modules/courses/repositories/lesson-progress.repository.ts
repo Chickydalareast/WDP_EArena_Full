@@ -24,22 +24,14 @@ export class LessonProgressRepository extends AbstractRepository<LessonProgressD
         const updateOps: any = {};
         const setOps: any = {};
 
-        if (payload.incWatchTime) {
-            updateOps.$inc = { watchTime: payload.incWatchTime };
-        }
-
-        if (payload.setLastPosition !== undefined) {
-            setOps.lastPosition = payload.setLastPosition;
-        }
-
+        if (payload.incWatchTime) updateOps.$inc = { watchTime: payload.incWatchTime };
+        if (payload.setLastPosition !== undefined) setOps.lastPosition = payload.setLastPosition;
         if (payload.isCompleted) {
             setOps.isCompleted = true;
             setOps.completedAt = new Date();
         }
 
-        if (Object.keys(setOps).length > 0) {
-            updateOps.$set = setOps;
-        }
+        if (Object.keys(setOps).length > 0) updateOps.$set = setOps;
 
         return this.progressModel.findOneAndUpdate(
             {
@@ -50,7 +42,7 @@ export class LessonProgressRepository extends AbstractRepository<LessonProgressD
             updateOps,
             {
                 upsert: true,
-                new: true,
+                returnDocument: 'after',
                 lean: true,
                 session: this.currentSession,
                 setDefaultsOnInsert: true

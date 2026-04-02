@@ -1,20 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-  DndContext, closestCenter, KeyboardSensor, PointerSensor,
-  useSensor, useSensors, DragEndEvent
-} from '@dnd-kit/core';
-import {
-  arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy
-} from '@dnd-kit/sortable';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core';
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useCurriculumTree, useReorderCurriculum } from '../../hooks/useCurriculumBuilder';
+import { useCourseSettings, useCourseDashboardStats } from '../../hooks/useCourseSettings';
 import { buildReorderPayload } from '../../lib/curriculum-utils';
-import { SectionPreview, LessonPreview } from '../../types/course.schema';
+import { SectionPreview, LessonPreview, CourseStatus } from '../../types/course.schema';
+
 import { BuilderSection } from './BuilderSection';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { Button } from '@/shared/components/ui/button';
-import { PlusCircle, Save, Loader2, Sparkles } from 'lucide-react';
+import { PlusCircle, Save, Loader2, Sparkles, AlertCircle, Lock } from 'lucide-react';
 
 import { CreateSectionModal } from './CreateSectionModal';
 import { CreateLessonModal } from './CreateLessonModal';
@@ -24,7 +21,10 @@ import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { AiCourseBuilderModal } from './AiCourseBuilderModal';
 
 export function BuilderBoard({ courseId }: { courseId: string }) {
-  const { data, isLoading } = useCurriculumTree(courseId);
+  const { data: treeData, isLoading: isTreeLoading } = useCurriculumTree(courseId);
+  const { data: course, isLoading: isCourseLoading } = useCourseSettings(courseId);
+  const { data: stats, isLoading: isStatsLoading } = useCourseDashboardStats(courseId);
+  
   const { mutate: reorderCurriculum, isPending: isSaving } = useReorderCurriculum(courseId);
 
   const [localSections, setLocalSections] = useState<SectionPreview[]>([]);
@@ -32,19 +32,24 @@ export function BuilderBoard({ courseId }: { courseId: string }) {
 
   const [isSectionModalOpen, setIsSectionModalOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-  
   const [activeSectionIdForLesson, setActiveSectionIdForLesson] = useState<string | null>(null);
   const [editingSection, setEditingSection] = useState<SectionPreview | null>(null);
-
   const [editingLesson, setEditingLesson] = useState<{ lesson: LessonPreview; sectionId: string } | null>(null);
-
   const [deleteConfig, setDeleteConfig] = useState<{ type: 'SECTION' | 'LESSON'; id: string; name: string; sectionId?: string } | null>(null);
 
   useEffect(() => {
-    if (data?.curriculum?.sections && !isDirty) {
-      setLocalSections(data.curriculum.sections);
+    if (treeData?.curriculum?.sections && !isDirty) {
+      setLocalSections(treeData.curriculum.sections);
     }
-  }, [data, isDirty]);
+  }, [treeData, isDirty]);
+
+  const isStatusLocked = course?.status === CourseStatus.PENDING_REVIEW;
+  const totalStudents = stats?.totalStudents || 0;
+  
+  const isStructureLocked = totalStudents > 0;
+  const isModeLocked = totalStudents > 0 && course?.progressionMode === 'STRICT_LINEAR';
+
+  const isTotalLocked = isStatusLocked;
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -52,6 +57,8 @@ export function BuilderBoard({ courseId }: { courseId: string }) {
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
+    if (isTotalLocked || isModeLocked) return; // Bảo mật 2 lớp
+
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -69,23 +76,48 @@ export function BuilderBoard({ courseId }: { courseId: string }) {
 
   const handleSaveStructure = () => {
     const payload = buildReorderPayload(localSections);
-    reorderCurriculum(payload, {
-      onSuccess: () => setIsDirty(false)
-    });
+    reorderCurriculum(payload, { onSuccess: () => setIsDirty(false) });
   };
 
-  if (isLoading) return <Skeleton className="w-full h-[400px] rounded-xl" />;
+  const isPageLoading = isTreeLoading || isCourseLoading || isStatsLoading;
+  if (isPageLoading) return <Skeleton className="w-full h-[500px] rounded-xl" />;
 
   return (
     <div className="bg-card p-6 rounded-xl border border-border shadow-sm">
+      
+      {/* Banner Cảnh báo Khóa Status */}
+      {isStatusLocked && (
+        <div className="mb-6 bg-yellow-500/10 border border-yellow-500/30 p-4 rounded-xl flex items-start gap-3 text-yellow-700">
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-bold text-sm">Khóa học đang được kiểm duyệt</h4>
+            <p className="text-xs mt-1">Hệ thống đã khóa tính năng sửa đổi giáo án để đảm bảo tính toàn vẹn dữ liệu.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Banner Cảnh báo Khóa Cấu Trúc */}
+      {!isStatusLocked && totalStudents > 0 && (
+        <div className="mb-6 bg-primary/5 border border-primary/20 p-4 rounded-xl flex items-start gap-3 text-foreground">
+          <Lock className="w-5 h-5 shrink-0 mt-0.5 text-primary" />
+          <div>
+            <h4 className="font-bold text-sm text-primary">Đã kích hoạt Chế độ Bảo vệ Tiến độ</h4>
+            <p className="text-xs mt-1 text-muted-foreground">
+              Khóa học đã có <strong className="text-primary">{totalStudents}</strong> học sinh. Tính năng Xóa phân mảnh đã bị khóa. 
+              {isModeLocked && " Chức năng kéo thả cũng bị khóa do bạn đang chọn chế độ học Tuần tự."}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
         <div>
           <h2 className="text-xl font-bold">Cấu trúc khóa học</h2>
-          <span className="text-sm text-muted-foreground">Kéo thả biểu tượng dọc để thay đổi vị trí. Nhớ bấm Lưu!</span>
+          <span className="text-sm text-muted-foreground">Xây dựng lộ trình học tập cho học viên.</span>
         </div>
 
         <div className="flex items-center gap-2">
-          {isDirty && (
+          {isDirty && !isTotalLocked && !isModeLocked && (
             <Button onClick={handleSaveStructure} disabled={isSaving} className="bg-green-600 hover:bg-green-700 text-white rounded-full">
               {isSaving ? <Loader2 className="mr-2 w-4 h-4 animate-spin" /> : <Save className="mr-2 w-4 h-4" />}
               {isSaving ? 'Đang lưu...' : 'Lưu Cấu Trúc'}
@@ -94,12 +126,18 @@ export function BuilderBoard({ courseId }: { courseId: string }) {
 
           <Button 
             onClick={() => setIsAiModalOpen(true)} 
-            className="rounded-full bg-purple-100 text-purple-700 hover:bg-purple-200 border border-purple-200"
+            disabled={isTotalLocked}
+            className="rounded-full bg-purple-100 text-purple-700 hover:bg-purple-200 border border-purple-200 disabled:opacity-50"
           >
             <Sparkles className="mr-2 w-4 h-4" /> AI Builder
           </Button>
 
-          <Button onClick={() => setIsSectionModalOpen(true)} className="rounded-full" variant={isDirty ? 'outline' : 'default'}>
+          <Button 
+            onClick={() => setIsSectionModalOpen(true)} 
+            disabled={isTotalLocked}
+            className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground disabled:opacity-50" 
+            variant={isDirty ? 'outline' : 'default'}
+          >
             <PlusCircle className="mr-2 w-4 h-4" /> Thêm Chương
           </Button>
         </div>
@@ -117,6 +155,9 @@ export function BuilderBoard({ courseId }: { courseId: string }) {
                 <BuilderSection
                   key={section.id}
                   section={section}
+                  isTotalLocked={isTotalLocked}
+                  isStructureLocked={isStructureLocked}
+                  isModeLocked={isModeLocked}
                   onAddLesson={(sectionId) => setActiveSectionIdForLesson(sectionId)}
                   onEditSection={(sec) => setEditingSection(sec)}
                   onEditLesson={(les) => setEditingLesson({ lesson: les, sectionId: section.id })}
@@ -130,17 +171,10 @@ export function BuilderBoard({ courseId }: { courseId: string }) {
 
       <CreateSectionModal courseId={courseId} isOpen={isSectionModalOpen} onClose={() => setIsSectionModalOpen(false)} />
       <CreateLessonModal courseId={courseId} sectionId={activeSectionIdForLesson || ''} isOpen={!!activeSectionIdForLesson} onClose={() => setActiveSectionIdForLesson(null)} />
-
       <EditSectionModal courseId={courseId} section={editingSection} onClose={() => setEditingSection(null)} />
       <EditLessonModal courseId={courseId} lessonData={editingLesson} onClose={() => setEditingLesson(null)} />
-
       {deleteConfig && <ConfirmDeleteModal courseId={courseId} isOpen={!!deleteConfig} config={deleteConfig} onClose={() => setDeleteConfig(null)} />}
-      
-      <AiCourseBuilderModal 
-        courseId={courseId} 
-        isOpen={isAiModalOpen} 
-        onClose={() => setIsAiModalOpen(false)} 
-      />
+      <AiCourseBuilderModal courseId={courseId} isOpen={isAiModalOpen} onClose={() => setIsAiModalOpen(false)} />
     </div>
   );
 }

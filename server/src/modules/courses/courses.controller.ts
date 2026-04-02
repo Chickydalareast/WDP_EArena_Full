@@ -61,14 +61,6 @@ export class CoursesController {
     return this.coursesService.updateCourse(payload);
   }
 
-  // @Patch(':id/publish')
-  // @Roles(UserRole.TEACHER, UserRole.ADMIN)
-  // async publishCourse(
-  //   @Param('id') id: string,
-  //   @CurrentUser('userId') userId: string
-  // ) {
-  //   return this.coursesService.publishCourse(id, userId);
-  // }
 
   @Delete(':id')
   @Roles(UserRole.TEACHER, UserRole.ADMIN)
@@ -100,5 +92,40 @@ export class CoursesController {
       message: 'Lấy thông tin cài đặt khóa học thành công',
       data,
     };
+  }
+
+  @Get('teacher/:id/curriculum-view')
+  @Roles(UserRole.TEACHER, UserRole.ADMIN)
+  async getTeacherCourseCurriculum(
+    @Param('id') id: string,
+    @CurrentUser('userId') userId: string
+  ) {
+    const data = await this.coursesService.getTeacherCourseCurriculum(id, userId);
+    return {
+      message: 'Lấy cấu trúc khóa học thành công',
+      data,
+    };
+  }
+
+  @Get('teacher/:id/dashboard-stats')
+  @Roles(UserRole.TEACHER, UserRole.ADMIN)
+  async getDashboardStats(
+    @Param('id') id: string,
+    @CurrentUser('userId') userId: string
+  ) {
+    const data = await this.coursesService.getTeacherCourseStats(id, userId);
+    return {
+      message: 'Lấy thống kê khóa học thành công',
+      data,
+    };
+  }
+
+    @Patch(':id/submit-for-review')
+  @Roles(UserRole.TEACHER, UserRole.ADMIN)
+  async submitCourseForReview(
+    @Param('id') id: string,
+    @CurrentUser('userId') userId: string
+  ) {
+    return this.coursesService.submitCourseForReview(id, userId);
   }
 }

@@ -5,10 +5,10 @@ import { Types } from 'mongoose';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ExamSubmissionsRepository } from './exam-submissions.repository';
 import { ExamPapersRepository } from './exam-papers.repository';
+import { ExamsRepository } from './exams.repository';
 import { EnrollmentsService } from '../courses/services/enrollments.service';
-import { ExamEventPattern } from './constants/exam-event.constant';
-
-import type { ExamGradedEventPayload } from './constants/exam-event.constant';
+import { ExamEventPattern, ExamGradedEventPayload } from './constants/exam-event.constant';
+import { QuestionType } from '../questions/schemas/question.schema';
 
 @Processor('exam-grading')
 export class ExamSubmissionProcessor extends WorkerHost {
@@ -17,6 +17,7 @@ export class ExamSubmissionProcessor extends WorkerHost {
   constructor(
     private readonly submissionsRepo: ExamSubmissionsRepository,
     private readonly papersRepo: ExamPapersRepository,
+    private readonly examsRepo: ExamsRepository,
     private readonly enrollmentsService: EnrollmentsService,
     private readonly eventEmitter: EventEmitter2,
   ) {
@@ -35,14 +36,10 @@ export class ExamSubmissionProcessor extends WorkerHost {
 
     try {
       const submissionId = new Types.ObjectId(job.data.submissionId);
-      const subModel = (this.submissionsRepo as any).model;
-      const paperModelDb = (this.papersRepo as any).model;
 
-      const submission = await subModel
-        .findById(submissionId)
-        .populate('lessonId', 'examRules')
-        .lean()
-        .exec();
+      const submission = await this.submissionsRepo.findByIdSafe(submissionId, {
+        populate: { path: 'lessonId', select: 'examRules' }
+      });
 
       if (!submission) {
         this.logger.error(`[Worker] Bài thi ${submissionId} không tồn tại trong DB.`);
@@ -50,39 +47,51 @@ export class ExamSubmissionProcessor extends WorkerHost {
       }
 
       if (typeof submission.score === 'number') {
-        this.logger.warn(`[Worker] Bài thi ${submissionId} đã có điểm (${submission.score}). Bỏ qua.`);
+        this.logger.warn(`[Worker] Bài thi ${submissionId} đã có điểm (${submission.score}). Bỏ qua để tránh duplicate processing.`);
         return;
       }
 
-      const paperModel = await paperModelDb
-        .findById(submission.examPaperId)
-        .select('+answerKeys')
+      const paperModel = await this.papersRepo.findByIdSafe(submission.examPaperId, {
+        select: '+answerKeys'
+      });
+
+      if (!paperModel) {
+        this.logger.error(`[Worker] Không tìm thấy mã đề Snapshot ${submission.examPaperId}`);
+        return;
+      }
+
+      // [FIX #1.1]: Lấy totalScore thực tế từ Exam document thay vì hardcode = 10
+      const examDoc = await this.examsRepo.modelInstance
+        .findById(submission.examId)
+        .select('totalScore')
         .lean()
         .exec();
 
-      if (!paperModel) {
-        this.logger.error(`[Worker] Không tìm thấy mã đề ${submission.examPaperId}`);
+      if (!examDoc) {
+        this.logger.error(`[Worker] Không tìm thấy Exam ${submission.examId} để lấy totalScore.`);
         return;
       }
 
-      const totalScore = 100;
-      const totalQuestions = paperModel.questions?.length || 0;
+      const totalScore = examDoc.totalScore;
+      
+      const answerableQuestions = (paperModel.questions || []).filter(q => q.type !== QuestionType.PASSAGE);
+      const totalQuestions = answerableQuestions.length || 0;
       const defaultPointsPerQuestion = totalQuestions > 0 ? (totalScore / totalQuestions) : 0;
 
       const correctAnswersMap = new Map<string, string>();
-      (paperModel.answerKeys || []).forEach((key: any) => {
+      (paperModel.answerKeys || []).forEach(key => {
         correctAnswersMap.set(key.originalQuestionId.toString(), key.correctAnswerId);
       });
 
       const pointsMap = new Map<string, number>();
-      (paperModel.questions || []).forEach((q: any) => {
+      answerableQuestions.forEach(q => {
         pointsMap.set(q.originalQuestionId.toString(), q.points !== null ? q.points : defaultPointsPerQuestion);
       });
 
       let earnedScore = 0;
       let correctCount = 0;
 
-      (submission.answers || []).forEach((studentAns: any) => {
+      (submission.answers || []).forEach(studentAns => {
         const qId = studentAns.questionId.toString();
         const correctId = correctAnswersMap.get(qId);
 
@@ -94,7 +103,7 @@ export class ExamSubmissionProcessor extends WorkerHost {
 
       const finalScore = parseFloat(earnedScore.toFixed(2));
 
-      await this.submissionsRepo.updateByIdSafe(submissionId, { $set: { score: finalScore } });
+      await this.submissionsRepo.updateByIdSafe(submissionId.toString(), { $set: { score: finalScore } });
       this.logger.log(`[Worker] Chấm xong ${submissionId} | Điểm: ${finalScore}/${totalScore} | Tỷ lệ: ${correctCount}/${totalQuestions}`);
 
       if (submission.courseId && submission.lessonId) {
@@ -129,6 +138,7 @@ export class ExamSubmissionProcessor extends WorkerHost {
 
     } catch (error: any) {
       this.logger.error(`[Worker] Lỗi cục bộ khi xử lý chấm bài: ${error.message}`, error.stack);
+      throw error; 
     }
   }
 }

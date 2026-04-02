@@ -34,6 +34,7 @@ import { UsersModule } from '../users/users.module';
   ],
   exports: [
     WalletsService,
+    WalletTransactionsRepository
   ],
 })
 export class WalletsModule {}

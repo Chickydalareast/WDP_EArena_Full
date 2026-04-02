@@ -1,8 +1,8 @@
 import { z } from 'zod';
+import { MatrixSectionSchema } from '@/features/exam-builder/types/exam.schema';
 
-// [CTO ADD]: Cấu hình luật chơi chuẩn MOOC từ BE Update Ver 2
 export const ExamRuleSchema = z.object({
-  timeLimit: z.number().min(0, 'Thời gian làm bài không được âm').default(45), // 0 = Không giới hạn
+  timeLimit: z.number().min(0, 'Thời gian làm bài không được âm').default(45),
   maxAttempts: z.number().min(1, 'Số lần làm bài tối thiểu là 1').default(1),
   passPercentage: z.number().min(0).max(100, 'Điểm chuẩn không vượt quá 100%').default(50),
   showResultMode: z.enum(['IMMEDIATELY', 'AFTER_END_TIME', 'NEVER']).default('IMMEDIATELY'),
@@ -22,7 +22,7 @@ export const createLessonSchema = z.object({
   content: z.string().optional(),
   primaryVideoId: z.string().optional(),
   examId: z.string().optional(),
-  examRules: ExamRuleSchema.optional(), // [CTO ADD] Bắt buộc kẹp Rules nếu có examId
+  examRules: ExamRuleSchema.optional(),
   attachments: z.array(z.string()).default([]),
 }).superRefine((data, ctx) => {
   const hasContent = data.content && data.content.trim() !== '' && data.content !== '<p></p>';
@@ -38,7 +38,6 @@ export const createLessonSchema = z.object({
     });
   }
 
-  // Đánh chặn: Nếu có ExamId thì phải khởi tạo ExamRules
   if (hasExam && !data.examRules) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -61,17 +60,16 @@ export const updateLessonSchema = z.object({
   content: z.string().optional(),
   primaryVideoId: z.string().optional(),
   examId: z.string().optional(),
-  examRules: ExamRuleSchema.optional(), // [CTO ADD]
+  examRules: ExamRuleSchema.optional(),
   attachments: z.array(z.string()).optional(),
 });
 export type UpdateLessonDTO = z.infer<typeof updateLessonSchema>;
 
-const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
-// Hỗ trợ check qua MIME type và fallback check qua đuôi file cho an toàn
+const MAX_FILE_SIZE = 15 * 1024 * 1024;
 const ACCEPTED_FILE_TYPES = [
   'application/pdf',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-  'text/plain' // .txt
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain'
 ];
 
 export const aiBuilderFormSchema = z.object({
@@ -90,7 +88,6 @@ export const aiBuilderFormSchema = z.object({
       'Hệ thống chỉ hỗ trợ định dạng .pdf, .docx, và .txt'
     ),
 
-  // Sử dụng preprocess để bắt chuỗi rỗng từ Form Input chuyển thành undefined (an toàn cho Optional Number)
   targetSectionCount: z.preprocess(
     (val) => (val === '' || val === null ? undefined : Number(val)),
     z.number()
@@ -106,9 +103,34 @@ export const aiBuilderFormSchema = z.object({
 
 export type AiBuilderFormDTO = z.infer<typeof aiBuilderFormSchema>;
 
-// Contract ánh xạ chính xác 100% với Response BE quy định
 export interface AiBuilderResponse {
   status: 'SUCCESS';
   sectionsGenerated: number;
   message: string;
 }
+
+export const DynamicConfigSchema = z.object({
+  matrixId: z.string().optional(),
+  adHocSections: z.array(MatrixSectionSchema).optional(),
+}).refine(data => data.matrixId || (data.adHocSections && data.adHocSections.length > 0), {
+  message: 'Bắt buộc phải chọn Ma trận mẫu hoặc tự tạo Luật bốc đề.',
+  path: ['adHocSections']
+});
+export type DynamicConfigDTO = z.infer<typeof DynamicConfigSchema>;
+
+export const CreateQuizLessonSchema = z.object({
+  courseId: z.string().min(1, 'Thiếu ID Khóa học'),
+  sectionId: z.string().min(1, 'Thiếu ID Chương học'),
+  title: z.string().min(1, 'Tên bài kiểm tra không được để trống'),
+  content: z.string().optional(),
+  isFreePreview: z.boolean().default(false),
+  totalScore: z.number().min(1).default(10),
+  dynamicConfig: DynamicConfigSchema,
+  examRules: ExamRuleSchema,
+});
+export type CreateQuizLessonDTO = z.infer<typeof CreateQuizLessonSchema>;
+
+export const UpdateQuizLessonSchema = CreateQuizLessonSchema.partial().extend({
+  lessonId: z.string().min(1, 'Thiếu ID Bài học cần cập nhật'),
+});
+export type UpdateQuizLessonDTO = z.infer<typeof UpdateQuizLessonSchema>;

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { courseService } from '../api/course.service';
 import { courseQueryKeys } from '../api/course-keys';
-import { ReorderCurriculumPayload } from '../types/course.schema';
+import { PublicCourseDetail, ReorderCurriculumPayload } from '../types/course.schema';
 import { toast } from 'sonner';
 import { parseApiError } from '@/shared/lib/error-parser';
 
@@ -18,9 +18,9 @@ export const useReorderCurriculum = (courseId: string) => {
   const queryKey = courseQueryKeys.studyTree(courseId);
 
   return useMutation({
-    mutationFn: (payload: ReorderCurriculumPayload) => 
+    mutationFn: (payload: ReorderCurriculumPayload) =>
       courseService.reorderCurriculum(courseId, payload),
-    
+
     onMutate: async (newPayload) => {
       await queryClient.cancelQueries({ queryKey });
       const previousData = queryClient.getQueryData(queryKey);
@@ -41,5 +41,50 @@ export const useReorderCurriculum = (courseId: string) => {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey });
     },
+  });
+};
+
+export const useTeacherCurriculumView = (courseId: string) => {
+  return useQuery({
+    queryKey: courseQueryKeys.teacherCurriculumView(courseId),
+    queryFn: () => courseService.getCurriculumView(courseId),
+    staleTime: 1000 * 60 * 5,
+    enabled: !!courseId,
+    select: (response): PublicCourseDetail | undefined => {
+      if (!response) return undefined;
+
+      const raw = response as unknown as Record<string, unknown>;
+
+      if ('course' in raw && 'curriculum' in raw) {
+        return {
+          ...(raw.course as Record<string, unknown>),
+          curriculum: raw.curriculum
+        } as PublicCourseDetail;
+      }
+
+      if ('sections' in raw) {
+        const {
+          sections,
+          totalLessons,
+          totalVideos,
+          totalDocuments,
+          totalQuizzes,
+          ...courseInfo
+        } = raw;
+
+        return {
+          ...(courseInfo as Record<string, unknown>),
+          curriculum: {
+            sections: sections,
+            totalLessons: totalLessons,
+            totalVideos: totalVideos,
+            totalDocuments: totalDocuments,
+            totalQuizzes: totalQuizzes
+          }
+        } as PublicCourseDetail;
+      }
+
+      return response as PublicCourseDetail;
+    }
   });
 };

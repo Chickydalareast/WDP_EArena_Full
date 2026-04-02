@@ -11,12 +11,13 @@ export type NavItem = {
 export const NAV_CONFIG: Record<'STUDENT' | 'TEACHER' | 'ADMIN', NavItem[]> = {
   STUDENT: [
     { title: 'Trang chủ', href: ROUTES.STUDENT.DASHBOARD, icon: Home },
-    { title: 'Khóa học của tôi', href: ROUTES.STUDENT.MY_COURSES, icon: BookOpen },
     { title: 'Khám phá', href: ROUTES.PUBLIC.COURSES, icon: Search },
+    { title: 'Khóa học của tôi', href: ROUTES.STUDENT.MY_COURSES, icon: BookOpen },
+    { title: 'Lịch sử làm bài', href: ROUTES.STUDENT.HISTORY, icon: LayoutGrid },
   ],
   TEACHER: [
-    { title: 'Trang chủ', href: ROUTES.TEACHER.DASHBOARD, icon: Home },
     { title: 'Khóa học', href: ROUTES.TEACHER.COURSES, icon: LayoutGrid },
+    { title: 'Câu hỏi', href: '/teacher/questions', icon: Home },
     { title: 'Kho Đề thi', href: ROUTES.TEACHER.EXAMS, icon: FileEdit },
     { title: 'Ví & Doanh thu', href: ROUTES.TEACHER.WALLET, icon: Wallet },
     { title: 'Quản lý gói', href: ROUTES.TEACHER.SUBSCRIPTION, icon: Crown },

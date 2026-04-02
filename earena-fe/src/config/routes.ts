@@ -24,6 +24,8 @@ export const ROUTES = {
     },
     
     EXAM_RESULT: (submissionId: string) => `/student/exams/${submissionId}/result` as const,
+
+    HISTORY: '/student/history',
   },
   
   TEACHER: {
@@ -34,10 +36,13 @@ export const ROUTES = {
     EXAM_BUILDER: (examId: string) => `/teacher/exams/${examId}/builder` as const,
     
     COURSES: '/teacher/courses',
-    COURSE_BUILDER: (courseId: string) => `/teacher/courses/${courseId}/builder` as const,
-    COURSE_SETTINGS: (courseId: string) => `/teacher/courses/${courseId}/settings` as const,
-    QUESTIONS: '/teacher/questions',
     
+    COURSE_DETAIL: (courseId: string) => `/teacher/courses/${courseId}` as const,
+    COURSE_CURRICULUM: (courseId: string) => `/teacher/courses/${courseId}/curriculum` as const, 
+    COURSE_SETTINGS: (courseId: string) => `/teacher/courses/${courseId}/settings` as const,
+    COURSE_BUILDER: (id: string) => `/teacher/courses/${id}/builder`,
+    
+    QUESTIONS: '/teacher/questions',
     WALLET: '/teacher/wallet',
     SUBSCRIPTION: '/teacher/subscription',
   },

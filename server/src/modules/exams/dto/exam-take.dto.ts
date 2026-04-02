@@ -1,5 +1,5 @@
-import { IsMongoId, IsNotEmpty, IsString, IsOptional, ValidateIf, IsInt, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsMongoId, IsNotEmpty, IsString, IsOptional } from 'class-validator';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 export class StartExamDto {
   @IsMongoId({ message: 'courseId không hợp lệ.' })
@@ -21,19 +21,7 @@ export class AutoSaveDto {
   selectedAnswerId: string;
 }
 
-export class GetStudentHistoryDto {
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  limit?: number = 10;
-
+export class GetStudentHistoryDto extends PaginationDto {
   @IsOptional()
   @IsMongoId({ message: 'courseId không hợp lệ.' })
   courseId?: string;
@@ -42,3 +30,17 @@ export class GetStudentHistoryDto {
   @IsMongoId({ message: 'lessonId không hợp lệ.' })
   lessonId?: string;
 }
+
+export class GetStudentHistoryOverviewDto extends PaginationDto {
+  @IsOptional()
+  @IsMongoId({ message: 'courseId không hợp lệ.' })
+  courseId?: string;
+}
+
+export class GetLessonAttemptsParamDto {
+  @IsMongoId({ message: 'lessonId không hợp lệ.' })
+  @IsNotEmpty({ message: 'Phải cung cấp lessonId.' })
+  lessonId: string;
+}
+
+export class GetLessonAttemptsQueryDto extends PaginationDto {}

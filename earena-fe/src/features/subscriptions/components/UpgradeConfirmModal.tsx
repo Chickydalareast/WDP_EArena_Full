@@ -46,23 +46,23 @@ export function UpgradeConfirmModal({ plan, onClose }: UpgradeConfirmModalProps)
     };
 
     const onSubmit = (data: UpgradeSubscriptionDTO) => {
-        upgradePlan(data); // Đẩy xuống React Query Mutation
+        upgradePlan(data);
     };
 
     return (
         <Dialog open={isOpen} onOpenChange={(open) => !open && !isPending && onClose()}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle className="text-2xl font-bold flex items-center gap-2">
-                        <CreditCard className="w-6 h-6 text-primary" /> Xác nhận thanh toán
+                    <DialogTitle className="text-2xl font-black flex items-center gap-2 text-foreground">
+                        <CreditCard className="w-7 h-7 text-primary" /> Xác nhận thanh toán
                     </DialogTitle>
-                    <DialogDescription>
-                        Bạn đang chọn gói <span className="font-bold text-foreground uppercase">{plan.name}</span>. Vui lòng chọn chu kỳ thanh toán.
+                    <DialogDescription className="pt-2 font-medium">
+                        Bạn đang chọn gói <span className="font-bold text-foreground uppercase tracking-widest bg-secondary px-2 py-0.5 rounded">{plan.name}</span>. Vui lòng chọn chu kỳ thanh toán.
                     </DialogDescription>
                 </DialogHeader>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-2">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
                         <FormField
                             control={form.control}
                             name="billingCycle"
@@ -74,15 +74,15 @@ export function UpgradeConfirmModal({ plan, onClose }: UpgradeConfirmModalProps)
                                             <div
                                                 onClick={() => !isPending && form.setValue('billingCycle', 'MONTHLY')}
                                                 className={cn(
-                                                    "cursor-pointer rounded-xl border-2 p-4 flex flex-col items-center justify-center gap-2 transition-all",
+                                                    "cursor-pointer rounded-2xl border-2 p-5 flex flex-col items-center justify-center gap-2 transition-all",
                                                     billingCycle === 'MONTHLY'
-                                                        ? "border-primary bg-primary/5 shadow-sm ring-1 ring-primary/20"
-                                                        : "border-border hover:bg-slate-50 text-muted-foreground"
+                                                        ? "border-primary bg-primary/5 shadow-md shadow-primary/10"
+                                                        : "border-border hover:bg-secondary/50 text-muted-foreground"
                                                 )}
                                             >
                                                 <Calendar className={cn("w-6 h-6", billingCycle === 'MONTHLY' && "text-primary")} />
-                                                <div className="text-sm font-bold">Thanh toán Tháng</div>
-                                                <div className={cn("text-lg font-extrabold", billingCycle === 'MONTHLY' && "text-primary")}>
+                                                <div className="text-sm font-bold">Gói 1 Tháng</div>
+                                                <div className={cn("text-xl font-black", billingCycle === 'MONTHLY' && "text-primary")}>
                                                     {formatCurrency(plan.priceMonthly)}
                                                 </div>
                                             </div>
@@ -91,18 +91,18 @@ export function UpgradeConfirmModal({ plan, onClose }: UpgradeConfirmModalProps)
                                             <div
                                                 onClick={() => !isPending && form.setValue('billingCycle', 'YEARLY')}
                                                 className={cn(
-                                                    "relative cursor-pointer rounded-xl border-2 p-4 flex flex-col items-center justify-center gap-2 transition-all",
+                                                    "relative cursor-pointer rounded-2xl border-2 p-5 flex flex-col items-center justify-center gap-2 transition-all",
                                                     billingCycle === 'YEARLY'
-                                                        ? "border-green-500 bg-green-50 shadow-sm ring-1 ring-green-500/20"
-                                                        : "border-border hover:bg-slate-50 text-muted-foreground"
+                                                        ? "border-primary bg-primary/5 shadow-md shadow-primary/10"
+                                                        : "border-border hover:bg-secondary/50 text-muted-foreground"
                                                 )}
                                             >
-                                                <div className="absolute -top-3 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                                                <div className="absolute -top-3 bg-green-500 dark:bg-green-600 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-sm tracking-wider border border-green-400">
                                                     TIẾT KIỆM 20%
                                                 </div>
-                                                <Calendar className={cn("w-6 h-6", billingCycle === 'YEARLY' && "text-green-600")} />
-                                                <div className="text-sm font-bold">Thanh toán Năm</div>
-                                                <div className={cn("text-lg font-extrabold", billingCycle === 'YEARLY' && "text-green-600")}>
+                                                <Calendar className={cn("w-6 h-6", billingCycle === 'YEARLY' && "text-primary")} />
+                                                <div className="text-sm font-bold">Gói 1 Năm</div>
+                                                <div className={cn("text-xl font-black", billingCycle === 'YEARLY' && "text-primary")}>
                                                     {formatCurrency(plan.priceYearly)}
                                                 </div>
                                             </div>
@@ -114,16 +114,16 @@ export function UpgradeConfirmModal({ plan, onClose }: UpgradeConfirmModalProps)
                         />
 
                         {/* Cảnh báo UX về Proration */}
-                        <div className="bg-blue-50 border border-blue-100 text-blue-800 text-xs p-3 rounded-lg flex items-start gap-2">
-                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-500 text-xs font-medium p-4 rounded-xl flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 shrink-0" />
                             <p>Hệ thống sẽ tự động tính toán <strong>khấu trừ (nếu có)</strong> dựa trên số ngày còn lại của gói cước hiện tại. Số tiền bị trừ trong ví có thể thấp hơn mức giá hiển thị.</p>
                         </div>
 
-                        <DialogFooter className="gap-2 sm:gap-0">
-                            <Button type="button" variant="outline" onClick={onClose} disabled={isPending}>
+                        <DialogFooter className="gap-3 sm:gap-0 pt-2 border-t border-border">
+                            <Button type="button" variant="outline" className="rounded-xl font-bold h-11" onClick={onClose} disabled={isPending}>
                                 Hủy bỏ
                             </Button>
-                            <Button type="submit" disabled={isPending} className="font-bold min-w-[120px]">
+                            <Button type="submit" disabled={isPending} className="font-bold min-w-[140px] rounded-xl h-11 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20">
                                 {isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                                 {isPending ? 'Đang xử lý...' : 'Xác nhận thanh toán'}
                             </Button>

@@ -29,21 +29,18 @@ export function WithdrawModal() {
         },
     });
 
-    // Lấy mutateAsync để intercept API Call
     const { mutateAsync, isPending } = useWithdrawMutation(() => {
         setOpen(false);
         form.reset();
     });
 
     const onSubmit = (data: WithdrawFormDTO) => {
-        // Validate logic nghiệp vụ sớm
         if (data.amount > balance) {
             toast.error('Số dư không đủ', { description: `Bạn chỉ có thể rút tối đa ${balance.toLocaleString()}đ` });
             form.setError('amount', { type: 'manual', message: 'Vượt quá số dư khả dụng' });
             return;
         }
 
-        // Intercept: Hiện hộp thoại xác nhận tổng quát trước khi trừ tiền
         openConfirm({
             title: 'Xác nhận rút doanh thu',
             description: `Rút tiền về tài khoản ngân hàng: ${data.bankName} - ${data.accountNumber}`,
@@ -61,33 +58,36 @@ export function WithdrawModal() {
             <DialogTrigger asChild>
                 <Button
                     size="lg"
-                    className="bg-white text-indigo-700 hover:bg-slate-100 font-bold px-8 shadow-sm rounded-full transition-transform active:scale-95"
+                    variant="outline"
+                    className="w-full text-foreground border-border hover:bg-secondary font-bold h-14 rounded-xl shadow-sm transition-transform active:scale-95 text-base"
                 >
                     <ArrowRightLeft className="w-5 h-5 mr-2" /> Rút doanh thu
                 </Button>
             </DialogTrigger>
 
-            {/* Khóa onInteractOutside khi đang chờ API */}
             <DialogContent className="sm:max-w-md" onInteractOutside={(e) => { if (isPending) e.preventDefault(); }}>
                 <DialogHeader>
-                    <DialogTitle className="text-xl font-bold">Yêu cầu rút tiền</DialogTitle>
+                    <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                        <ArrowRightLeft className="w-6 h-6 text-primary" />
+                        Yêu cầu rút tiền
+                    </DialogTitle>
                     <DialogDescription>
                         Vui lòng nhập thông tin ngân hàng thụ hưởng.
                     </DialogDescription>
                 </DialogHeader>
 
                 <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
                         <FormField
                             control={form.control}
                             name="amount"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Số tiền rút (VNĐ)</FormLabel>
+                                    <FormLabel className="font-bold">Số tiền rút (VNĐ)</FormLabel>
                                     <FormControl>
-                                        <Input type="number" placeholder="Ví dụ: 500000" {...field} disabled={isPending} />
+                                        <Input type="number" className="rounded-xl h-11" placeholder="Ví dụ: 500000" {...field} disabled={isPending} />
                                     </FormControl>
-                                    <FormMessage />
+                                    <FormMessage className="font-bold" />
                                 </FormItem>
                             )}
                         />
@@ -96,11 +96,11 @@ export function WithdrawModal() {
                             name="bankName"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Ngân hàng</FormLabel>
+                                    <FormLabel className="font-bold">Ngân hàng</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Ví dụ: Vietcombank" {...field} disabled={isPending} />
+                                        <Input className="rounded-xl h-11" placeholder="Ví dụ: Vietcombank" {...field} disabled={isPending} />
                                     </FormControl>
-                                    <FormMessage />
+                                    <FormMessage className="font-bold" />
                                 </FormItem>
                             )}
                         />
@@ -109,11 +109,11 @@ export function WithdrawModal() {
                             name="accountNumber"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Số tài khoản</FormLabel>
+                                    <FormLabel className="font-bold">Số tài khoản</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="Nhập số tài khoản" {...field} disabled={isPending} />
+                                        <Input className="rounded-xl h-11" placeholder="Nhập số tài khoản" {...field} disabled={isPending} />
                                     </FormControl>
-                                    <FormMessage />
+                                    <FormMessage className="font-bold" />
                                 </FormItem>
                             )}
                         />
@@ -122,20 +122,20 @@ export function WithdrawModal() {
                             name="accountName"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Tên chủ tài khoản</FormLabel>
+                                    <FormLabel className="font-bold">Tên chủ tài khoản</FormLabel>
                                     <FormControl>
-                                        <Input placeholder="NGUYEN VAN A" className="uppercase" {...field} disabled={isPending} />
+                                        <Input placeholder="NGUYEN VAN A" className="uppercase rounded-xl h-11" {...field} disabled={isPending} />
                                     </FormControl>
-                                    <FormMessage />
+                                    <FormMessage className="font-bold" />
                                 </FormItem>
                             )}
                         />
 
-                        <div className="pt-4 flex justify-end gap-3">
-                            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={isPending}>
+                        <div className="pt-6 border-t border-border flex justify-end gap-3">
+                            <Button type="button" variant="outline" className="rounded-xl font-bold" onClick={() => setOpen(false)} disabled={isPending}>
                                 Hủy
                             </Button>
-                            <Button type="submit" disabled={isPending} className="font-bold min-w-[120px] bg-indigo-600 hover:bg-indigo-700 text-white shadow-md">
+                            <Button type="submit" disabled={isPending} className="font-bold rounded-xl min-w-[120px] bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20">
                                 {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Tiếp tục'}
                             </Button>
                         </div>

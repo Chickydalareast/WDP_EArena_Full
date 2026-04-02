@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsInt, Min, Max, IsNumber } from 'class-validator';
+import { IsString, IsNotEmpty, IsInt, Min, Max, IsNumber, IsOptional, IsBoolean } from 'class-validator';
 
 export class SyncHeartbeatDto {
     @IsString()
@@ -17,4 +17,8 @@ export class SyncHeartbeatDto {
     @IsNumber()
     @Min(0)
     lastPosition: number;
+    
+    @IsOptional()
+    @IsBoolean()
+    isEnded?: boolean;
 }

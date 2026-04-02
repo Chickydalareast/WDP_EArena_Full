@@ -24,8 +24,11 @@ import { QuestionsModule } from '../questions/questions.module';
 import { UsersModule } from '../users/users.module';
 import { CoursesModule } from '../courses/courses.module';
 
-// [MAX PING]: Import Listener để hệ thống hết bị "điếc"
 import { ExamGradingListener } from './listeners/exam-grading.listener';
+import { ExamMatricesController } from './exam-matrices.controller';
+import { ExamMatricesService } from './exam-matrices.service';
+import { TaxonomyModule } from '../taxonomy/taxonomy.module';
+import { QuizLifecycleListener } from './listeners/quiz-lifecycle.listener';
 
 @Module({
   imports: [
@@ -37,17 +40,25 @@ import { ExamGradingListener } from './listeners/exam-grading.listener';
     ]),
     BullModule.registerQueue({ name: 'exam-grading' }),
     QuestionsModule,
+    TaxonomyModule,
     UsersModule,
     forwardRef(() => CoursesModule)
   ],
-  controllers: [ExamsController, ExamTakeController],
+  controllers: [ExamsController, ExamTakeController, ExamMatricesController],
   providers: [
     ExamsRepository, ExamPapersRepository, ExamMatricesRepository, ExamSubmissionsRepository,
     ExamsService, ExamTakeService, ExamGeneratorService, ExamSubmissionProcessor, QuestionSyncProcessor,
-    
-    // [MAX PING]: Khai sinh Listener vào vùng nhớ của NestJS
-    ExamGradingListener,
+
+    ExamGradingListener, ExamMatricesService,QuizLifecycleListener,
   ],
-  exports: [ExamsRepository, ExamPapersRepository, ExamSubmissionsRepository],
+  exports: [
+    ExamsRepository,
+    ExamPapersRepository,
+    ExamSubmissionsRepository,
+    ExamsService,
+    ExamMatricesService,
+    ExamGeneratorService,
+  ],
+
 })
 export class ExamsModule { }
