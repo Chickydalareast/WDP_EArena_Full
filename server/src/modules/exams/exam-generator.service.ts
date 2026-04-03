@@ -1,4 +1,11 @@
-import { BadRequestException, Injectable, Logger, InternalServerErrorException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { Types } from 'mongoose';
 import { QuestionsRepository } from '../questions/questions.repository';
 import { ExamsRepository } from './exams.repository';
@@ -7,9 +14,17 @@ import { ExamMatricesService } from './exam-matrices.service';
 import { QuestionFoldersRepository } from '../questions/question-folders.repository';
 import { KnowledgeTopicsRepository } from '../taxonomy/knowledge-topics.repository';
 import { RedisService } from '../../common/redis/redis.service';
-import { FillExistingPaperPayload, GenerateDynamicExamPayload, PreviewRulePayload, PreviewDynamicExamPayload } from './interfaces/exam-generator.interface';
+import {
+  FillExistingPaperPayload,
+  GenerateDynamicExamPayload,
+  PreviewRulePayload,
+  PreviewDynamicExamPayload,
+} from './interfaces/exam-generator.interface';
 import { ExamMode, ExamType } from './schemas/exam.schema';
-import { DifficultyLevel, QuestionType } from '../questions/schemas/question.schema';
+import {
+  DifficultyLevel,
+  QuestionType,
+} from '../questions/schemas/question.schema';
 
 @Injectable()
 export class ExamGeneratorService {
@@ -23,11 +38,11 @@ export class ExamGeneratorService {
     private readonly foldersRepo: QuestionFoldersRepository,
     private readonly topicsRepo: KnowledgeTopicsRepository,
     private readonly redisService: RedisService,
-  ) { }
+  ) {}
 
-  // [PERF 2.1]: Cache hierarchy expansion trong Redis TTL 1h.
-  // Folder/topic tree thay đổi rất ít — query DB mỗi JIT generation là lãng phí.
-  // Cache key stable: sort ids trước để deterministic dù thứ tự input khác nhau.
+  // [PERF & UX FIX]: Cache hierarchy expansion trong Redis.
+  // Giảm TTL từ 3600s (1 giờ) xuống 60s (1 phút) để đảm bảo giáo viên 
+  // có trải nghiệm realtime khi vừa thêm câu hỏi/thư mục mới.
   private async expandHierarchyIds(
     repo: any,
     collectionPrefix: 'folder' | 'topic',
@@ -37,23 +52,34 @@ export class ExamGeneratorService {
 
     const sortedIds = [...inputIds].sort();
     const cacheKey = `hierarchy:${collectionPrefix}:${sortedIds.join(',')}`;
-    const HIERARCHY_CACHE_TTL_SECONDS = 3600; // 1 giờ
+    const HIERARCHY_CACHE_TTL_SECONDS = 60; // 60 giây (Soft Real-time)
 
     const cached = await this.redisService.get(cacheKey);
     if (cached) {
       return JSON.parse(cached) as string[];
     }
 
-    const objIds = sortedIds.map(id => new Types.ObjectId(id));
+    const objIds = sortedIds.map((id) => new Types.ObjectId(id));
+    
+    // [FIX]: Sử dụng modelInstance thay vì model protected
     const childNodes = await repo.modelInstance
       .find({ ancestors: { $in: objIds } })
       .select('_id')
       .lean()
       .exec();
 
-    const expanded = [...new Set([...sortedIds, ...childNodes.map((n: any) => n._id.toString())])];
+    const expanded = [
+      ...new Set([
+        ...sortedIds,
+        ...childNodes.map((n: any) => n._id.toString()),
+      ]),
+    ];
 
-    await this.redisService.set(cacheKey, JSON.stringify(expanded), HIERARCHY_CACHE_TTL_SECONDS);
+    await this.redisService.set(
+      cacheKey,
+      JSON.stringify(expanded),
+      HIERARCHY_CACHE_TTL_SECONDS,
+    );
 
     return expanded;
   }
@@ -67,13 +93,22 @@ export class ExamGeneratorService {
     return arr;
   }
 
-  private mapQuestionToPaper(rawQ: any, parentPassageId: Types.ObjectId | null, questionsArray: any[], keysArray: any[], orderIdx: number) {
+  private mapQuestionToPaper(
+    rawQ: any,
+    parentPassageId: Types.ObjectId | null,
+    questionsArray: any[],
+    keysArray: any[],
+    orderIdx: number,
+  ) {
     const isPassageMother = rawQ.type === QuestionType.PASSAGE;
     let answers: any[] = [];
 
     if (!isPassageMother) {
       const correctAnswer = rawQ.answers?.find((a: any) => a.isCorrect);
-      if (!correctAnswer) throw new InternalServerErrorException(`Câu hỏi gốc ID ${rawQ._id} bị lỗi dữ liệu (không set đáp án đúng).`);
+      if (!correctAnswer)
+        throw new InternalServerErrorException(
+          `Câu hỏi gốc ID ${rawQ._id} bị lỗi dữ liệu (không set đáp án đúng).`,
+        );
 
       answers = this.shuffleArray(rawQ.answers).map((opt: any) => ({
         id: opt.id,
@@ -103,7 +138,7 @@ export class ExamGeneratorService {
     teacherObjId: Types.ObjectId,
     sectionsToProcess: any[],
     initialExcludeIds: Set<string>,
-    startOrderIndex: number
+    startOrderIndex: number,
   ) {
     const pickedQuestionIds = new Set<string>(initialExcludeIds);
     const finalPaperQuestions: any[] = [];
@@ -111,11 +146,9 @@ export class ExamGeneratorService {
     let globalOrderIndex = startOrderIndex;
 
     for (const section of sectionsToProcess) {
-      // [PERF 2.2]: Parallel hóa tầng I/O (expand hierarchy + fetch pool) cho tất cả rules
-      // trong cùng một section. Snapshot excludeIds tại đầu section — đủ an toàn vì
-      // các rules trong cùng section không share pool nguồn với nhau.
-      // Phần PICK + FILL vẫn sequential để đảm bảo dedup chính xác.
-      const excludeObjIdsSnapshot = Array.from(pickedQuestionIds).map(id => new Types.ObjectId(id));
+      const excludeObjIdsSnapshot = Array.from(pickedQuestionIds).map(
+        (id) => new Types.ObjectId(id),
+      );
 
       const ruleCandidates = await Promise.all(
         section.rules.map(async (rule: any) => {
@@ -125,8 +158,8 @@ export class ExamGeneratorService {
           ]);
 
           const mappedRule = {
-            folderIds: expandedFolderIds.map(id => new Types.ObjectId(id)),
-            topicIds: expandedTopicIds.map(id => new Types.ObjectId(id)),
+            folderIds: expandedFolderIds.map((id) => new Types.ObjectId(id)),
+            topicIds: expandedTopicIds.map((id) => new Types.ObjectId(id)),
             difficulties: rule.difficulties || [],
             tags: rule.tags || [],
             limit: rule.limit,
@@ -143,30 +176,51 @@ export class ExamGeneratorService {
         }),
       );
 
-      // Sequential pick-and-fill để dedup set được cập nhật chính xác theo từng rule
       for (const { rule, candidates } of ruleCandidates) {
         let currentSlotFilled = 0;
         const targetLimit = rule.limit;
 
+        // 1. FILL PASSAGE (Soft Limit Strategy)
         for (const passage of candidates.passages) {
           const childCount = passage.children.length;
-          if (currentSlotFilled + childCount <= targetLimit) {
-            this.mapQuestionToPaper(passage, null, finalPaperQuestions, finalAnswerKeys, globalOrderIndex++);
+          
+          if (currentSlotFilled < targetLimit) {
+            this.mapQuestionToPaper(
+              passage,
+              null,
+              finalPaperQuestions,
+              finalAnswerKeys,
+              globalOrderIndex++,
+            );
             pickedQuestionIds.add(passage._id.toString());
 
             for (const child of passage.children) {
-              this.mapQuestionToPaper(child, passage._id, finalPaperQuestions, finalAnswerKeys, globalOrderIndex++);
+              this.mapQuestionToPaper(
+                child,
+                passage._id,
+                finalPaperQuestions,
+                finalAnswerKeys,
+                globalOrderIndex++,
+              );
               pickedQuestionIds.add(child._id.toString());
             }
-            currentSlotFilled += childCount;
+            currentSlotFilled += childCount; 
           }
-          if (currentSlotFilled === targetLimit) break;
+
+          if (currentSlotFilled >= targetLimit) break;
         }
 
+        // 2. FILL FLAT QUESTIONS (Nếu Passage chưa lấp đầy giỏ)
         if (currentSlotFilled < targetLimit) {
           for (const flat of candidates.flats) {
             if (currentSlotFilled < targetLimit) {
-              this.mapQuestionToPaper(flat, null, finalPaperQuestions, finalAnswerKeys, globalOrderIndex++);
+              this.mapQuestionToPaper(
+                flat,
+                null,
+                finalPaperQuestions,
+                finalAnswerKeys,
+                globalOrderIndex++,
+              );
               pickedQuestionIds.add(flat._id.toString());
               currentSlotFilled++;
             } else {
@@ -175,9 +229,10 @@ export class ExamGeneratorService {
           }
         }
 
+        // 3. SAFEGUARD VALIDATION
         if (currentSlotFilled < targetLimit) {
           throw new BadRequestException(
-            `Ngân hàng không đủ dữ liệu. Yêu cầu ${targetLimit} câu nhưng chỉ tìm được ${currentSlotFilled} câu cho Section "${section.name}".`
+            `Ngân hàng không đủ dữ liệu. Yêu cầu tối thiểu ${targetLimit} câu nhưng chỉ tìm được ${currentSlotFilled} câu khả dụng (chưa trùng lặp) cho Section "${section.name}".`,
           );
         }
       }
@@ -186,31 +241,39 @@ export class ExamGeneratorService {
     return { finalPaperQuestions, finalAnswerKeys };
   }
 
-  private async resolveSectionsToProcess(teacherId: string, matrixId?: string, adHocSections?: any[]) {
-    // [FIX #1.3]: Defense-in-depth — enforce mutually exclusive ở service layer.
-    // DTO đã validate nhưng service phải tự bảo vệ khi bị gọi trực tiếp (worker, internal call).
+  private async resolveSectionsToProcess(
+    teacherId: string,
+    matrixId?: string,
+    adHocSections?: any[],
+  ) {
     const hasMatrix = !!matrixId;
     const hasAdHoc = Array.isArray(adHocSections) && adHocSections.length > 0;
+    
     if (hasMatrix && hasAdHoc) {
       throw new BadRequestException(
-        'Cấu hình nguồn đề không hợp lệ: không được cung cấp cả "matrixId" lẫn "adHocSections" cùng lúc.'
+        'Cấu hình nguồn đề không hợp lệ: không được cung cấp cả "matrixId" lẫn "adHocSections" cùng lúc.',
       );
     }
 
-    let sectionsToProcess = (adHocSections || []).map(sec => ({
+    let sectionsToProcess = (adHocSections || []).map((sec) => ({
       ...sec,
       orderIndex: sec.orderIndex ?? 0,
     }));
     let subjectId: Types.ObjectId | null = null;
 
     if (matrixId) {
-      const template = await this.matricesService.getMatrixDetail(matrixId, teacherId);
+      const template = await this.matricesService.getMatrixDetail(
+        matrixId,
+        teacherId,
+      );
       sectionsToProcess = template.sections.map((sec: any) => ({
         name: sec.name,
         orderIndex: sec.orderIndex,
         rules: sec.rules.map((rule: any) => ({
-          folderIds: rule.folderIds?.map((id: Types.ObjectId) => id.toString()) || [],
-          topicIds: rule.topicIds?.map((id: Types.ObjectId) => id.toString()) || [],
+          folderIds:
+            rule.folderIds?.map((id: Types.ObjectId) => id.toString()) || [],
+          topicIds:
+            rule.topicIds?.map((id: Types.ObjectId) => id.toString()) || [],
           difficulties: rule.difficulties || [],
           tags: rule.tags || [],
           limit: rule.limit,
@@ -230,16 +293,23 @@ export class ExamGeneratorService {
     const { teacherId, matrixId, adHocSections } = payload;
     const teacherObjId = new Types.ObjectId(teacherId);
 
-    const { sectionsToProcess } = await this.resolveSectionsToProcess(teacherId, matrixId, adHocSections);
-
-    const { finalPaperQuestions, finalAnswerKeys } = await this.buildQuestionsFromSections(
-      teacherObjId,
-      sectionsToProcess,
-      new Set<string>(),
-      1
+    const { sectionsToProcess } = await this.resolveSectionsToProcess(
+      teacherId,
+      matrixId,
+      adHocSections,
     );
 
-    this.logger.log(`[Dry-Run Preview] Teacher ${teacherId} generated a preview. Questions: ${finalPaperQuestions.length}`);
+    const { finalPaperQuestions, finalAnswerKeys } =
+      await this.buildQuestionsFromSections(
+        teacherObjId,
+        sectionsToProcess,
+        new Set<string>(),
+        1,
+      );
+
+    this.logger.log(
+      `[Dry-Run Preview] Teacher ${teacherId} generated a preview. Questions: ${finalPaperQuestions.length}`,
+    );
 
     return {
       message: 'Tạo bản xem trước thành công (Dry-Run). Dữ liệu chưa được lưu.',
@@ -248,7 +318,7 @@ export class ExamGeneratorService {
       previewData: {
         questions: finalPaperQuestions,
         answerKeys: finalAnswerKeys,
-      }
+      },
     };
   }
 
@@ -256,18 +326,22 @@ export class ExamGeneratorService {
     const { teacherId, title, totalScore, matrixId, adHocSections } = payload;
     const teacherObjId = new Types.ObjectId(teacherId);
 
-    const { sectionsToProcess, subjectId } = await this.resolveSectionsToProcess(teacherId, matrixId, adHocSections);
+    const { sectionsToProcess, subjectId } =
+      await this.resolveSectionsToProcess(teacherId, matrixId, adHocSections);
 
-    const { finalPaperQuestions, finalAnswerKeys } = await this.buildQuestionsFromSections(
-      teacherObjId,
-      sectionsToProcess,
-      new Set<string>(),
-      1
-    );
+    const { finalPaperQuestions, finalAnswerKeys } =
+      await this.buildQuestionsFromSections(
+        teacherObjId,
+        sectionsToProcess,
+        new Set<string>(),
+        1,
+      );
 
     if (totalScore > 0 && finalAnswerKeys.length > 0) {
-      const scorePerQuestion = Number((totalScore / finalAnswerKeys.length).toFixed(2));
-      finalPaperQuestions.forEach(q => {
+      const scorePerQuestion = Number(
+        (totalScore / finalAnswerKeys.length).toFixed(2),
+      );
+      finalPaperQuestions.forEach((q) => {
         if (q.type !== QuestionType.PASSAGE) q.points = scorePerQuestion;
       });
     }
@@ -305,17 +379,26 @@ export class ExamGeneratorService {
     const paperObjId = new Types.ObjectId(paperId);
     const teacherObjId = new Types.ObjectId(teacherId);
 
-    const paper = await this.examPapersRepo.modelInstance
+    // [FIX]: Sử dụng modelInstance thay vì model protected
+    const paper = (await this.examPapersRepo.modelInstance
       .findById(paperObjId)
       .populate('examId', 'teacherId isPublished')
       .lean()
-      .exec() as any;
+      .exec()) as any;
 
     if (!paper) throw new NotFoundException('Mã đề không tồn tại.');
-    if (paper.examId.teacherId.toString() !== teacherId) throw new ForbiddenException('Bạn không có quyền sửa đề thi này.');
-    if (paper.examId.isPublished) throw new BadRequestException('Đề thi đã khóa (Published). Không thể đắp thêm câu hỏi.');
+    if (paper.examId.teacherId.toString() !== teacherId)
+      throw new ForbiddenException('Bạn không có quyền sửa đề thi này.');
+    if (paper.examId.isPublished)
+      throw new BadRequestException(
+        'Đề thi đã khóa (Published). Không thể đắp thêm câu hỏi.',
+      );
 
-    const { sectionsToProcess } = await this.resolveSectionsToProcess(teacherId, matrixId, adHocSections);
+    const { sectionsToProcess } = await this.resolveSectionsToProcess(
+      teacherId,
+      matrixId,
+      adHocSections,
+    );
 
     const existingExcludeIds = new Set<string>();
     let maxOrderIndex = 0;
@@ -328,21 +411,24 @@ export class ExamGeneratorService {
     }
 
     const startOrderIndex = maxOrderIndex + 1;
-    const { finalPaperQuestions, finalAnswerKeys } = await this.buildQuestionsFromSections(
-      teacherObjId,
-      sectionsToProcess,
-      existingExcludeIds,
-      startOrderIndex
-    );
+    const { finalPaperQuestions, finalAnswerKeys } =
+      await this.buildQuestionsFromSections(
+        teacherObjId,
+        sectionsToProcess,
+        existingExcludeIds,
+        startOrderIndex,
+      );
 
     await this.examPapersRepo.updateByIdSafe(paperObjId, {
       $push: {
         questions: { $each: finalPaperQuestions },
-        answerKeys: { $each: finalAnswerKeys }
-      }
+        answerKeys: { $each: finalAnswerKeys },
+      },
     });
 
-    this.logger.log(`[Builder] Teacher ${teacherId} đắp thêm ${finalAnswerKeys.length} câu vào Paper ${paperId} bằng Matrix`);
+    this.logger.log(
+      `[Builder] Teacher ${teacherId} đắp thêm ${finalAnswerKeys.length} câu vào Paper ${paperId} bằng Matrix`,
+    );
 
     return {
       message: `Đã bốc thành công ${finalAnswerKeys.length} câu hỏi mới vào đề thi hiện tại.`,
@@ -356,40 +442,46 @@ export class ExamGeneratorService {
     const paperObjId = new Types.ObjectId(paperId);
     const teacherObjId = new Types.ObjectId(teacherId);
 
-    const paper = await this.examPapersRepo.modelInstance
+    // [FIX]: Sử dụng modelInstance thay vì model protected
+    const paper = (await this.examPapersRepo.modelInstance
       .findById(paperObjId)
       .populate('examId', 'teacherId isPublished')
       .select('questions examId')
       .lean()
-      .exec() as any;
+      .exec()) as any;
 
     if (!paper) throw new NotFoundException('Mã đề không tồn tại.');
     if (paper.examId.teacherId.toString() !== teacherId) {
-      throw new ForbiddenException('Bạn không có quyền thao tác trên đề thi này.');
+      throw new ForbiddenException(
+        'Bạn không có quyền thao tác trên đề thi này.',
+      );
     }
     if (paper.examId.isPublished) {
-      throw new BadRequestException('Đề thi đã khóa (Published). Không thể thay đổi rule.');
+      throw new BadRequestException(
+        'Đề thi đã khóa (Published). Không thể thay đổi rule.',
+      );
     }
 
     const excludeIds = paper.questions.map((q: any) => q.originalQuestionId);
 
     const [expandedFolderIds, expandedTopicIds] = await Promise.all([
       this.expandHierarchyIds(this.foldersRepo, 'folder', rule.folderIds),
-      this.expandHierarchyIds(this.topicsRepo, 'topic', rule.topicIds)
+      this.expandHierarchyIds(this.topicsRepo, 'topic', rule.topicIds),
     ]);
 
     const mappedRule = {
-      folderIds: expandedFolderIds.map(id => new Types.ObjectId(id)),
-      topicIds: expandedTopicIds.map(id => new Types.ObjectId(id)),
+      folderIds: expandedFolderIds.map((id) => new Types.ObjectId(id)),
+      topicIds: expandedTopicIds.map((id) => new Types.ObjectId(id)),
       difficulties: rule.difficulties || [],
       tags: rule.tags || [],
     };
 
-    const availableCount = await this.questionsRepo.countAvailableQuestionsForRule(
-      teacherObjId,
-      mappedRule,
-      excludeIds
-    );
+    const availableCount =
+      await this.questionsRepo.countAvailableQuestionsForRule(
+        teacherObjId,
+        mappedRule,
+        excludeIds,
+      );
 
     return {
       message: 'Lấy số lượng câu hỏi khả dụng thành công.',
@@ -401,27 +493,34 @@ export class ExamGeneratorService {
     teacherId: string,
     totalScore: number,
     matrixId?: string,
-    adHocSections?: any[]
+    adHocSections?: any[],
   ) {
-    const { sectionsToProcess } = await this.resolveSectionsToProcess(teacherId, matrixId, adHocSections);
-
-    const { finalPaperQuestions, finalAnswerKeys } = await this.buildQuestionsFromSections(
-      new Types.ObjectId(teacherId),
-      sectionsToProcess,
-      new Set<string>(),
-      1
+    const { sectionsToProcess } = await this.resolveSectionsToProcess(
+      teacherId,
+      matrixId,
+      adHocSections,
     );
 
+    const { finalPaperQuestions, finalAnswerKeys } =
+      await this.buildQuestionsFromSections(
+        new Types.ObjectId(teacherId),
+        sectionsToProcess,
+        new Set<string>(),
+        1,
+      );
+
     if (totalScore > 0 && finalAnswerKeys.length > 0) {
-      const scorePerQuestion = Number((totalScore / finalAnswerKeys.length).toFixed(2));
-      finalPaperQuestions.forEach(q => {
+      const scorePerQuestion = Number(
+        (totalScore / finalAnswerKeys.length).toFixed(2),
+      );
+      finalPaperQuestions.forEach((q) => {
         if (q.type !== QuestionType.PASSAGE) q.points = scorePerQuestion;
       });
     }
 
     return {
       questions: finalPaperQuestions,
-      answerKeys: finalAnswerKeys
+      answerKeys: finalAnswerKeys,
     };
   }
 
@@ -443,8 +542,8 @@ export class ExamGeneratorService {
     ]);
 
     const mappedRule = {
-      folderIds: expandedFolderIds.map(id => new Types.ObjectId(id)),
-      topicIds: expandedTopicIds.map(id => new Types.ObjectId(id)),
+      folderIds: expandedFolderIds.map((id) => new Types.ObjectId(id)),
+      topicIds: expandedTopicIds.map((id) => new Types.ObjectId(id)),
       difficulties: rule.difficulties || [],
       tags: rule.tags || [],
       limit: rule.limit,

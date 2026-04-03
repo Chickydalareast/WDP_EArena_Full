@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { MyCourseReview } from './review.schema';
 import { ExamRuleDTO } from './curriculum.schema';
+import { MatrixRuleSchema, MatrixSectionSchema } from '@/features/exam-builder/types/exam.schema';
 
 export enum CourseStatus {
     DRAFT = 'DRAFT',
@@ -34,8 +35,11 @@ export interface LessonPreview {
     order: number;
     isFreePreview: boolean;
     examId?: string;
-    isCompleted?: boolean;
+    
+    examMode?: 'STATIC' | 'DYNAMIC' | null; 
+    examType?: 'COURSE_QUIZ' | 'PRACTICE' | 'OFFICIAL' | null;
 
+    isCompleted?: boolean;
     content?: string;
     primaryVideo?: PrimaryVideoData;
     attachments?: AttachmentData[];
@@ -84,10 +88,10 @@ export interface CourseBasic {
     totalVideos?: number;
     totalDocuments?: number;
     totalQuizzes?: number;
-    
+
     submittedAt?: string;
     rejectionReason?: string;
-    isEnrolled?: boolean; 
+    isEnrolled?: boolean;
 }
 
 export interface CourseTeacherDetail extends CourseBasic {
@@ -181,7 +185,7 @@ export const baseUpdateCourseSchema = z.object({
     requirements: z.array(z.string()).optional(),
     coverImageId: z.string().nullable().optional(),
     promotionalVideoId: z.string().nullable().optional(),
-    
+
     progressionMode: ProgressionModeEnum.optional(),
     isStrictExam: z.boolean().optional(),
 });
@@ -199,3 +203,144 @@ export const updateCourseSchema = baseUpdateCourseSchema.superRefine((data, ctx)
 });
 
 export type UpdateCourseDTO = z.infer<typeof updateCourseSchema>;
+
+
+export type { ExamRuleDTO };
+export interface TeacherLessonQuizDynamicConfig {
+    matrixId: string | null;
+    adHocSections: Array<{
+        name: string;
+        orderIndex: number;
+        rules: Array<{
+            folderIds: string[];
+            topicIds: string[];
+            difficulties: Array<'NB' | 'TH' | 'VD' | 'VDC'>;
+            tags: string[];
+            limit: number;
+        }>;
+    }>;
+}
+
+export interface TeacherLessonPopulatedExam {
+    _id: string;
+    title: string;
+    totalScore: number;
+    mode: 'DYNAMIC' | 'STATIC';
+    type: 'COURSE_QUIZ';
+    isPublished: boolean;
+    dynamicConfig: TeacherLessonQuizDynamicConfig;
+}
+
+export interface TeacherLessonQuizDetail {
+    _id: string;
+    courseId: string;
+    sectionId: string;
+    title: string;
+    content: string;
+    order: number;
+    isFreePreview: boolean;
+    type: 'QUIZ' | 'VIDEO' | 'DOCUMENT' | 'MIXED';
+    examRules: ExamRuleDTO;
+    examId: TeacherLessonPopulatedExam | null;
+    attachments: Array<{
+        id: string;
+        url: string | null;
+        originalName: string;
+        mimetype?: string;
+    }>;
+    primaryVideo?: {
+        id: string;
+        url: string | null;
+        duration?: number;
+    };
+    createdAt: string;
+    updatedAt: string;
+}
+
+
+export const QuizRulePreviewPayloadSchema = z.object({
+    folderIds: z.array(z.string()).min(1, 'Phải chọn ít nhất 1 thư mục'),
+    topicIds: z.array(z.string()).optional(),
+    tags: z.array(z.string()).optional(),
+    difficulties: z.array(z.enum(['NB', 'TH', 'VD', 'VDC'])).default([]),
+    limit: z.number().min(1, 'Số câu tối thiểu là 1'),
+});
+
+export type QuizRulePreviewPayloadDTO = z.infer<typeof QuizRulePreviewPayloadSchema>;
+
+export interface QuizRulePreviewResponse {
+    availableCount: number;
+    requiredCount: number;
+    isSufficient: boolean;
+    safetyRatio: number;
+}
+
+
+export const QuizBuilderPreviewPayloadSchema = z.object({
+    adHocSections: z.array(MatrixSectionSchema).optional(),
+    matrixId: z.string().optional(),
+}).refine(
+    (data) => data.matrixId || (data.adHocSections && data.adHocSections.length > 0),
+    { message: 'Phải cung cấp matrixId hoặc adHocSections', path: ['adHocSections'] }
+);
+
+export type QuizBuilderPreviewPayloadDTO = z.infer<typeof QuizBuilderPreviewPayloadSchema>;
+
+export interface QuizBuilderPreviewResponse {
+    totalItems: number;
+    totalActualQuestions: number;
+    previewData: {
+        questions: Array<{
+            originalQuestionId: string;
+            type: 'MULTIPLE_CHOICE' | 'PASSAGE';
+            content: string;
+            answers: Array<{ id: string; content: string }>;
+        }>;
+    };
+}
+
+
+export interface QuizMatrixItem {
+    _id: string;
+    title: string;
+    description?: string;
+    createdAt: string;
+}
+
+export interface QuizMatricesResponse {
+    items: QuizMatrixItem[];
+    meta: {
+        total: number;
+        page: number;
+        limit: number;
+        totalPages: number;
+    };
+}
+
+export const QuizHealthRuleStatusSchema = z.object({
+    sectionName: z.string(),
+    requiredCount: z.number(),
+    availableCount: z.number(),
+    isSufficient: z.boolean(),
+    safetyRatio: z.number(),
+    isWarning: z.boolean(),
+});
+
+export const QuizHealthDataSchema = z.object({
+    lessonId: z.string(),
+    examId: z.string(),
+    isHealthy: z.boolean(),
+    hasWarning: z.boolean(),
+    isLocked: z.boolean(),
+    matrixExists: z.boolean().nullable(),
+    configMode: z.enum(['matrix', 'adHoc', 'unconfigured']),
+    rules: z.array(QuizHealthRuleStatusSchema),
+});
+
+export type QuizHealthRuleStatus = z.infer<typeof QuizHealthRuleStatusSchema>;
+export type QuizHealthData = z.infer<typeof QuizHealthDataSchema>;
+
+export interface QuizHealthResponse {
+    message: string;
+    data: QuizHealthData;
+}

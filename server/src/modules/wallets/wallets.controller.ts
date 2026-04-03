@@ -24,29 +24,32 @@ export class WalletsController {
   @Get('transactions')
   async getMyTransactions(
     @Query() query: GetTransactionsDto,
-    @CurrentUser('userId') userId: string
+    @CurrentUser('userId') userId: string,
   ) {
     const payload = {
       userId,
       page: query.page || 1,
       limit: query.limit || 10,
     };
-    
+
     const result = await this.walletsService.getMyTransactions(payload);
-    
-    return { 
-      message: 'Lấy lịch sử giao dịch thành công', 
+
+    return {
+      message: 'Lấy lịch sử giao dịch thành công',
       data: result.data,
-      meta: result.meta 
+      meta: result.meta,
     };
   }
 
   @Post('mock-deposit')
   async mockDeposit(
-    @Body() dto: MockDepositDto, 
-    @CurrentUser('userId') userId: string
+    @Body() dto: MockDepositDto,
+    @CurrentUser('userId') userId: string,
   ) {
-    const data = await this.walletsService.mockDeposit({ userId, amount: dto.amount });
+    const data = await this.walletsService.mockDeposit({
+      userId,
+      amount: dto.amount,
+    });
     return data;
   }
 
@@ -54,7 +57,7 @@ export class WalletsController {
   @Roles(UserRole.TEACHER)
   async requestWithdrawal(
     @Body() dto: CreateWithdrawalDto,
-    @CurrentUser('userId') userId: string
+    @CurrentUser('userId') userId: string,
   ) {
     const payload: CreateWithdrawalPayload = {
       teacherId: userId,
@@ -63,7 +66,7 @@ export class WalletsController {
       accountNumber: dto.accountNumber,
       accountName: dto.accountName,
     };
-    
+
     return this.walletsService.requestWithdrawal(payload);
   }
 }

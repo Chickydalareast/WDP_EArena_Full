@@ -5,7 +5,10 @@ import { BullModule } from '@nestjs/bullmq';
 import { Exam, ExamSchema } from './schemas/exam.schema';
 import { ExamPaper, ExamPaperSchema } from './schemas/exam-paper.schema';
 import { ExamMatrix, ExamMatrixSchema } from './schemas/exam-matrix.schema';
-import { ExamSubmission, ExamSubmissionSchema } from './schemas/exam-submission.schema';
+import {
+  ExamSubmission,
+  ExamSubmissionSchema,
+} from './schemas/exam-submission.schema';
 
 import { ExamsController } from './exams.controller';
 import { ExamsService } from './exams.service';
@@ -42,14 +45,23 @@ import { QuizLifecycleListener } from './listeners/quiz-lifecycle.listener';
     QuestionsModule,
     TaxonomyModule,
     UsersModule,
-    forwardRef(() => CoursesModule)
+    forwardRef(() => CoursesModule),
   ],
   controllers: [ExamsController, ExamTakeController, ExamMatricesController],
   providers: [
-    ExamsRepository, ExamPapersRepository, ExamMatricesRepository, ExamSubmissionsRepository,
-    ExamsService, ExamTakeService, ExamGeneratorService, ExamSubmissionProcessor, QuestionSyncProcessor,
+    ExamsRepository,
+    ExamPapersRepository,
+    ExamMatricesRepository,
+    ExamSubmissionsRepository,
+    ExamsService,
+    ExamTakeService,
+    ExamGeneratorService,
+    ExamSubmissionProcessor,
+    QuestionSyncProcessor,
 
-    ExamGradingListener, ExamMatricesService,QuizLifecycleListener,
+    ExamGradingListener,
+    ExamMatricesService,
+    QuizLifecycleListener,
   ],
   exports: [
     ExamsRepository,
@@ -59,6 +71,5 @@ import { QuizLifecycleListener } from './listeners/quiz-lifecycle.listener';
     ExamMatricesService,
     ExamGeneratorService,
   ],
-
 })
-export class ExamsModule { }
+export class ExamsModule {}

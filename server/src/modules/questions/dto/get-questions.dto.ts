@@ -1,4 +1,13 @@
-import { IsOptional, IsMongoId, IsString, IsBoolean, IsEnum, IsArray, IsInt, Min } from 'class-validator';
+import {
+  IsOptional,
+  IsMongoId,
+  IsString,
+  IsBoolean,
+  IsEnum,
+  IsArray,
+  IsInt,
+  Min,
+} from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { DifficultyLevel } from '../schemas/question.schema';
 
@@ -16,25 +25,33 @@ export class GetQuestionsDto {
   limit?: number = 10;
 
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.split(',') : value,
+  )
   @IsArray()
   @IsMongoId({ each: true, message: 'ID thư mục không hợp lệ' })
   folderIds?: string[];
 
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.split(',') : value,
+  )
   @IsArray()
   @IsMongoId({ each: true, message: 'ID chuyên đề không hợp lệ' })
   topicIds?: string[];
 
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.split(',') : value,
+  )
   @IsArray()
   @IsEnum(DifficultyLevel, { each: true, message: 'Mức độ khó không hợp lệ' })
   difficultyLevels?: DifficultyLevel[];
 
   @IsOptional()
-  @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.split(',') : value,
+  )
   @IsArray()
   @IsString({ each: true })
   tags?: string[];

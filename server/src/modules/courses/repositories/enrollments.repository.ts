@@ -2,20 +2,28 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
 import { Connection, Model, PipelineStage, Types } from 'mongoose';
 import { AbstractRepository } from '../../../common/database/abstract.repository';
-import { Enrollment, EnrollmentDocument, EnrollmentStatus } from '../schemas/enrollment.schema';
+import {
+  Enrollment,
+  EnrollmentDocument,
+  EnrollmentStatus,
+} from '../schemas/enrollment.schema';
 
 @Injectable()
 export class EnrollmentsRepository extends AbstractRepository<EnrollmentDocument> {
   protected readonly logger = new Logger(EnrollmentsRepository.name);
 
   constructor(
-    @InjectModel(Enrollment.name) private readonly enrollmentModel: Model<EnrollmentDocument>,
+    @InjectModel(Enrollment.name)
+    private readonly enrollmentModel: Model<EnrollmentDocument>,
     @InjectConnection() connection: Connection,
   ) {
     super(enrollmentModel, connection);
   }
 
-  async findUserEnrollment(userId: string | Types.ObjectId, courseId: string | Types.ObjectId): Promise<EnrollmentDocument | null> {
+  async findUserEnrollment(
+    userId: string | Types.ObjectId,
+    courseId: string | Types.ObjectId,
+  ): Promise<EnrollmentDocument | null> {
     return this.findOneSafe({
       userId: new Types.ObjectId(userId.toString()),
       courseId: new Types.ObjectId(courseId.toString()),
@@ -25,16 +33,18 @@ export class EnrollmentsRepository extends AbstractRepository<EnrollmentDocument
   async atomicUpdateProgress(
     enrollmentId: Types.ObjectId,
     lessonId: Types.ObjectId,
-    newProgress: number
+    newProgress: number,
   ): Promise<EnrollmentDocument | null> {
-    return this.enrollmentModel.findByIdAndUpdate(
-      enrollmentId,
-      {
-        $addToSet: { completedLessons: lessonId },
-        $set: { progress: newProgress }
-      },
-      { returnDocument: 'after', lean: true, session: this.currentSession }
-    ).exec() as Promise<EnrollmentDocument | null>;
+    return this.enrollmentModel
+      .findByIdAndUpdate(
+        enrollmentId,
+        {
+          $addToSet: { completedLessons: lessonId },
+          $set: { progress: newProgress },
+        },
+        { returnDocument: 'after', lean: true, session: this.currentSession },
+      )
+      .exec();
   }
 
   async findMyCoursesPaginated(userId: string, page: number, limit: number) {
@@ -44,8 +54,8 @@ export class EnrollmentsRepository extends AbstractRepository<EnrollmentDocument
       {
         $match: {
           userId: new Types.ObjectId(userId),
-          status: EnrollmentStatus.ACTIVE
-        }
+          status: EnrollmentStatus.ACTIVE,
+        },
       },
       { $sort: { updatedAt: -1 } },
       {
@@ -58,8 +68,8 @@ export class EnrollmentsRepository extends AbstractRepository<EnrollmentDocument
                 from: 'courses',
                 localField: 'courseId',
                 foreignField: '_id',
-                as: 'course'
-              }
+                as: 'course',
+              },
             },
             { $unwind: { path: '$course', preserveNullAndEmptyArrays: false } },
             {
@@ -67,8 +77,8 @@ export class EnrollmentsRepository extends AbstractRepository<EnrollmentDocument
                 from: 'users',
                 localField: 'course.teacherId',
                 foreignField: '_id',
-                as: 'teacher'
-              }
+                as: 'teacher',
+              },
             },
             { $unwind: { path: '$teacher', preserveNullAndEmptyArrays: true } },
             {
@@ -76,10 +86,15 @@ export class EnrollmentsRepository extends AbstractRepository<EnrollmentDocument
                 from: 'media',
                 localField: 'course.coverImageId',
                 foreignField: '_id',
-                as: 'coverImage'
-              }
+                as: 'coverImage',
+              },
             },
-            { $unwind: { path: '$coverImage', preserveNullAndEmptyArrays: true } },
+            {
+              $unwind: {
+                path: '$coverImage',
+                preserveNullAndEmptyArrays: true,
+              },
+            },
             {
               $project: {
                 _id: 0,
@@ -92,56 +107,60 @@ export class EnrollmentsRepository extends AbstractRepository<EnrollmentDocument
                   slug: '$course.slug',
                   teacher: {
                     fullName: '$teacher.fullName',
-                    avatar: '$teacher.avatar'
+                    avatar: '$teacher.avatar',
                   },
                   coverImage: {
                     url: '$coverImage.url',
-                    blurHash: '$coverImage.blurHash'
-                  }
-                }
-              }
-            }
+                    blurHash: '$coverImage.blurHash',
+                  },
+                },
+              },
+            },
           ],
-          totalCount: [{ $count: 'count' }]
-        }
-      }
+          totalCount: [{ $count: 'count' }],
+        },
+      },
     ];
 
     const [result] = await this.enrollmentModel.aggregate(pipeline).exec();
 
     return {
       items: result.data || [],
-      total: result.totalCount[0]?.count || 0
+      total: result.totalCount[0]?.count || 0,
     };
   }
 
-  async findActiveStudentIdsByCourse(courseId: string | Types.ObjectId): Promise<string[]> {
+  async findActiveStudentIdsByCourse(
+    courseId: string | Types.ObjectId,
+  ): Promise<string[]> {
     const enrollments = await this.enrollmentModel
       .find({
         courseId: new Types.ObjectId(courseId.toString()),
-        status: EnrollmentStatus.ACTIVE
+        status: EnrollmentStatus.ACTIVE,
       })
       .select('userId')
       .lean()
       .exec();
 
-    return enrollments.map(e => e.userId.toString());
+    return enrollments.map((e) => e.userId.toString());
   }
 
-  async getCourseAverageProgress(courseId: string | Types.ObjectId): Promise<number> {
+  async getCourseAverageProgress(
+    courseId: string | Types.ObjectId,
+  ): Promise<number> {
     const pipeline: PipelineStage[] = [
-      { 
-        $match: { 
-          courseId: new Types.ObjectId(courseId.toString()), 
-          status: EnrollmentStatus.ACTIVE 
-        } 
+      {
+        $match: {
+          courseId: new Types.ObjectId(courseId.toString()),
+          status: EnrollmentStatus.ACTIVE,
+        },
       },
-      { 
-        $group: { 
-          _id: null, 
-          avgProgress: { $avg: '$progress' } 
-        } 
-      }
+      {
+        $group: {
+          _id: null,
+          avgProgress: { $avg: '$progress' },
+        },
+      },
     ];
 
     const result = await this.enrollmentModel.aggregate(pipeline).exec();

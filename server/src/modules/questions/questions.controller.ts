@@ -1,4 +1,17 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { QuestionsService } from './questions.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -21,7 +34,10 @@ import { SuggestFolderDto } from './dto/suggest-folder.dto';
 import { OrganizeQuestionsDto } from './dto/organize-questions.dto';
 import { AutoTagQuestionsDto } from './dto/auto-tag-questions.dto';
 import { ActiveFiltersDto } from './dto/active-filters.dto';
-import { BulkPublishQuestionPayload, GetActiveFiltersPayload } from './interfaces/question.interface';
+import {
+  BulkPublishQuestionPayload,
+  GetActiveFiltersPayload,
+} from './interfaces/question.interface';
 import { BulkPublishQuestionDto } from './dto/bulk-publish-question.dto';
 
 @Controller('questions')
@@ -29,11 +45,13 @@ import { BulkPublishQuestionDto } from './dto/bulk-publish-question.dto';
 @RequireTeacherVerified()
 @Roles(UserRole.TEACHER, UserRole.ADMIN)
 export class QuestionsController {
-  constructor(private readonly questionsService: QuestionsService) { }
-
+  constructor(private readonly questionsService: QuestionsService) {}
 
   @Get()
-  async getQuestions(@CurrentUser('userId') userId: string, @Query() query: GetQuestionsDto) {
+  async getQuestions(
+    @CurrentUser('userId') userId: string,
+    @Query() query: GetQuestionsDto,
+  ) {
     return this.questionsService.getQuestionsPaginated(userId, {
       page: query.page || 1,
       limit: query.limit || 10,
@@ -47,7 +65,10 @@ export class QuestionsController {
   }
 
   @Post()
-  async createQuestion(@CurrentUser('userId') userId: string, @Body() dto: CreateQuestionDto) {
+  async createQuestion(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: CreateQuestionDto,
+  ) {
     return this.questionsService.createQuestion({
       ownerId: userId,
       folderId: dto.folderId,
@@ -66,7 +87,10 @@ export class QuestionsController {
   }
 
   @Post('bulk-create')
-  async bulkCreateQuestions(@CurrentUser('userId') userId: string, @Body() dto: BulkCreateQuestionDto) {
+  async bulkCreateQuestions(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: BulkCreateQuestionDto,
+  ) {
     return this.questionsService.bulkCreateQuestions({
       ownerId: userId,
       folderId: dto.folderId,
@@ -75,7 +99,10 @@ export class QuestionsController {
   }
 
   @Patch('bulk-standardize')
-  async bulkStandardizeQuestions(@CurrentUser('userId') userId: string, @Body() dto: BulkStandardizeQuestionDto) {
+  async bulkStandardizeQuestions(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: BulkStandardizeQuestionDto,
+  ) {
     return this.questionsService.bulkStandardizeQuestions(userId, {
       questionIds: dto.questionIds,
       topicId: dto.topicId,
@@ -85,7 +112,10 @@ export class QuestionsController {
   }
 
   @Patch('bulk-move')
-  async moveQuestions(@CurrentUser('userId') userId: string, @Body() dto: MoveQuestionsDto) {
+  async moveQuestions(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: MoveQuestionsDto,
+  ) {
     return this.questionsService.moveQuestions(userId, {
       questionIds: dto.questionIds,
       destFolderId: dto.destFolderId,
@@ -93,7 +123,10 @@ export class QuestionsController {
   }
 
   @Post('bulk-clone')
-  async bulkCloneQuestions(@CurrentUser('userId') userId: string, @Body() dto: BulkCloneQuestionDto) {
+  async bulkCloneQuestions(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: BulkCloneQuestionDto,
+  ) {
     return this.questionsService.bulkCloneQuestions(userId, {
       questionIds: dto.questionIds,
       destFolderId: dto.destFolderId,
@@ -101,25 +134,30 @@ export class QuestionsController {
   }
 
   @Post('bulk-delete')
-  async bulkDeleteQuestions(@CurrentUser('userId') userId: string, @Body() dto: BulkDeleteQuestionDto) {
+  async bulkDeleteQuestions(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: BulkDeleteQuestionDto,
+  ) {
     return this.questionsService.bulkDeleteQuestions(userId, {
       questionIds: dto.questionIds,
     });
   }
 
   @Post('suggest-folders')
-  async suggestFoldersForMove(@CurrentUser('userId') userId: string, @Body() dto: SuggestFolderDto) {
+  async suggestFoldersForMove(
+    @CurrentUser('userId') userId: string,
+    @Body() dto: SuggestFolderDto,
+  ) {
     return this.questionsService.suggestFoldersForMove(userId, {
       questionIds: dto.questionIds,
     });
   }
 
-  
   @Patch('bulk-publish')
   @HttpCode(HttpStatus.OK)
   async bulkPublishQuestions(
-    @CurrentUser('userId') userId: string, 
-    @Body() dto: BulkPublishQuestionDto
+    @CurrentUser('userId') userId: string,
+    @Body() dto: BulkPublishQuestionDto,
   ) {
     const payload: BulkPublishQuestionPayload = {
       questionIds: dto.questionIds,
@@ -128,7 +166,11 @@ export class QuestionsController {
   }
 
   @Patch(':id')
-  async updateQuestion(@Param('id') id: string, @CurrentUser('userId') userId: string, @Body() dto: UpdateQuestionDto) {
+  async updateQuestion(
+    @Param('id') id: string,
+    @CurrentUser('userId') userId: string,
+    @Body() dto: UpdateQuestionDto,
+  ) {
     return this.questionsService.updateQuestion(id, userId, {
       folderId: dto.folderId,
       topicId: dto.topicId,
@@ -146,19 +188,30 @@ export class QuestionsController {
   }
 
   @Delete(':id')
-  async deleteQuestion(@Param('id') id: string, @CurrentUser('userId') userId: string) {
+  async deleteQuestion(
+    @Param('id') id: string,
+    @CurrentUser('userId') userId: string,
+  ) {
     return this.questionsService.deleteQuestion(id, userId);
   }
 
   @Post(':id/clone')
-  async cloneQuestion(@Param('id') id: string, @CurrentUser('userId') userId: string, @Body() dto: CloneQuestionDto) {
+  async cloneQuestion(
+    @Param('id') id: string,
+    @CurrentUser('userId') userId: string,
+    @Body() dto: CloneQuestionDto,
+  ) {
     return this.questionsService.cloneQuestion(id, userId, {
       destFolderId: dto.destFolderId,
     });
   }
 
   @Put(':id/passage')
-  async updatePassageWithDiffing(@Param('id') passageId: string, @CurrentUser('userId') userId: string, @Body() dto: UpdatePassageDto) {
+  async updatePassageWithDiffing(
+    @Param('id') passageId: string,
+    @CurrentUser('userId') userId: string,
+    @Body() dto: UpdatePassageDto,
+  ) {
     return this.questionsService.updatePassageWithDiffing(passageId, userId, {
       content: dto.content,
       explanation: dto.explanation,
@@ -172,7 +225,7 @@ export class QuestionsController {
   @Post('organize/preview')
   async previewOrganizeQuestions(
     @CurrentUser('userId') userId: string,
-    @Body() dto: OrganizeQuestionsDto
+    @Body() dto: OrganizeQuestionsDto,
   ) {
     return this.questionsService.previewOrganize(userId, {
       questionIds: dto.questionIds,
@@ -184,7 +237,7 @@ export class QuestionsController {
   @Post('organize/execute')
   async executeOrganizeQuestions(
     @CurrentUser('userId') userId: string,
-    @Body() dto: OrganizeQuestionsDto
+    @Body() dto: OrganizeQuestionsDto,
   ) {
     return this.questionsService.executeOrganize(userId, {
       questionIds: dto.questionIds,
@@ -196,7 +249,7 @@ export class QuestionsController {
   @Post('bulk-auto-tag')
   async bulkAutoTagQuestions(
     @CurrentUser('userId') userId: string,
-    @Body() dto: AutoTagQuestionsDto
+    @Body() dto: AutoTagQuestionsDto,
   ) {
     return this.questionsService.dispatchAutoTagJob(userId, {
       questionIds: dto.questionIds,
@@ -228,15 +281,14 @@ export class QuestionsController {
       topicIds: dto.topicIds,
       difficulties: dto.difficulties,
       tags: dto.tags,
-      isDraft: dto.isDraft
+      isDraft: dto.isDraft,
     };
 
     const data = await this.questionsService.getActiveFilters(userId, payload);
 
     return {
       message: 'Lấy bộ lọc động thành công.',
-      data
+      data,
     };
   }
-
 }

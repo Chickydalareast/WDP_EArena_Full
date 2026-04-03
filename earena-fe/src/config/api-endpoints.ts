@@ -42,6 +42,15 @@ export const API_ENDPOINTS = {
     LESSON_DETAIL: (courseId: string, lessonId: string) => `/courses/${courseId}/lessons/${lessonId}` as const,
     QUIZ_BUILDER: '/courses/builder/quiz',
     
+    QUIZ_BUILDER_DETAIL: (lessonId: string) => `/courses/builder/quiz/${lessonId}` as const,
+    QUIZ_BUILDER_PREVIEW: '/courses/builder/quiz/preview',
+    QUIZ_BUILDER_RULE_PREVIEW: '/courses/builder/quiz/rule-preview',
+    QUIZ_BUILDER_MATRICES: '/courses/builder/quiz/matrices',
+    QUIZ_BUILDER_HEALTH: (lessonId: string) => `/courses/builder/quiz/${lessonId}/health` as const,
+    QUIZ_BUILDER_STATS: (lessonId: string) => `/courses/builder/quiz/${lessonId}/stats` as const,
+    QUIZ_BUILDER_ATTEMPTS: (lessonId: string) => `/courses/builder/quiz/${lessonId}/attempts` as const,
+    QUIZ_BUILDER_STATIC_QUESTIONS: (lessonId: string) => `/courses/builder/quiz/${lessonId}/static-questions` as const,
+    
     REORDER: (courseId: string) => `/courses/${courseId}/curriculum/reorder` as const,
     PUBLISH: (courseId: string) => `/courses/${courseId}/publish` as const,
     SUBMIT_REVIEW: (courseId: string) => `/courses/${courseId}/submit-for-review` as const,
@@ -56,6 +65,7 @@ export const API_ENDPOINTS = {
 
     REVIEWS: (courseId: string) => `/courses/${courseId}/reviews` as const,
     REVIEW_REPLY: (courseId: string, reviewId: string) => `/courses/${courseId}/reviews/${reviewId}/reply` as const,
+
   },
 
   WALLETS: {

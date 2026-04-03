@@ -1,9 +1,19 @@
-import { Injectable, Logger, ForbiddenException, BadRequestException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ForbiddenException,
+  BadRequestException,
+  NotFoundException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { Types } from 'mongoose';
 import * as fs from 'fs/promises';
 import * as mammoth from 'mammoth';
 
-import { AiQuestionBuilderPayload, AiQuestionBankResponse } from '../interfaces/ai-question-builder.interface';
+import {
+  AiQuestionBuilderPayload,
+  AiQuestionBankResponse,
+} from '../interfaces/ai-question-builder.interface';
 import { QuestionFoldersRepository } from '../question-folders.repository';
 import { UsersService } from '../../users/users.service';
 import { AiService } from '../../ai/ai.service';
@@ -25,33 +35,44 @@ export class AiQuestionBuilderService {
 
   async generateQuestionBank(payload: AiQuestionBuilderPayload) {
     try {
-      this.logger.debug(`[AI Builder] Bắt đầu phân tích đề thi cho User ${payload.teacherId}`);
+      this.logger.debug(
+        `[AI Builder] Bắt đầu phân tích đề thi cho User ${payload.teacherId}`,
+      );
 
       // 1. Validate Folder
-      const folder = await this.foldersRepo.findByIdSafe(new Types.ObjectId(payload.folderId));
+      const folder = await this.foldersRepo.findByIdSafe(
+        new Types.ObjectId(payload.folderId),
+      );
       if (!folder || folder.ownerId.toString() !== payload.teacherId) {
-        throw new ForbiddenException('Thư mục đích không tồn tại hoặc bạn không có quyền thao tác.');
+        throw new ForbiddenException(
+          'Thư mục đích không tồn tại hoặc bạn không có quyền thao tác.',
+        );
       }
 
       // 2. [CTO SECURE FLOW] Truy xuất cứng Môn học từ Database theo Teacher ID
       const teacher = await this.usersService.findById(payload.teacherId);
       if (!teacher || !teacher.subjectIds || teacher.subjectIds.length === 0) {
-        throw new BadRequestException('Tài khoản của bạn chưa được phân công giảng dạy bộ môn nào. Vui lòng liên hệ Admin.');
+        throw new BadRequestException(
+          'Tài khoản của bạn chưa được phân công giảng dạy bộ môn nào. Vui lòng liên hệ Admin.',
+        );
       }
-      
+
       // [CTO FIX]: Xử lý an toàn trường hợp subjectIds đã bị UsersService populate thành Object
       const firstSubject: any = teacher.subjectIds[0];
-      const targetSubjectId = firstSubject._id 
-        ? firstSubject._id.toString() 
+      const targetSubjectId = firstSubject._id
+        ? firstSubject._id.toString()
         : firstSubject.toString();
 
       // [BỌC THÉP]: Chặn đứng mọi rác dữ liệu trước khi gọi xuống Taxonomy
       if (!Types.ObjectId.isValid(targetSubjectId)) {
-        throw new InternalServerErrorException(`Lỗi dữ liệu hệ thống: Mã môn học của giáo viên không hợp lệ (${targetSubjectId}).`);
+        throw new InternalServerErrorException(
+          `Lỗi dữ liệu hệ thống: Mã môn học của giáo viên không hợp lệ (${targetSubjectId}).`,
+        );
       }
 
       // 3. [CONTEXT INJECTION] Lấy cây Chuyên đề (Knowledge Topics)
-      const rawTopicTree = await this.topicsService.getTreeBySubject(targetSubjectId);
+      const rawTopicTree =
+        await this.topicsService.getTreeBySubject(targetSubjectId);
       const flatTopicsDict = this.flattenTopicTree(rawTopicTree);
       // 4. [HYBRID EXTRACTION] Bóc tách tài liệu
       const pdfFiles: any[] = [];
@@ -61,7 +82,10 @@ export class AiQuestionBuilderService {
         const mime = file.mimeType.toLowerCase();
         if (mime === 'application/pdf') {
           pdfFiles.push(file);
-        } else if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        } else if (
+          mime ===
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        ) {
           const result = await mammoth.extractRawText({ path: file.filePath });
           extractedText += `\n\n--- ĐỀ THI (${file.originalName}) ---\n${result.value}\n`;
         } else if (mime === 'text/plain' || mime === 'application/json') {
@@ -70,23 +94,33 @@ export class AiQuestionBuilderService {
       }
 
       // 5. [MEGA-PROMPTING] Xây dựng lời gọi LLM
-      const systemPrompt = this.buildExamSetterPrompt(flatTopicsDict, payload.additionalInstructions);
+      const systemPrompt = this.buildExamSetterPrompt(
+        flatTopicsDict,
+        payload.additionalInstructions,
+      );
       const finalUserMessage = `Dưới đây là văn bản bóc tách từ đề thi (nếu có):\n${extractedText}\n\nHãy kết hợp với file PDF đính kèm (nếu có) để tạo bộ câu hỏi JSON.`;
 
       let aiResponse;
       if (pdfFiles.length > 0) {
-        this.logger.debug(`[AI Engine] Đang gọi Google Gemini Flash (Multimodal) cho ${pdfFiles.length} file PDF...`);
+        this.logger.debug(
+          `[AI Engine] Đang gọi Google Gemini Flash (Multimodal) cho ${pdfFiles.length} file PDF...`,
+        );
         aiResponse = await this.aiService.processDocumentRequest({
           providerName: AiProviderName.GOOGLE,
           modelId: 'gemini-2.5-flash',
-          documents: pdfFiles.map(f => ({ filePath: f.filePath, mimeType: f.mimeType })),
+          documents: pdfFiles.map((f) => ({
+            filePath: f.filePath,
+            mimeType: f.mimeType,
+          })),
           systemPrompt: systemPrompt,
           userMessage: finalUserMessage,
           temperature: 0.1, // Nhiệt độ cực thấp để đảm bảo tính logic của đáp án
           responseFormat: 'json_object',
         });
       } else {
-        this.logger.debug(`[AI Engine] Đang gọi Google Gemini Flash (Text Only) cho file DOCX...`);
+        this.logger.debug(
+          `[AI Engine] Đang gọi Google Gemini Flash (Text Only) cho file DOCX...`,
+        );
         aiResponse = await this.aiService.processTextRequest({
           providerName: AiProviderName.GOOGLE,
           modelId: 'gemini-2.5-flash',
@@ -99,35 +133,48 @@ export class AiQuestionBuilderService {
 
       // 6. Parse JSON & Bắn vào Database
       const jsonBank = this.extractJsonFromAiResponse(aiResponse.content);
-      
-      if (!jsonBank.questions || !Array.isArray(jsonBank.questions) || jsonBank.questions.length === 0) {
-        throw new InternalServerErrorException('AI đã chạy nhưng không bóc tách được câu hỏi nào.');
+
+      if (
+        !jsonBank.questions ||
+        !Array.isArray(jsonBank.questions) ||
+        jsonBank.questions.length === 0
+      ) {
+        throw new InternalServerErrorException(
+          'AI đã chạy nhưng không bóc tách được câu hỏi nào.',
+        );
       }
 
-      this.logger.debug(`[AI Builder] Bóc thành công ${jsonBank.questions.length} câu. Bắt đầu lưu DB...`);
+      this.logger.debug(
+        `[AI Builder] Bóc thành công ${jsonBank.questions.length} câu. Bắt đầu lưu DB...`,
+      );
 
       // Tái sử dụng hàm xịn xò của QuestionsService (Đã bao gồm Transaction)
       // [CTO FIX]: Chỉ truyền đúng 1 Object Payload theo Interface
       await this.questionsService.bulkCreateQuestions({
         ownerId: payload.teacherId,
         folderId: payload.folderId,
-        questions: jsonBank.questions as any
+        questions: jsonBank.questions as any,
       });
 
-      return { 
+      return {
         status: 'SUCCESS',
         questionsGenerated: jsonBank.questions.length,
-        message: 'Đã bóc tách và tạo bộ câu hỏi thành công.'
+        message: 'Đã bóc tách và tạo bộ câu hỏi thành công.',
       };
-
     } catch (error: any) {
       this.logger.error(`[AI Question Lỗi]: ${error.message}`, error.stack);
-      if (error instanceof BadRequestException || error instanceof NotFoundException || error instanceof ForbiddenException) {
-          throw error;
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
       }
-      throw new BadRequestException(`Quá trình AI xử lý thất bại: ${error.message}`);
+      throw new BadRequestException(
+        `Quá trình AI xử lý thất bại: ${error.message}`,
+      );
     } finally {
-      await this.cleanupTempFiles(payload.files.map(f => f.filePath));
+      await this.cleanupTempFiles(payload.files.map((f) => f.filePath));
     }
   }
 
@@ -136,11 +183,18 @@ export class AiQuestionBuilderService {
    */
   private extractJsonFromAiResponse(aiText: string): AiQuestionBankResponse {
     try {
-      const cleanText = aiText.replace(/```json/gi, '').replace(/```/gi, '').trim();
+      const cleanText = aiText
+        .replace(/```json/gi, '')
+        .replace(/```/gi, '')
+        .trim();
       return JSON.parse(cleanText) as AiQuestionBankResponse;
     } catch (error) {
-      this.logger.error(`[JSON Parse Error] AI format sai: ${aiText.substring(0, 200)}...`);
-      throw new InternalServerErrorException('AI đã tạo phản hồi nhưng sai định dạng cấu trúc hệ thống.');
+      this.logger.error(
+        `[JSON Parse Error] AI format sai: ${aiText.substring(0, 200)}...`,
+      );
+      throw new InternalServerErrorException(
+        'AI đã tạo phản hồi nhưng sai định dạng cấu trúc hệ thống.',
+      );
     }
   }
 
@@ -161,7 +215,10 @@ export class AiQuestionBuilderService {
   /**
    * System Prompt "Thần Thánh" ép khung Question & Passage
    */
-  private buildExamSetterPrompt(topicsDict: string, extraInstructions?: string): string {
+  private buildExamSetterPrompt(
+    topicsDict: string,
+    extraInstructions?: string,
+  ): string {
     return `
 Bạn là một chuyên gia ra đề thi (Exam Setter) và phân tích dữ liệu giáo dục. Nhiệm vụ của bạn là đọc toàn bộ đề thi (bao gồm câu hỏi, bảng đáp án, và lời giải chi tiết), sau đó đối chiếu và gộp chúng lại thành một cấu trúc JSON hoàn chỉnh.
 
@@ -215,8 +272,8 @@ ${extraInstructions ? `\nLƯU Ý THÊM: ${extraInstructions}` : ''}
   }
 
   private async cleanupTempFiles(filePaths: string[]) {
-    const unlinkPromises = filePaths.map(path => 
-      fs.unlink(path).catch(() => null)
+    const unlinkPromises = filePaths.map((path) =>
+      fs.unlink(path).catch(() => null),
     );
     await Promise.all(unlinkPromises);
   }

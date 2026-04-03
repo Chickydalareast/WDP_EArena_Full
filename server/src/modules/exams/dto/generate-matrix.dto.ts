@@ -1,4 +1,15 @@
-import { IsArray, IsEnum, IsInt, IsMongoId, IsNotEmpty, IsString, MaxLength, Min, ValidateNested, ArrayMinSize } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsMongoId,
+  IsNotEmpty,
+  IsString,
+  MaxLength,
+  Min,
+  ValidateNested,
+  ArrayMinSize,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { DifficultyLevel } from '../../questions/schemas/question.schema';
 
@@ -6,18 +17,18 @@ class MatrixCriterionDto {
   @IsArray()
   @IsMongoId({ each: true })
   @ArrayMinSize(1)
-  folderIds: string[]; 
+  folderIds: string[];
 
   @IsMongoId()
   @IsNotEmpty()
-  topicId: string; 
+  topicId: string;
 
   @IsEnum(DifficultyLevel)
   difficulty: DifficultyLevel;
 
   @IsInt()
   @Min(1)
-  limit: number; 
+  limit: number;
 }
 
 export class GenerateMatrixDto {

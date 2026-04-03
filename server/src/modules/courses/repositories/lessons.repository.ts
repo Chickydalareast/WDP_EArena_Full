@@ -9,7 +9,8 @@ export class LessonsRepository extends AbstractRepository<LessonDocument> {
   protected readonly logger = new Logger(LessonsRepository.name);
 
   constructor(
-    @InjectModel(Lesson.name) private readonly lessonModel: Model<LessonDocument>,
+    @InjectModel(Lesson.name)
+    private readonly lessonModel: Model<LessonDocument>,
     @InjectConnection() connection: Connection,
   ) {
     super(lessonModel, connection);
@@ -25,38 +26,57 @@ export class LessonsRepository extends AbstractRepository<LessonDocument> {
     return lastLesson ? lastLesson.order + 1 : 1;
   }
 
-  async bulkUpdateOrderAndSection(updates: { id: string; order: number; sectionId: string }[]): Promise<any> {
+  async bulkUpdateOrderAndSection(
+    updates: { id: string; order: number; sectionId: string }[],
+  ): Promise<any> {
     if (!updates.length) return;
-    const ops = updates.map(u => ({
+    const ops = updates.map((u) => ({
       updateOne: {
         filter: { _id: new Types.ObjectId(u.id) },
-        update: { $set: { order: u.order, sectionId: new Types.ObjectId(u.sectionId) } },
+        update: {
+          $set: { order: u.order, sectionId: new Types.ObjectId(u.sectionId) },
+        },
       },
     }));
     return this.model.bulkWrite(ops, { ordered: false });
   }
 
-  async bulkUpdateOrderAndSectionStrict(courseId: string, updates: { id: string; order: number; sectionId: string }[]): Promise<any> {
+  async bulkUpdateOrderAndSectionStrict(
+    courseId: string,
+    updates: { id: string; order: number; sectionId: string }[],
+  ): Promise<any> {
     if (!updates.length) return;
-    const ops = updates.map(u => ({
+    const ops = updates.map((u) => ({
       updateOne: {
-        filter: { _id: new Types.ObjectId(u.id), courseId: new Types.ObjectId(courseId) },
-        update: { $set: { order: u.order, sectionId: new Types.ObjectId(u.sectionId) } },
+        filter: {
+          _id: new Types.ObjectId(u.id),
+          courseId: new Types.ObjectId(courseId),
+        },
+        update: {
+          $set: { order: u.order, sectionId: new Types.ObjectId(u.sectionId) },
+        },
       },
     }));
-    return this.model.bulkWrite(ops, { ordered: false, session: this.currentSession });
+    return this.model.bulkWrite(ops, {
+      ordered: false,
+      session: this.currentSession,
+    });
   }
 
-  async countLessonsByCourse(courseId: string | Types.ObjectId): Promise<number> {
-    return this.model.countDocuments({
-      courseId: new Types.ObjectId(courseId.toString())
-    }).exec();
+  async countLessonsByCourse(
+    courseId: string | Types.ObjectId,
+  ): Promise<number> {
+    return this.model
+      .countDocuments({
+        courseId: new Types.ObjectId(courseId.toString()),
+      })
+      .exec();
   }
 
   async getPreviousLessonId(
     courseId: string,
     currentSectionOrder: number,
-    currentLessonOrder: number
+    currentLessonOrder: number,
   ): Promise<string | null> {
     const pipeline: PipelineStage[] = [
       { $match: { courseId: new Types.ObjectId(courseId) } },
@@ -65,8 +85,8 @@ export class LessonsRepository extends AbstractRepository<LessonDocument> {
           from: 'course_sections',
           localField: 'sectionId',
           foreignField: '_id',
-          as: 'section'
-        }
+          as: 'section',
+        },
       },
       { $unwind: '$section' },
       {
@@ -75,14 +95,14 @@ export class LessonsRepository extends AbstractRepository<LessonDocument> {
             { 'section.order': { $lt: currentSectionOrder } },
             {
               'section.order': currentSectionOrder,
-              order: { $lt: currentLessonOrder }
-            }
-          ]
-        }
+              order: { $lt: currentLessonOrder },
+            },
+          ],
+        },
       },
       { $sort: { 'section.order': -1, order: -1 } },
       { $limit: 1 },
-      { $project: { _id: 1 } }
+      { $project: { _id: 1 } },
     ];
 
     const [result] = await this.model.aggregate(pipeline).exec();

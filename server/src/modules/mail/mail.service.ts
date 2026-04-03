@@ -1,16 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { WithdrawalApprovalMailPayload, WithdrawalRejectionMailPayload } from './interfaces/mail-withdrawal.interface';
+import {
+  WithdrawalApprovalMailPayload,
+  WithdrawalRejectionMailPayload,
+} from './interfaces/mail-withdrawal.interface';
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
 
   constructor(@InjectQueue('mail_queue') private mailQueue: Queue) {}
-  
 
-  async sendUserOtp(email: string, name: string, otp: string): Promise<boolean> {
+  async sendUserOtp(
+    email: string,
+    name: string,
+    otp: string,
+  ): Promise<boolean> {
     try {
       await this.mailQueue.add(
         'send_otp',
@@ -32,30 +38,51 @@ export class MailService {
     }
   }
 
-  async sendCourseApproval(email: string, name: string, courseTitle: string): Promise<boolean> {
+  async sendCourseApproval(
+    email: string,
+    name: string,
+    courseTitle: string,
+  ): Promise<boolean> {
     try {
       await this.mailQueue.add(
         'course_approval',
         { email, name, courseTitle, status: 'APPROVED' },
-        { attempts: 3, backoff: { type: 'exponential', delay: 1000 }, removeOnComplete: true }
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1000 },
+          removeOnComplete: true,
+        },
       );
       return true;
     } catch (error: any) {
-      this.logger.error(`[MailQueue Error] Không thể gửi mail duyệt khóa học cho ${email}: ${error.message}`);
+      this.logger.error(
+        `[MailQueue Error] Không thể gửi mail duyệt khóa học cho ${email}: ${error.message}`,
+      );
       return false;
     }
   }
 
-  async sendCourseRejection(email: string, name: string, courseTitle: string, reason: string): Promise<boolean> {
+  async sendCourseRejection(
+    email: string,
+    name: string,
+    courseTitle: string,
+    reason: string,
+  ): Promise<boolean> {
     try {
       await this.mailQueue.add(
         'course_rejection',
         { email, name, courseTitle, status: 'REJECTED', reason },
-        { attempts: 3, backoff: { type: 'exponential', delay: 1000 }, removeOnComplete: true }
+        {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 1000 },
+          removeOnComplete: true,
+        },
       );
       return true;
     } catch (error: any) {
-      this.logger.error(`[MailQueue Error] Không thể gửi mail từ chối khóa học cho ${email}: ${error.message}`);
+      this.logger.error(
+        `[MailQueue Error] Không thể gửi mail từ chối khóa học cho ${email}: ${error.message}`,
+      );
       return false;
     }
   }
@@ -67,9 +94,13 @@ export class MailService {
         backoff: 5000,
         removeOnComplete: true,
       });
-      this.logger.log(`[Queue] Added Withdrawal Approval mail job to: ${payload.to}`);
+      this.logger.log(
+        `[Queue] Added Withdrawal Approval mail job to: ${payload.to}`,
+      );
     } catch (error) {
-      this.logger.error(`[Queue] Error adding Withdrawal Approval job: ${error.message}`);
+      this.logger.error(
+        `[Queue] Error adding Withdrawal Approval job: ${error.message}`,
+      );
     }
   }
 
@@ -80,9 +111,13 @@ export class MailService {
         backoff: 5000,
         removeOnComplete: true,
       });
-      this.logger.log(`[Queue] Added Withdrawal Rejection mail job to: ${payload.to}`);
+      this.logger.log(
+        `[Queue] Added Withdrawal Rejection mail job to: ${payload.to}`,
+      );
     } catch (error) {
-      this.logger.error(`[Queue] Error adding Withdrawal Rejection job: ${error.message}`);
+      this.logger.error(
+        `[Queue] Error adding Withdrawal Rejection job: ${error.message}`,
+      );
     }
   }
 

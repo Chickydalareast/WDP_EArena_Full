@@ -1,4 +1,12 @@
-import { IsOptional, IsString, IsNumber, Min, IsEnum, IsBoolean, IsMongoId } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsNumber,
+  Min,
+  IsEnum,
+  IsBoolean,
+  IsMongoId,
+} from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { CourseSortType } from '../enums/course-search.enum';
 
@@ -25,8 +33,10 @@ export class SearchPublicCoursesDto {
 
   @IsOptional()
   @Transform(({ value }) => {
-    if (value === 'true' || value === true || value === 1 || value === '1') return true;
-    if (value === 'false' || value === false || value === 0 || value === '0') return false;
+    if (value === 'true' || value === true || value === 1 || value === '1')
+      return true;
+    if (value === 'false' || value === false || value === 0 || value === '0')
+      return false;
     return undefined;
   })
   @IsBoolean()
@@ -45,6 +55,8 @@ export class SearchPublicCoursesDto {
   maxPrice?: number;
 
   @IsOptional()
-  @IsEnum(CourseSortType, { message: `sort chỉ chấp nhận các giá trị: ${Object.values(CourseSortType).join(', ')}` })
+  @IsEnum(CourseSortType, {
+    message: `sort chỉ chấp nhận các giá trị: ${Object.values(CourseSortType).join(', ')}`,
+  })
   sort?: CourseSortType;
 }

@@ -3,7 +3,10 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { BullModule } from '@nestjs/bullmq';
 
 // --- SCHEMAS ---
-import { QuestionFolder, QuestionFolderSchema } from './schemas/question-folder.schema';
+import {
+  QuestionFolder,
+  QuestionFolderSchema,
+} from './schemas/question-folder.schema';
 import { Question, QuestionSchema } from './schemas/question.schema';
 
 // --- REPOSITORIES ---
@@ -48,12 +51,12 @@ import { QUESTION_TASKS_QUEUE } from './interfaces/question-jobs.interface';
     TaxonomyModule,
     UsersModule,
     MediaModule,
-    AiModule
+    AiModule,
   ],
   controllers: [
     QuestionsController,
     QuestionFoldersController,
-    AiQuestionBuilderController
+    AiQuestionBuilderController,
   ],
   providers: [
     QuestionFoldersRepository,
@@ -62,13 +65,13 @@ import { QUESTION_TASKS_QUEUE } from './interfaces/question-jobs.interface';
     QuestionFoldersService,
     AiQuestionBuilderService,
     QuestionOrganizerEngine,
-    QuestionTasksProcessor
+    QuestionTasksProcessor,
   ],
   exports: [
     QuestionFoldersRepository,
     QuestionsRepository,
     QuestionsService,
-    QuestionFoldersService
+    QuestionFoldersService,
   ],
 })
-export class QuestionsModule { }
+export class QuestionsModule {}

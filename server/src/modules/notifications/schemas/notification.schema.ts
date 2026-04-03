@@ -4,35 +4,40 @@ import { NotificationType } from '../constants/notification-event.constant';
 import type { NotificationPayload } from '../interfaces/notification.interface';
 
 @Schema({
-    timestamps: true,
-    collection: 'notifications',
-    // Tối ưu hóa Mongoose ảo hóa ID
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+  timestamps: true,
+  collection: 'notifications',
+  // Tối ưu hóa Mongoose ảo hóa ID
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true },
 })
 export class Notification extends Document {
-    @Prop({ type: SchemaTypes.ObjectId, ref: 'User', required: true, index: true })
-    receiverId: Types.ObjectId;
+  @Prop({
+    type: SchemaTypes.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  })
+  receiverId: Types.ObjectId;
 
-    // Nếu là hệ thống tự động gửi (ví dụ: Chấm điểm xong), senderId = null
-    @Prop({ type: SchemaTypes.ObjectId, ref: 'User', default: null })
-    senderId: Types.ObjectId | null;
+  // Nếu là hệ thống tự động gửi (ví dụ: Chấm điểm xong), senderId = null
+  @Prop({ type: SchemaTypes.ObjectId, ref: 'User', default: null })
+  senderId: Types.ObjectId | null;
 
-    @Prop({ type: String, enum: NotificationType, required: true, index: true })
-    type: string;
+  @Prop({ type: String, enum: NotificationType, required: true, index: true })
+  type: string;
 
-    @Prop({ type: String, required: true })
-    title: string;
+  @Prop({ type: String, required: true })
+  title: string;
 
-    @Prop({ type: String, required: true })
-    message: string;
+  @Prop({ type: String, required: true })
+  message: string;
 
-    // Sử dụng Mixed Type nhưng được kiểm soát chặt bởi TypeScript Interface
-    @Prop({ type: SchemaTypes.Mixed, default: {} })
-    payload: NotificationPayload;
+  // Sử dụng Mixed Type nhưng được kiểm soát chặt bởi TypeScript Interface
+  @Prop({ type: SchemaTypes.Mixed, default: {} })
+  payload: NotificationPayload;
 
-    @Prop({ type: Boolean, default: false })
-    isRead: boolean;
+  @Prop({ type: Boolean, default: false })
+  isRead: boolean;
 }
 
 export const NotificationSchema = SchemaFactory.createForClass(Notification);

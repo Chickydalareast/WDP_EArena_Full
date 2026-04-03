@@ -15,7 +15,7 @@ import {
   Min,
   registerDecorator,
   ValidationOptions,
-  ValidationArguments
+  ValidationArguments,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { DifficultyLevel, QuestionType } from '../schemas/question.schema';
@@ -25,7 +25,7 @@ import { NoBase64Image } from '../../../common/decorators/no-base64.decorator';
 // [CTO CHỐT CHẶN CORE]: Cross-Validation Guard cho Matrix Engine
 // =======================================================================
 export function IsRequiredIfPublished(validationOptions?: ValidationOptions) {
-  return function (object: Object, propertyName: string) {
+  return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isRequiredIfPublished',
       target: object.constructor,
@@ -34,7 +34,7 @@ export function IsRequiredIfPublished(validationOptions?: ValidationOptions) {
       validator: {
         validate(value: any, args: ValidationArguments) {
           const { isDraft } = args.object as any;
-          
+
           // Nếu là tạo Nháp (isDraft = true hoặc undefined), cho qua
           if (isDraft === true || isDraft === undefined) {
             return true;
@@ -47,17 +47,21 @@ export function IsRequiredIfPublished(validationOptions?: ValidationOptions) {
           }
           if (propertyName === 'difficultyLevel') {
             // Bắt buộc phải có giá trị và tuyệt đối KHÔNG được là UNKNOWN
-            return value !== undefined && value !== null && value !== DifficultyLevel.UNKNOWN;
+            return (
+              value !== undefined &&
+              value !== null &&
+              value !== DifficultyLevel.UNKNOWN
+            );
           }
-          
+
           return true;
         },
         defaultMessage(args: ValidationArguments) {
           if (args.property === 'difficultyLevel') {
-             return 'Bắt buộc chọn Mức độ học thuật (khác UNKNOWN) khi Xuất bản câu hỏi.';
+            return 'Bắt buộc chọn Mức độ học thuật (khác UNKNOWN) khi Xuất bản câu hỏi.';
           }
           return `Bắt buộc chọn Chuyên đề (topicId) khi Xuất bản câu hỏi.`;
-        }
+        },
       },
     });
   };

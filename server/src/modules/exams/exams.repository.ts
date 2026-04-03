@@ -15,19 +15,26 @@ export class ExamsRepository extends AbstractRepository<ExamDocument> {
     super(model, connection);
   }
 
-  async getExamsWithPagination(teacherId: string, page: number, limit: number, search?: string, type?: ExamType, subjectId?: string) {
+  async getExamsWithPagination(
+    teacherId: string,
+    page: number,
+    limit: number,
+    search?: string,
+    type?: ExamType,
+    subjectId?: string,
+  ) {
     const skip = (page - 1) * limit;
     const matchStage: any = { teacherId: new Types.ObjectId(teacherId) };
 
     if (search) matchStage.title = { $regex: search, $options: 'i' };
-    
+
     // [FIX BLIND SPOT]: Xử lý triệt để loại trừ COURSE_QUIZ khỏi danh sách quản lý
     if (type) {
       matchStage.type = type;
     } else {
       matchStage.type = { $ne: ExamType.COURSE_QUIZ }; // Ẩn hoàn toàn quiz nội bộ khóa học
     }
-    
+
     if (subjectId) matchStage.subjectId = new Types.ObjectId(subjectId);
 
     const [result] = await this.model.aggregate([
@@ -44,14 +51,21 @@ export class ExamsRepository extends AbstractRepository<ExamDocument> {
       {
         $addFields: {
           defaultPaperId: {
-            $ifNull: [{ $toString: { $arrayElemAt: ['$papers._id', 0] } }, null]
-          }
-        }
+            $ifNull: [
+              { $toString: { $arrayElemAt: ['$papers._id', 0] } },
+              null,
+            ],
+          },
+        },
       },
       {
         $facet: {
           metadata: [{ $count: 'total' }],
-          data: [{ $skip: skip }, { $limit: limit }, { $project: { __v: 0, updatedAt: 0, papers: 0 } }],
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            { $project: { __v: 0, updatedAt: 0, papers: 0 } },
+          ],
         },
       },
     ]);

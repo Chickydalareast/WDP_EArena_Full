@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { QuestionFoldersService } from './question-folders.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -7,14 +16,16 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { RequireTeacherVerified } from '../../common/decorators/teacher-verified.decorator';
 import { CreateQuestionFolderDto } from './dto/create-question-folder.dto';
-import { UpdateQuestionFolderDto } from './dto/update-question-folder.dto'; 
+import { UpdateQuestionFolderDto } from './dto/update-question-folder.dto';
 
 @Controller('question-folders')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequireTeacherVerified()
 @Roles(UserRole.TEACHER, UserRole.ADMIN)
 export class QuestionFoldersController {
-  constructor(private readonly questionFoldersService: QuestionFoldersService) {}
+  constructor(
+    private readonly questionFoldersService: QuestionFoldersService,
+  ) {}
 
   @Post()
   async createFolder(
