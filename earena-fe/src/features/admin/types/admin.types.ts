@@ -138,3 +138,26 @@ export interface ForceTakedownPayload {
 }
 
 export type MasterListCourseStatus = Exclude<CourseApprovalStatus, 'DRAFT'>;
+
+// Teacher Verification Types
+export type TeacherVerificationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
+
+export interface Qualification {
+  url: string;
+  name: string;
+  uploadedAt: string;
+}
+
+export interface AdminTeacherVerification {
+  _id: string;
+  email: string;
+  fullName: string;
+  avatar?: string;
+  phone?: string;
+  teacherVerificationStatus: TeacherVerificationStatus;
+  teacherVerificationNote?: string;
+  teacherVerifiedAt?: string;
+  hasUploadedQualifications: boolean;
+  qualifications?: Qualification[];
+  createdAt?: string;
+}

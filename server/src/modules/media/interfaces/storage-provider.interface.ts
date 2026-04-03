@@ -1,4 +1,3 @@
-// file: src/modules/media/interfaces/storage-provider.interface.ts
 import { MediaContext } from '../schemas/media.schema';
 
 export const CLOUDINARY_PROVIDER = 'CLOUDINARY_PROVIDER';
@@ -35,13 +34,19 @@ export interface ICloudinaryProvider extends ITicketStorageProvider {
     folder: string,
     publicId?: string,
   ): Promise<StorageMetadata>;
+
+  uploadImageBuffer(
+    buffer: Buffer, 
+    folder: string
+  ): Promise<StorageMetadata>;
+
   deleteFile(
     publicId: string,
     resourceType?: 'image' | 'video' | 'raw',
   ): Promise<boolean>;
+
   generateSignature(folder: string): any;
 
-  // [CTO UPGRADE]: Thêm hợp đồng sinh chữ ký bảo mật
   generateSignedUrl(
     publicId: string,
     resourceType: 'image' | 'video' | 'raw',
@@ -53,5 +58,6 @@ export interface IVideoProvider extends ITicketStorageProvider {
   createResumableUploadSession(
     fileMetadata: any,
   ): Promise<{ uploadUrl: string; fileId: string }>;
+  
   deleteVideo(fileId: string): Promise<boolean>;
 }

@@ -8,7 +8,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { Types, UpdateQuery } from 'mongoose';
 import { UsersRepository } from './users.repository';
-import { AuthProvider, UserDocument } from './schemas/user.schema';
+import { AuthProvider, UserDocument, TeacherVerificationStatus } from './schemas/user.schema';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import {
   AVATAR_PROVIDER_URL,
@@ -22,6 +22,8 @@ export type CreateUserPayload = {
   role?: UserRole | string;
   subjectIds?: string[] | Types.ObjectId[];
   isEmailVerified?: boolean;
+  qualifications?: { url: string; name: string; uploadedAt: Date }[];
+  hasUploadedQualifications?: boolean;
 };
 
 export type UpdateProfilePayload = {
@@ -46,8 +48,16 @@ export class UsersService {
   constructor(private readonly usersRepository: UsersRepository) {}
 
   async create(payload: CreateUserPayload): Promise<UserDocument> {
-    const { email, password, role, fullName, isEmailVerified, subjectIds } =
-      payload;
+    const { 
+      email, 
+      password, 
+      role, 
+      fullName, 
+      isEmailVerified, 
+      subjectIds, 
+      qualifications, 
+      hasUploadedQualifications 
+    } = payload;
 
     if (!password) {
       throw new BadRequestException(
@@ -80,6 +90,8 @@ export class UsersService {
       role: role || UserRole.STUDENT,
       isEmailVerified: isEmailVerified || false,
       subjectIds: validSubjectIds,
+      qualifications: qualifications || [],
+      hasUploadedQualifications: hasUploadedQualifications || false,
     });
 
     await this.usersRepository.modelInstance.populate(newUser, [
@@ -334,5 +346,61 @@ export class UsersService {
       }
       throw error;
     }
+  }
+
+  async addQualification(userId: string, qualification: { url: string; name: string; uploadedAt: Date }) {
+    const user = await this.usersRepository.modelInstance.findByIdAndUpdate(
+      userId,
+      {
+        $push: { qualifications: qualification },
+        $set: { hasUploadedQualifications: true }
+      },
+      { new: true }
+    ).lean();
+
+    if (!user) throw new NotFoundException('Không tìm thấy tài khoản');
+    return user;
+  }
+
+  async removeQualification(userId: string, index: number) {
+    const user = await this.findById(userId);
+    if (!user) throw new NotFoundException('Không tìm thấy tài khoản');
+
+    if (index < 0 || index >= user.qualifications.length) {
+      throw new BadRequestException('Index không hợp lệ');
+    }
+
+    const qualifications = [...user.qualifications];
+    qualifications.splice(index, 1);
+
+    const updated = await this.usersRepository.modelInstance.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          qualifications,
+          hasUploadedQualifications: qualifications.length > 0
+        }
+      },
+      { new: true }
+    ).lean();
+
+    return updated;
+  }
+
+  async updateTeacherVerificationStatus(userId: string, status: TeacherVerificationStatus, note?: string) {
+    const updated = await this.usersRepository.modelInstance.findByIdAndUpdate(
+      userId,
+      {
+        $set: {
+          teacherVerificationStatus: status,
+          teacherVerificationNote: note || null,
+          teacherVerifiedAt: status === TeacherVerificationStatus.VERIFIED ? new Date() : null
+        }
+      },
+      { new: true }
+    ).lean();
+
+    if (!updated) throw new NotFoundException('Không tìm thấy tài khoản');
+    return updated;
   }
 }

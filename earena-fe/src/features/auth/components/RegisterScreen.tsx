@@ -1,6 +1,6 @@
 "use client";
 import { z } from 'zod';
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { GoogleLogin } from "@react-oauth/google";
@@ -8,10 +8,12 @@ import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { toast } from "sonner";
+import { Plus, X } from "lucide-react";
 import { useSubjects } from "../hooks/useSubjects";
 
 import { useAuthFlowStore } from "../stores/auth-flow.store";
 import { useSendOtp, useVerifyOtp, useRegister, useGoogleAuth } from "../hooks";
+import { authService } from "../api/auth.service";
 import {
   registerEmailSchema,
   RegisterEmailDTO,
@@ -19,6 +21,7 @@ import {
   VerifyOtpFormDTO,
   registerDetailsSchema,
   RegisterDetailsDTO,
+  QualificationInput,
 } from "../types/auth.schema";
 
 const EmailStep = () => {
@@ -300,6 +303,11 @@ const DetailsStep = () => {
   const { mutate: executeRegister, isPending } = useRegister();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [qualifications, setQualifications] = useState<QualificationInput[]>([]);
+  const [newQualName, setNewQualName] = useState("");
+  const [newQualFile, setNewQualFile] = useState<File | null>(null);
+  const [qualUploadPending, setQualUploadPending] = useState(false);
+  const qualFileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: subjects = [], isLoading: isLoadingSubjects } = useSubjects();
 
@@ -353,9 +361,15 @@ const DetailsStep = () => {
       return;
     }
 
+    // Validate qualifications for Teacher
+    if (role === "TEACHER" && qualifications.length === 0) {
+      toast.error("Vui lòng upload ít nhất một bằng cấp");
+      return;
+    }
+
     // Boundary Mapping: Biến đổi Form State (String) thành API Contract (Array)
-    const finalSubjectIds = (role === "TEACHER" && data.subjectId) 
-      ? [data.subjectId] 
+    const finalSubjectIds = (role === "TEACHER" && data.subjectId)
+      ? [data.subjectId]
       : undefined;
 
     executeRegister({
@@ -364,8 +378,44 @@ const DetailsStep = () => {
       password: data.password,
       ticket,
       role,
-      subjectIds: finalSubjectIds, 
+      subjectIds: finalSubjectIds,
+      qualifications: role === "TEACHER" ? qualifications : undefined,
     });
+  };
+
+  const addQualification = async () => {
+    if (!newQualName.trim() || !newQualFile) {
+      toast.error("Vui lòng nhập tên bằng cấp và chọn file ảnh");
+      return;
+    }
+    if (!ticket) {
+      toast.error("Phiên đăng ký không hợp lệ", { description: "Vui lòng bắt đầu lại." });
+      useAuthFlowStore.getState().resetFlow();
+      return;
+    }
+    setQualUploadPending(true);
+    try {
+      const item = await authService.uploadRegisterQualification({
+        email,
+        ticket,
+        name: newQualName.trim(),
+        file: newQualFile,
+      });
+      setQualifications([...qualifications, item]);
+      setNewQualName("");
+      setNewQualFile(null);
+      if (qualFileInputRef.current) qualFileInputRef.current.value = "";
+      toast.success("Đã tải ảnh bằng cấp lên");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Tải ảnh thất bại";
+      toast.error(msg);
+    } finally {
+      setQualUploadPending(false);
+    }
+  };
+
+  const removeQualification = (index: number) => {
+    setQualifications(qualifications.filter((_, i) => i !== index));
   };
 
   return (
@@ -513,47 +563,126 @@ const DetailsStep = () => {
 
       {/* KHU VỰC CHUYÊN MÔN: Chỉ hiển thị khi role là TEACHER */}
       {role === "TEACHER" && (
-        <div className="pt-2">
-          <Label className="block text-sm font-semibold text-foreground mb-1.5">
-            Chuyên môn giảng dạy <span className="text-red-500">*</span>
-          </Label>
-          <p className="text-xs text-muted-foreground mb-3">
-            Vui lòng chọn môn học bạn sẽ đảm nhiệm.
-          </p>
-
-          {isLoadingSubjects ? (
-            <div className="flex justify-center items-center py-6 border-2 border-dashed border-border rounded-xl">
-              <span className="material-symbols-outlined animate-spin text-primary text-2xl">
-                progress_activity
-              </span>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 max-h-52 overflow-y-auto pr-1 custom-scrollbar">
-              {subjects.map((subject) => (
-                <label
-                  key={subject._id}
-                  className="flex items-center space-x-3 p-3 border-2 border-border rounded-xl cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-all has-[:checked]:border-primary has-[:checked]:bg-primary/5"
-                >
-                  <input
-                    type="radio" 
-                    value={subject._id}
-                    {...register("subjectId")} // Đã đổi biến thành subjectId
-                    className="w-4 h-4 text-primary rounded-full border-muted focus:ring-primary focus:ring-offset-background"
-                    disabled={isPending}
-                  />
-                  <span className="text-sm font-medium text-foreground select-none line-clamp-1">
-                    {subject.name}
-                  </span>
-                </label>
-              ))}
-            </div>
-          )}
-          {errors.subjectId && (
-            <p className="text-sm font-medium text-red-500 mt-2">
-              {errors.subjectId.message as string}
+        <>
+          <div className="pt-2">
+            <Label className="block text-sm font-semibold text-foreground mb-1.5">
+              Chuyên môn giảng dạy <span className="text-red-500">*</span>
+            </Label>
+            <p className="text-xs text-muted-foreground mb-3">
+              Vui lòng chọn môn học bạn sẽ đảm nhiệm.
             </p>
-          )}
-        </div>
+
+            {isLoadingSubjects ? (
+              <div className="flex justify-center items-center py-6 border-2 border-dashed border-border rounded-xl">
+                <span className="material-symbols-outlined animate-spin text-primary text-2xl">
+                  progress_activity
+                </span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 max-h-52 overflow-y-auto pr-1 custom-scrollbar">
+                {subjects.map((subject) => (
+                  <label
+                    key={subject._id}
+                    className="flex items-center space-x-3 p-3 border-2 border-border rounded-xl cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-all has-[:checked]:border-primary has-[:checked]:bg-primary/5"
+                  >
+                    <input
+                      type="radio"
+                      value={subject._id}
+                      {...register("subjectId")} // Đã đổi biến thành subjectId
+                      className="w-4 h-4 text-primary rounded-full border-muted focus:ring-primary focus:ring-offset-background"
+                      disabled={isPending}
+                    />
+                    <span className="text-sm font-medium text-foreground select-none line-clamp-1">
+                      {subject.name}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+            {errors.subjectId && (
+              <p className="text-sm font-medium text-red-500 mt-2">
+                {errors.subjectId.message as string}
+              </p>
+            )}
+          </div>
+
+          {/* KHU VỰC BẰNG CẤP: Chỉ hiển thị khi role là TEACHER */}
+          <div className="pt-2">
+            <Label className="block text-sm font-semibold text-foreground mb-1.5">
+              Bằng cấp / Chứng chỉ <span className="text-red-500">*</span>
+            </Label>
+            <p className="text-xs text-muted-foreground mb-3">
+              Tải lên ít nhất một ảnh bằng cấp / chứng chỉ (JPEG, PNG, WebP hoặc GIF, tối đa 5MB).
+            </p>
+
+            {/* Danh sách bằng cấp đã thêm */}
+            {qualifications.length > 0 && (
+              <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
+                {qualifications.map((q, index) => (
+                  <div key={index} className="flex items-center justify-between gap-2 p-3 rounded-lg border bg-muted/30">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={q.url}
+                        alt=""
+                        className="w-14 h-14 object-cover rounded-md border flex-shrink-0 bg-background"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{q.name}</div>
+                        <div className="text-xs text-muted-foreground truncate">Đã tải lên</div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeQualification(index)}
+                      className="p-1 hover:bg-destructive/10 rounded text-destructive flex-shrink-0"
+                      disabled={isPending || qualUploadPending}
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Form thêm bằng cấp mới */}
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+              <div className="flex-1 space-y-1">
+                <Input
+                  placeholder="Tên bằng cấp (VD: Bằng cử nhân)"
+                  value={newQualName}
+                  onChange={(e) => setNewQualName(e.target.value)}
+                  disabled={isPending || qualUploadPending}
+                  className="text-sm"
+                />
+              </div>
+              <div className="flex-1 space-y-1">
+                <Input
+                  ref={qualFileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  disabled={isPending || qualUploadPending}
+                  className="text-sm cursor-pointer"
+                  onChange={(e) => setNewQualFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void addQualification()}
+                disabled={isPending || qualUploadPending || !newQualName.trim() || !newQualFile}
+                className="flex-shrink-0 w-full sm:w-auto"
+              >
+                {qualUploadPending ? (
+                  <span className="material-symbols-outlined animate-spin text-lg">progress_activity</span>
+                ) : (
+                  <Plus className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+          </div>
+        </>
       )}
 
       <Button

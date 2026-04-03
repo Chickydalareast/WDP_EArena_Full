@@ -6,7 +6,8 @@ import * as bcrypt from 'bcrypt';
 import { CoursesRepository } from '../courses/courses.repository';
 import { CourseStatus } from '../courses/schemas/course.schema';
 
-import { User, UserDocument, UserStatus } from '../users/schemas/user.schema';
+import { User, UserDocument, UserStatus, TeacherVerificationStatus } from '../users/schemas/user.schema';
+import { Token } from '../auth/schemas/token.schema';
 import { Exam, ExamDocument, ExamType } from '../exams/schemas/exam.schema';
 import { Question, QuestionDocument } from '../questions/schemas/question.schema';
 import { Class, ClassDocument } from '../classes/schemas/class.schema';
@@ -17,6 +18,7 @@ import { TransactionStatus } from '../subscriptions/schemas/subscription-transac
 import { RedisService } from '../../common/redis/redis.service';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { ExamsService } from '../exams/exams.service';
+import { MailService } from '../mail/mail.service';
 
 import { PricingPlansRepository } from '../subscriptions/repositories/pricing-plans.repository';
 import { SubscriptionTransactionsRepository } from '../subscriptions/repositories/subscription-transactions.repository';
@@ -33,6 +35,7 @@ function buildPageMeta(page: number, limit: number, totalItems: number): PageMet
 export class AdminService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
+    @InjectModel(Token.name) private readonly tokenModel: Model<Token>,
     @InjectModel(Exam.name) private readonly examModel: Model<ExamDocument>,
     @InjectModel(Question.name) private readonly questionModel: Model<QuestionDocument>,
     @InjectModel(Class.name) private readonly classModel: Model<ClassDocument>,
@@ -46,6 +49,7 @@ export class AdminService {
     private readonly coursesRepo: CoursesRepository,
     
     private readonly examsService: ExamsService,
+    private readonly mailService: MailService,
   ) {}
 
   async getOverview() {
@@ -375,18 +379,33 @@ export class AdminService {
   async listTeacherVerifications(query: { page: number; limit: number; status?: string; search?: string }): Promise<PageResult<any>> {
     const { page, limit, status, search } = query;
     const filter: any = { role: UserRole.TEACHER };
+    const andConditions: any[] = [];
+
     if (status) {
       if (status === 'PENDING') {
-        filter.teacherVerificationStatus = { $in: ['PENDING', null] };
+        andConditions.push({
+          $or: [
+            { teacherVerificationStatus: 'PENDING' },
+            { teacherVerificationStatus: { $exists: false } },
+            { teacherVerificationStatus: null },
+          ],
+        });
       } else {
         filter.teacherVerificationStatus = status;
       }
     }
-    if (search) {
-      filter.$or = [
-        { email: { $regex: search, $options: 'i' } },
-        { fullName: { $regex: search, $options: 'i' } },
-      ];
+
+    if (search?.trim()) {
+      andConditions.push({
+        $or: [
+          { email: { $regex: search.trim(), $options: 'i' } },
+          { fullName: { $regex: search.trim(), $options: 'i' } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      filter.$and = andConditions;
     }
 
     const skip = (page - 1) * limit;
@@ -394,7 +413,7 @@ export class AdminService {
     const [items, totalItems] = await Promise.all([
       this.userModel
         .find(filter)
-        .select('email fullName avatar phone teacherVerificationStatus teacherVerificationNote teacherVerifiedAt')
+        .select('email fullName avatar phone teacherVerificationStatus teacherVerificationNote teacherVerifiedAt hasUploadedQualifications qualifications')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -407,20 +426,49 @@ export class AdminService {
   }
 
   async updateTeacherVerification(adminId: string, teacherId: string, payload: { status: string; note?: string }) {
+    const teacher = await this.userModel.findOne(
+      { _id: new Types.ObjectId(teacherId), role: UserRole.TEACHER },
+    ).lean();
+
+    if (!teacher) throw new NotFoundException('Teacher không tồn tại');
+
+    if (payload.status === TeacherVerificationStatus.REJECTED) {
+      await this.mailService.sendTeacherVerificationRejection(
+        teacher.email,
+        teacher.fullName,
+        payload.note,
+      );
+      await this.tokenModel.deleteMany({ userId: new Types.ObjectId(teacherId) });
+      await this.userModel.findOneAndDelete({
+        _id: new Types.ObjectId(teacherId),
+        role: UserRole.TEACHER,
+      });
+      return { success: true };
+    }
+
     const updated = await this.userModel.findOneAndUpdate(
       { _id: new Types.ObjectId(teacherId), role: UserRole.TEACHER },
       {
         $set: {
           teacherVerificationStatus: payload.status,
           teacherVerificationNote: payload.note || null,
-          teacherVerifiedAt: payload.status === 'VERIFIED' ? new Date() : null,
-          teacherVerifiedBy: payload.status === 'VERIFIED' ? new Types.ObjectId(adminId) : null,
+          teacherVerifiedAt: payload.status === TeacherVerificationStatus.VERIFIED ? new Date() : null,
+          teacherVerifiedBy: payload.status === TeacherVerificationStatus.VERIFIED ? new Types.ObjectId(adminId) : null,
         },
       },
       { returnDocument: 'after' }
     ).lean();
 
     if (!updated) throw new NotFoundException('Teacher không tồn tại');
+
+    if (payload.status === TeacherVerificationStatus.VERIFIED) {
+      await this.mailService.sendTeacherVerificationApproval(
+        teacher.email,
+        teacher.fullName,
+        payload.note,
+      );
+    }
+
     return { success: true };
   }
 

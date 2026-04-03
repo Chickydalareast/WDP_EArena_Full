@@ -85,6 +85,15 @@ export class AuthCacheRepository {
     await this.redisService.del(key);
   }
 
+  /** Kiểm tra ticket đăng ký còn hiệu lực (không xóa — dùng trước khi hoàn tất đăng ký). */
+  async assertRegisterTicketValid(email: string, inputTicket: string): Promise<void> {
+    const key = `${this.PREFIX}:ticket:REGISTER:${email}`;
+    const storedTicket = await this.redisService.get(key);
+    if (!storedTicket || storedTicket !== inputTicket) {
+      throw new BadRequestException('Phiên xác thực không hợp lệ hoặc đã hết hạn.');
+    }
+  }
+
   async setRefreshGracePeriod(oldToken: string, newTokens: { accessToken: string, refreshToken: string }): Promise<void> {
     const key = `${this.PREFIX}:grace:${oldToken}`;
     await this.redisService.set(key, JSON.stringify(newTokens), 45); 

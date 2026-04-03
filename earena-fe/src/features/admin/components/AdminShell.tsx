@@ -12,7 +12,8 @@ import {
   CreditCard,
   LineChart,
   LogOut,
-  Banknote, // Thêm icon Banknote cho Rút tiền
+  Banknote,
+  ClipboardCheck,
 } from 'lucide-react';
 import { useAuthStore } from '@/features/auth/stores/auth.store';
 import { useLogout } from '@/features/auth/hooks/useLogout';
@@ -22,6 +23,7 @@ import { ROUTES } from '@/config/routes';
 // [CTO FIX]: Cập nhật mảng nav với định tuyến Quản lý rút tiền
 const nav = [
   { href: '/admin', label: 'Tổng quan', icon: LayoutDashboard },
+  { href: ROUTES.ADMIN.TEACHERS, label: 'Duyệt hồ sơ', icon: ClipboardCheck },
   { href: '/admin/users', label: 'Người dùng', icon: Users },
   { href: '/admin/exams', label: 'Đề thi', icon: GraduationCap },
   { href: '/admin/courses', label: 'Khóa học', icon: BookOpen },

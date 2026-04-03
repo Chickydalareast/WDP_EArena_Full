@@ -7,6 +7,7 @@ import { authService, RegisterDTO } from '../api/auth.service';
 import { useAuthFlowStore } from '../stores/auth-flow.store';
 import { useAuthStore, UserSession } from '../stores/auth.store';
 import { ApiError } from '@/shared/lib/error-parser';
+import { getPostAuthLandingPath } from '../lib/post-auth-redirect';
 
 export const useRegister = () => {
   const router = useRouter();
@@ -23,8 +24,7 @@ export const useRegister = () => {
         description: 'Đang khởi tạo không gian làm việc...',
       });
 
-      const targetRoute = user.role === 'STUDENT' ? '/student' : '/teacher';
-      router.replace(targetRoute);
+      router.replace(getPostAuthLandingPath(user));
     },
     onError: (error) => {
       const isTicketInvalid = error.statusCode === 400 || error.code === 'INVALID_TICKET';

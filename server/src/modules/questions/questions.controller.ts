@@ -18,6 +18,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { RequireTeacherVerified } from '../../common/decorators/teacher-verified.decorator';
 
 import { GetQuestionsDto } from './dto/get-questions.dto';
 import { CreateQuestionDto } from './dto/create-question.dto';
@@ -41,6 +42,7 @@ import { BulkPublishQuestionDto } from './dto/bulk-publish-question.dto';
 
 @Controller('questions')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequireTeacherVerified()
 @Roles(UserRole.TEACHER, UserRole.ADMIN)
 export class QuestionsController {
   constructor(private readonly questionsService: QuestionsService) {}

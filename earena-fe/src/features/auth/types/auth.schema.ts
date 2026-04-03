@@ -21,6 +21,11 @@ export const verifyOtpSchema = z.object({
     .regex(/^\d+$/, "Mã OTP chỉ chứa số"),
 });
 
+export const qualificationSchema = z.object({
+  url: z.string().url("URL không hợp lệ"),
+  name: z.string().min(1, "Tên bằng cấp không được để trống"),
+});
+
 export const registerDetailsSchema = z.object({
   role: z.enum(['STUDENT', 'TEACHER']).default('STUDENT'),
 
@@ -35,6 +40,7 @@ export const registerDetailsSchema = z.object({
   confirmPassword: z.string().min(1, 'Vui lòng xác nhận mật khẩu'),
 
   subjectId: z.string().optional(),
+  qualifications: z.array(qualificationSchema).optional(),
 })
 .refine((data) => data.password === data.confirmPassword, {
   message: "Mật khẩu xác nhận không khớp",
@@ -55,6 +61,7 @@ export const registerDetailsSchema = z.object({
 export type RegisterDetailsDTO = z.infer<typeof registerDetailsSchema>;
 export type RegisterEmailDTO = z.infer<typeof registerEmailSchema>;
 export type VerifyOtpFormDTO = z.infer<typeof verifyOtpSchema>;
+export type QualificationInput = z.infer<typeof qualificationSchema>;
 
 export interface AuthResponse {
   accessToken: string;

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { authService, authKeys } from '../api/auth.service';
 import { useAuthStore, UserSession } from '../stores/auth.store';
 import { ApiError } from '@/shared/lib/error-parser';
+import { resolvePostAuthRoute } from '../lib/post-auth-redirect';
 
 export const useGoogleAuth = () => {
   const router = useRouter();
@@ -23,13 +24,7 @@ export const useGoogleAuth = () => {
       toast.success('Đăng nhập Google thành công');
 
       const callbackUrl = searchParams.get('callbackUrl');
-      if (callbackUrl) {
-        router.replace(callbackUrl);
-        return;
-      }
-
-      const targetRoute = user.role === 'STUDENT' ? '/student' : '/teacher';
-      router.replace(targetRoute);
+      router.replace(resolvePostAuthRoute(user, callbackUrl));
     },
     onError: (error) => {
       toast.error('Xác thực Google thất bại', { 

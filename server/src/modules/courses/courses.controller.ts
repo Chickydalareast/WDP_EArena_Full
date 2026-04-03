@@ -14,6 +14,7 @@ import { CreateCourseDto } from './dto/create-course.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { RequireTeacherVerified } from '../../common/decorators/teacher-verified.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UserRole } from '../../common/enums/user-role.enum';
 import { UpdateCourseDto } from './dto/course.dto';
@@ -24,6 +25,7 @@ import {
 
 @Controller('courses')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequireTeacherVerified()
 export class CoursesController {
   constructor(private readonly coursesService: CoursesService) {}
 

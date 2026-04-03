@@ -68,4 +68,7 @@ export class UserResponseDto {
     expiresAt: string | null;
     isExpired: boolean;
   } | null;
+
+  @Expose()
+  teacherVerificationStatus?: string;
 }

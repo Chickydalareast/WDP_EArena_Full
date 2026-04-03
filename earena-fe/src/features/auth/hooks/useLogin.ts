@@ -7,6 +7,7 @@ import { authService, authKeys } from '../api/auth.service';
 import { LoginDTO } from '../types/auth.schema';
 import { UserSession } from '../stores/auth.store';
 import { ApiError } from '@/shared/lib/error-parser';
+import { resolvePostAuthRoute } from '../lib/post-auth-redirect';
 
 export const useLogin = () => {
   const router = useRouter();
@@ -21,13 +22,7 @@ export const useLogin = () => {
       toast.success('Đăng nhập thành công');
 
       const callbackUrl = searchParams.get('callbackUrl');
-      if (callbackUrl) {
-        router.replace(callbackUrl);
-        return;
-      }
-
-      const targetRoute = user.role === 'STUDENT' ? '/student' : '/teacher';
-      router.replace(targetRoute);
+      router.replace(resolvePostAuthRoute(user, callbackUrl));
     },
     onError: (error) => {
       toast.error('Đăng nhập thất bại', { 

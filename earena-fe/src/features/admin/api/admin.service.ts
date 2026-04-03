@@ -20,6 +20,8 @@ import type {
   CourseApprovalStatus,
   ForceTakedownPayload,
   MasterListCourseStatus,
+  AdminTeacherVerification,
+  TeacherVerificationStatus,
 } from '../types/admin.types';
 
 export const adminService = {
@@ -176,6 +178,23 @@ export const adminService = {
 
   forceTakedownCourse: async (id: string, payload: ForceTakedownPayload): Promise<void> => {
     return axiosClient.patch(API_ENDPOINTS.ADMIN.COURSE_FORCE_TAKEDOWN(id), payload);
+  },
+
+  // Teacher Verification
+  listTeacherVerifications: async (params: {
+    page?: number;
+    limit?: number;
+    status?: TeacherVerificationStatus | 'PENDING';
+    search?: string;
+  }): Promise<PageResult<AdminTeacherVerification>> => {
+    return axiosClient.get(API_ENDPOINTS.ADMIN.TEACHER_VERIFICATION, { params });
+  },
+
+  updateTeacherVerification: async (
+    id: string,
+    payload: { status: TeacherVerificationStatus; note?: string }
+  ): Promise<void> => {
+    return axiosClient.patch(API_ENDPOINTS.ADMIN.TEACHER_VERIFICATION_UPDATE(id), payload);
   },
 };
 

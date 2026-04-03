@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { WalletsService } from './wallets.service';
 import { MockDepositDto, GetTransactionsDto } from './dto/wallets.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RequireTeacherVerified } from '../../common/decorators/teacher-verified.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { UserRole } from 'src/common/enums/user-role.enum';
@@ -10,6 +11,7 @@ import { CreateWithdrawalPayload } from './interfaces/withdrawal.interface';
 
 @Controller('wallets')
 @UseGuards(JwtAuthGuard)
+@RequireTeacherVerified()
 export class WalletsController {
   constructor(private readonly walletsService: WalletsService) {}
 
