@@ -11,13 +11,17 @@ import {
 export interface SendOtpPayload { email: string; name: string; otp: string; }
 export interface CourseApprovalPayload { email: string; name: string; courseTitle: string; status: string; }
 export interface CourseRejectionPayload { email: string; name: string; courseTitle: string; status: string; reason: string; }
+export interface TeacherApprovalPayload { email: string; name: string; note?: string; }
+export interface TeacherRejectionPayload { email: string; name: string; reason?: string; }
 
 type MailJobPayload =
   | SendOtpPayload
   | CourseApprovalPayload
   | CourseRejectionPayload
   | WithdrawalApprovalMailPayload
-  | WithdrawalRejectionMailPayload;
+  | WithdrawalRejectionMailPayload
+  | TeacherApprovalPayload
+  | TeacherRejectionPayload;
 
 @Processor('mail_queue')
 export class MailProcessor extends WorkerHost {
@@ -50,6 +54,12 @@ export class MailProcessor extends WorkerHost {
 
       case 'withdrawal-rejection':
         return this.handleWithdrawalRejection(job as Job<WithdrawalRejectionMailPayload>);
+
+      case 'teacher_verification_approval':
+        return this.handleTeacherApproval(job as Job<TeacherApprovalPayload>);
+
+      case 'teacher_verification_rejection':
+        return this.handleTeacherRejection(job as Job<TeacherRejectionPayload>);
 
       default:
         this.logger.warn(`[Queue] Không tìm thấy handler cho job: ${job.name}`);
@@ -152,6 +162,46 @@ export class MailProcessor extends WorkerHost {
       this.logger.log(`[Worker] Sent Withdrawal Rejection mail to: ${job.data.to} (TX: ${job.data.transactionId})`);
     } catch (error: any) {
       this.logger.error(`[Worker] Failed to send Withdrawal Rejection mail to: ${job.data.to} - ${error.message}`);
+      throw error;
+    }
+  }
+
+  private async handleTeacherApproval(job: Job<TeacherApprovalPayload>) {
+    this.logger.log(`[Queue] Start sending Teacher Approval to ${job.data.email}...`);
+    try {
+      await this.mailerService.sendMail({
+        to: job.data.email,
+        subject: 'EArena - Tài khoản giáo viên đã được xác minh!',
+        template: './teacher-approval',
+        context: {
+          name: job.data.name,
+          note: job.data.note,
+          year: new Date().getFullYear(),
+        },
+      });
+      this.logger.log(`[Queue] Teacher approval email sent successfully to ${job.data.email}`);
+    } catch (error: any) {
+      this.logger.error(`[Queue] Failed to send teacher approval email: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  private async handleTeacherRejection(job: Job<TeacherRejectionPayload>) {
+    this.logger.log(`[Queue] Start sending Teacher Rejection to ${job.data.email}...`);
+    try {
+      await this.mailerService.sendMail({
+        to: job.data.email,
+        subject: 'EArena - Hồ sơ giáo viên chưa được xác minh',
+        template: './teacher-rejection',
+        context: {
+          name: job.data.name,
+          reason: job.data.reason,
+          year: new Date().getFullYear(),
+        },
+      });
+      this.logger.log(`[Queue] Teacher rejection email sent successfully to ${job.data.email}`);
+    } catch (error: any) {
+      this.logger.error(`[Queue] Failed to send teacher rejection email: ${error.message}`, error.stack);
       throw error;
     }
   }

@@ -1,6 +1,7 @@
 import { axiosClient } from '@/shared/lib/axios-client';
 import { UserSession } from '../stores/auth.store';
 import { API_ENDPOINTS } from '@/config/api-endpoints';
+import { env } from '@/config/env';
 import { LoginDTO } from '../types/auth.schema';
 import { AuthResponse } from '../types/auth.schema';
 
@@ -18,13 +19,19 @@ export interface VerifyOtpDTO extends SendOtpDTO {
   otp: string;
 }
 
+export interface RegisterQualificationItem {
+  url: string;
+  name: string;
+}
+
 export interface RegisterDTO {
   email: string;
   fullName: string;
   password: string;
   ticket: string;
   role: 'STUDENT' | 'TEACHER';
-  subjectIds?: string[]; 
+  subjectIds?: string[];
+  qualifications?: RegisterQualificationItem[];
 }
 
 export interface ResetPasswordDTO {
@@ -57,6 +64,40 @@ export const authService = {
 
   register: async (data: RegisterDTO): Promise<UserSession> => {
     return axiosClient.post(API_ENDPOINTS.AUTH.REGISTER, data);
+  },
+
+  /** Upload ảnh bằng cấp trong bước đăng ký (sau OTP). Dùng fetch để tránh header JSON mặc định của axios. */
+  uploadRegisterQualification: async (params: {
+    email: string;
+    ticket: string;
+    name: string;
+    file: File;
+  }): Promise<RegisterQualificationItem> => {
+    const fd = new FormData();
+    fd.append('file', params.file);
+    fd.append('email', params.email);
+    fd.append('ticket', params.ticket);
+    fd.append('name', params.name);
+
+    const base = env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
+    const res = await fetch(`${base}${API_ENDPOINTS.AUTH.REGISTER_QUALIFICATION_UPLOAD}`, {
+      method: 'POST',
+      body: fd,
+      credentials: 'include',
+    });
+
+    const json = (await res.json().catch(() => ({}))) as {
+      message?: string | string[];
+      data?: RegisterQualificationItem;
+    };
+    if (!res.ok) {
+      const msg = json?.message ?? 'Không thể tải ảnh lên. Vui lòng thử lại.';
+      const text = Array.isArray(msg) ? msg.join(', ') : String(msg);
+      throw new Error(text);
+    }
+    const payload = json.data;
+    if (!payload?.url) throw new Error('Phản hồi máy chủ không hợp lệ.');
+    return payload;
   },
 
   resetPassword: async (data: ResetPasswordDTO): Promise<{ message: string }> => {

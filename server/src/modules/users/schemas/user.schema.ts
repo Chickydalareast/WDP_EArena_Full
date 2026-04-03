@@ -10,6 +10,12 @@ export enum UserStatus {
   BANNED = 'BANNED',
 }
 
+export enum TeacherVerificationStatus {
+  PENDING = 'PENDING',
+  VERIFIED = 'VERIFIED',
+  REJECTED = 'REJECTED',
+}
+
 export enum AuthProvider {
   LOCAL = 'LOCAL',
   GOOGLE = 'GOOGLE',
@@ -65,6 +71,26 @@ export class User {
 
   @Prop({ type: Date, required: false, index: true })
   planExpiresAt?: Date;
+
+  // Teacher verification fields
+  @Prop({ type: String, enum: TeacherVerificationStatus, default: TeacherVerificationStatus.PENDING })
+  teacherVerificationStatus: TeacherVerificationStatus;
+
+  @Prop({ required: false })
+  teacherVerificationNote?: string;
+
+  @Prop({ type: Date, required: false })
+  teacherVerifiedAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', required: false })
+  teacherVerifiedBy?: Types.ObjectId;
+
+  // Qualifications (bằng cấp/chứng chỉ)
+  @Prop({ type: [{ url: String, name: String, uploadedAt: Date }], default: [] })
+  qualifications: { url: string; name: string; uploadedAt: Date }[];
+
+  @Prop({ default: false })
+  hasUploadedQualifications: boolean;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

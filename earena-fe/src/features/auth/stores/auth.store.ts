@@ -23,6 +23,8 @@ export interface UserSession {
     id: string;
     name: string;
   }[];
+
+  teacherVerificationStatus?: 'PENDING' | 'VERIFIED' | 'REJECTED';
 }
 
 interface AuthState {

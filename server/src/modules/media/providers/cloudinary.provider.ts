@@ -1,5 +1,6 @@
 import { Injectable, InternalServerErrorException, BadRequestException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Readable } from 'stream';
 import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 import type { ICloudinaryProvider, StorageMetadata } from '../interfaces/storage-provider.interface';
 
@@ -52,6 +53,34 @@ export class CloudinaryAdapter implements ICloudinaryProvider {
       this.logger.error(`Upload file thất bại: ${error.message}`);
       throw new InternalServerErrorException('Lỗi hệ thống khi tải tài nguyên lên đám mây');
     }
+  }
+
+  async uploadImageBuffer(buffer: Buffer, folder: string): Promise<StorageMetadata> {
+    return new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        { folder, resource_type: 'image' },
+        (error, result: UploadApiResponse | undefined) => {
+          if (error) {
+            this.logger.error(`Upload buffer thất bại: ${error.message}`);
+            return reject(
+              new InternalServerErrorException('Lỗi hệ thống khi tải ảnh bằng cấp lên đám mây'),
+            );
+          }
+          if (!result) {
+            return reject(new InternalServerErrorException('Cloudinary không trả về kết quả'));
+          }
+          resolve({
+            url: result.secure_url,
+            publicId: result.public_id,
+            bytes: result.bytes,
+            width: result.width,
+            height: result.height,
+            format: result.format,
+          });
+        },
+      );
+      Readable.from(buffer).pipe(uploadStream);
+    });
   }
 
   async deleteFile(publicId: string, resourceType: 'image' | 'video' | 'raw' = 'image'): Promise<boolean> {

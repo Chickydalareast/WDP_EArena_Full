@@ -85,4 +85,32 @@ export class MailService {
       this.logger.error(`[Queue] Error adding Withdrawal Rejection job: ${error.message}`);
     }
   }
+
+  async sendTeacherVerificationApproval(email: string, name: string, note?: string): Promise<boolean> {
+    try {
+      await this.mailQueue.add(
+        'teacher_verification_approval',
+        { email, name, note },
+        { attempts: 3, backoff: { type: 'exponential', delay: 1000 }, removeOnComplete: true }
+      );
+      return true;
+    } catch (error: any) {
+      this.logger.error(`[MailQueue Error] Không thể gửi mail duyệt giáo viên cho ${email}: ${error.message}`);
+      return false;
+    }
+  }
+
+  async sendTeacherVerificationRejection(email: string, name: string, reason?: string): Promise<boolean> {
+    try {
+      await this.mailQueue.add(
+        'teacher_verification_rejection',
+        { email, name, reason },
+        { attempts: 3, backoff: { type: 'exponential', delay: 1000 }, removeOnComplete: true }
+      );
+      return true;
+    } catch (error: any) {
+      this.logger.error(`[MailQueue Error] Không thể gửi mail từ chối giáo viên cho ${email}: ${error.message}`);
+      return false;
+    }
+  }
 }

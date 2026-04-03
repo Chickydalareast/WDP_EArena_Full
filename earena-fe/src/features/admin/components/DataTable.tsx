@@ -6,11 +6,18 @@ export function DataTable({
   columns,
   rows,
   empty,
+  emptyMessage,
+  isLoading,
 }: {
   columns: Array<{ key: string; header: ReactNode; className?: string }>;
   rows: Array<Record<string, ReactNode>>;
   empty?: string;
+  /** Alias của empty (tương thích màn hình cũ) */
+  emptyMessage?: string;
+  isLoading?: boolean;
 }) {
+  const emptyText = empty ?? emptyMessage ?? 'Không có dữ liệu';
+
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card/60">
       <div className="overflow-x-auto">
@@ -31,10 +38,16 @@ export function DataTable({
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 ? (
+            {isLoading ? (
+              <tr>
+                <td colSpan={columns.length} className="px-4 py-10 text-center text-muted-foreground">
+                  Đang tải...
+                </td>
+              </tr>
+            ) : rows.length === 0 ? (
               <tr>
                 <td colSpan={columns.length} className="px-4 py-8 text-center text-muted-foreground">
-                  {empty || 'Không có dữ liệu'}
+                  {emptyText}
                 </td>
               </tr>
             ) : (

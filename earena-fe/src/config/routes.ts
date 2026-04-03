@@ -10,6 +10,7 @@ export const ROUTES = {
     LOGIN: '/login',
     REGISTER: '/register',
     FORGOT_PASSWORD: '/forgot-password',
+    WAITING_APPROVAL: '/waiting-approval',
   },
   
   STUDENT: {
@@ -18,10 +19,10 @@ export const ROUTES = {
     MY_COURSES: '/student/courses',
     WALLET: '/student/wallet',
     
-    STUDY_ROOM: (courseId: string, lessonId?: string) => {
-      const basePath = `/student/courses/${courseId}/study`;
-      return lessonId ? `${basePath}?lessonId=${lessonId}` as const : basePath as const;
-    },
+    STUDY_ROOM: (courseId: string, lessonId?: string) =>
+      lessonId
+        ? (`/student/courses/${courseId}/study?lessonId=${lessonId}` as const)
+        : (`/student/courses/${courseId}/study` as const),
     
     EXAM_RESULT: (submissionId: string) => `/student/exams/${submissionId}/result` as const,
 
@@ -66,7 +67,7 @@ export const PUBLIC_PATHS = [
   ROUTES.PUBLIC.HOME,
   ROUTES.PUBLIC.PRICING,
   ...Object.values(ROUTES.AUTH),
-];
+] as string[];
 
 export const ROLE_ROOT_PATHS = {
   STUDENT: ROUTES.STUDENT.DASHBOARD,

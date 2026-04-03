@@ -17,10 +17,12 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { Roles } from 'src/common/decorators/roles.decorator';
+import { RequireTeacherVerified } from 'src/common/decorators/teacher-verified.decorator';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 
 @Controller('questions/ai-builder')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequireTeacherVerified()
 export class AiQuestionBuilderController {
   constructor(private readonly aiQuestionBuilderService: AiQuestionBuilderService) {}
 

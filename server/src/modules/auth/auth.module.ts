@@ -8,12 +8,14 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { Token, TokenSchema } from './schemas/token.schema';
 import { TokenRepository } from './token.repository';
 import { UsersModule } from '../users/users.module';
+import { MediaModule } from '../media/media.module';
 import { AuthCacheRepository } from './auth.cache.repository';
 import { AuthController } from './auth.controller'; // <-- 1. Import AuthController
 
 @Module({
   imports: [
-    UsersModule, 
+    UsersModule,
+    MediaModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

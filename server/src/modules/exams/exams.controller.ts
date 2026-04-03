@@ -15,6 +15,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { RequireTeacherVerified } from '../../common/decorators/teacher-verified.decorator';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { GenerateDynamicExamDto } from './dto/generate-exam.dto';
 import { FillExistingPaperPayload, GenerateDynamicExamPayload, PreviewDynamicExamPayload, PreviewRulePayload } from './interfaces/exam-generator.interface';
@@ -26,6 +27,7 @@ import { PreviewDynamicExamDto } from './dto/preview-dynamic-exam.dto';
 
 @Controller('exams')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequireTeacherVerified()
 export class ExamsController {
   constructor(
     private readonly examsService: ExamsService,

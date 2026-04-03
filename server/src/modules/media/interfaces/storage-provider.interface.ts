@@ -28,6 +28,8 @@ export interface ITicketStorageProvider {
 
 export interface ICloudinaryProvider extends ITicketStorageProvider {
   uploadFileLocal(filePath: string, folder: string, publicId?: string): Promise<StorageMetadata>;
+  /** Upload ảnh từ buffer (đăng ký giáo viên, không cần JWT). */
+  uploadImageBuffer(buffer: Buffer, folder: string): Promise<StorageMetadata>;
   deleteFile(publicId: string, resourceType?: 'image' | 'video' | 'raw'): Promise<boolean>;
   generateSignature(folder: string): any;
   

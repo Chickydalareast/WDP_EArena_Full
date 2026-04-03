@@ -1,7 +1,9 @@
 import {
   Controller, Post, Get, Body, Req, Res, HttpCode, HttpStatus, UnauthorizedException,
-  BadRequestException
+  BadRequestException, UseInterceptors, UploadedFile, ParseFilePipe, MaxFileSizeValidator,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { plainToInstance } from 'class-transformer';
@@ -96,6 +98,7 @@ export class AuthController {
       ticket: dto.ticket,
       role: dto.role,
       subjectIds: dto.subjectIds,
+      qualifications: dto.qualifications,
     });
 
     this.setAuthCookies(res, accessToken, refreshToken);
@@ -103,6 +106,41 @@ export class AuthController {
     return {
       message: 'Đăng ký tài khoản thành công',
       data: this.serializeUser(user),
+    };
+  }
+
+  /** Upload ảnh bằng cấp trong luồng đăng ký (sau OTP, cần ticket + email). */
+  @Public()
+  @Post('register/qualification-upload')
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+    }),
+  )
+  async uploadRegisterQualification(
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 })],
+      }),
+    )
+    file: Express.Multer.File,
+    @Body('email') email: string,
+    @Body('ticket') ticket: string,
+    @Body('name') name: string,
+  ) {
+    if (!email?.trim() || !ticket?.trim() || !name?.trim()) {
+      throw new BadRequestException('Thiếu email, ticket hoặc tên bằng cấp.');
+    }
+    const data = await this.authService.uploadRegistrationQualificationImage({
+      email: email.trim().toLowerCase(),
+      ticket: ticket.trim(),
+      name: name.trim(),
+      file,
+    });
+    return {
+      message: 'Tải ảnh bằng cấp thành công',
+      data,
     };
   }
 

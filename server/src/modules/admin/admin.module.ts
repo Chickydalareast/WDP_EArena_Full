@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
 import { User, UserSchema } from '../users/schemas/user.schema';
+import { Token, TokenSchema } from '../auth/schemas/token.schema';
 import { Exam, ExamSchema } from '../exams/schemas/exam.schema';
 import { Question, QuestionSchema } from '../questions/schemas/question.schema';
 import { Class, ClassSchema } from '../classes/schemas/class.schema';
@@ -34,6 +35,7 @@ import { ExamsModule } from '../exams/exams.module';
   imports: [
     MongooseModule.forFeature([
       { name: User.name, schema: UserSchema },
+      { name: Token.name, schema: TokenSchema },
       { name: Exam.name, schema: ExamSchema },
       { name: Question.name, schema: QuestionSchema },
       { name: Class.name, schema: ClassSchema },

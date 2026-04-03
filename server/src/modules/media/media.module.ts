@@ -25,6 +25,6 @@ import { MediaRepository } from './media.repository';
     { provide: CLOUDINARY_PROVIDER, useClass: CloudinaryAdapter },
     { provide: VIDEO_PROVIDER, useClass: GoogleDriveAdapter },
   ],
-  exports: [MediaService, MediaRepository],
+  exports: [MediaService, MediaRepository, CLOUDINARY_PROVIDER],
 })
 export class MediaModule { }

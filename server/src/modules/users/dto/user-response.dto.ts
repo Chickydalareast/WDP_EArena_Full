@@ -63,4 +63,7 @@ export class UserResponseDto {
     };
   })
   subscription: { planId: string; planCode: string; expiresAt: string | null; isExpired: boolean } | null;
+
+  @Expose()
+  teacherVerificationStatus?: string;
 }

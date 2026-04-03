@@ -5,6 +5,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { validationSchema } from './common/configs/env.validation';
 import { DatabaseModule } from './common/database/database.module';
 import { RedisModule } from './common/redis/redis.module';
+import { TeacherVerificationModule } from './common/teacher-verification.module';
 
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -21,8 +22,9 @@ import { AiModule } from './modules/ai/ai.module';
 import { CoursesModule } from './modules/courses/courses.module';
 import { WalletsModule } from './modules/wallets/wallets.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { TeachersModule } from './modules/teachers/teachers.module';
 
-import { NotificationsModule } from './modules/notifications/notifications.module'; 
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 import { EventEmitterModule } from '@nestjs/event-emitter';
 
@@ -45,6 +47,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 
     DatabaseModule,
     RedisModule,
+    TeacherVerificationModule,
 
     UsersModule,
     AuthModule,
@@ -59,6 +62,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     CoursesModule,
     WalletsModule,
     SubscriptionsModule,
+    TeachersModule,
     NotificationsModule,
 
     EventEmitterModule.forRoot(),

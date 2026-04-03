@@ -4,7 +4,8 @@ import {
   BadRequestException,
   InternalServerErrorException,
   Logger,
-  HttpException
+  HttpException,
+  Inject,
 } from '@nestjs/common';
 import { OAuth2Client } from 'google-auth-library';
 import { JwtService } from '@nestjs/jwt';
@@ -17,7 +18,11 @@ import { UsersRepository } from '../users/users.repository';
 import { TokenRepository } from './token.repository';
 import { AuthCacheRepository } from './auth.cache.repository';
 import { MailService } from '../mail/mail.service';
-import { UserDocument } from '../users/schemas/user.schema';
+import { TeacherVerificationStatus, UserDocument } from '../users/schemas/user.schema';
+import { UserRole } from '../../common/enums/user-role.enum';
+import { CLOUDINARY_PROVIDER } from '../media/interfaces/storage-provider.interface';
+import type { ICloudinaryProvider } from '../media/interfaces/storage-provider.interface';
+import type { Express } from 'express';
 
 export type AuthOtpType = 'REGISTER' | 'FORGOT_PASSWORD';
 
@@ -25,6 +30,8 @@ export interface JwtPayload {
   userId: string;
   email: string;
   role: string;
+  /** Teacher verification status — chỉ có khi role === TEACHER (middleware / guard phía client) */
+  tvs?: string;
 }
 
 export type LoginPayload = { email: string; password: string };
@@ -36,6 +43,7 @@ export type RegisterPayload = {
   ticket: string;
   role?: 'STUDENT' | 'TEACHER';
   subjectIds?: string[];
+  qualifications?: { url: string; name: string }[];
 };
 export type ResetPasswordPayload = { email: string; newPassword: string; ticket: string };
 export type ChangePasswordPayload = { oldPassword: string; newPassword: string };
@@ -53,6 +61,8 @@ export class AuthService {
     private readonly tokenRepository: TokenRepository,
     private readonly authCacheRepo: AuthCacheRepository,
     private readonly mailService: MailService,
+    @Inject(CLOUDINARY_PROVIDER)
+    private readonly cloudinaryProvider: ICloudinaryProvider,
   ) {
     this.googleClient = new OAuth2Client(this.configService.get<string>('GOOGLE_CLIENT_ID'));
   }
@@ -61,8 +71,12 @@ export class AuthService {
     const payload: JwtPayload = {
       userId: user._id.toString(),
       email: user.email,
-      role: user.role
+      role: user.role,
     };
+    if (user.role === UserRole.TEACHER) {
+      payload.tvs =
+        user.teacherVerificationStatus ?? TeacherVerificationStatus.PENDING;
+    }
 
     const accessToken = this.jwtService.sign(payload);
     const refreshToken = crypto.randomBytes(64).toString('hex');
@@ -178,13 +192,49 @@ export class AuthService {
     return { success: true, message: 'Xác thực OTP thành công.', ticket };
   }
 
+  private readonly registerQualificationFolder = 'earena/register-qualifications';
+
+  async uploadRegistrationQualificationImage(payload: {
+    email: string;
+    ticket: string;
+    name: string;
+    file: Express.Multer.File;
+  }) {
+    const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+    if (!allowed.has(payload.file.mimetype)) {
+      throw new BadRequestException('Chỉ chấp nhận ảnh JPEG, PNG, WebP hoặc GIF.');
+    }
+
+    await this.authCacheRepo.assertRegisterTicketValid(payload.email, payload.ticket);
+
+    const meta = await this.cloudinaryProvider.uploadImageBuffer(
+      payload.file.buffer,
+      this.registerQualificationFolder,
+    );
+
+    return {
+      url: meta.url,
+      name: payload.name,
+    };
+  }
+
   async register(payload: RegisterPayload) {
-    const { email, fullName, password, ticket, role, subjectIds } = payload;
+    const { email, fullName, password, ticket, role, subjectIds, qualifications } = payload;
 
     const existingUser = await this.usersService.findByEmail(email);
     if (existingUser) throw new BadRequestException('Email đã được đăng ký.');
 
     const validSubjectIds = role === 'TEACHER' ? subjectIds : undefined;
+
+    // Process qualifications for Teacher
+    let validQualifications: { url: string; name: string; uploadedAt: Date }[] | undefined;
+    if (role === 'TEACHER' && qualifications && qualifications.length > 0) {
+      validQualifications = qualifications.map(q => ({
+        url: q.url,
+        name: q.name,
+        uploadedAt: new Date(),
+      }));
+    }
 
     return this.usersRepository.executeInTransaction(async () => {
       const newUser = await this.usersService.create({
@@ -193,7 +243,9 @@ export class AuthService {
         password,
         role,
         subjectIds: validSubjectIds,
-        isEmailVerified: true
+        isEmailVerified: true,
+        qualifications: validQualifications,
+        hasUploadedQualifications: !!validQualifications && validQualifications.length > 0,
       });
 
       const tokenPair = await this.generateTokenPair(newUser);
