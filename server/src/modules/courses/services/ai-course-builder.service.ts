@@ -1,19 +1,19 @@
-import { 
-  Injectable, 
-  Logger, 
-  ForbiddenException, 
-  NotFoundException, 
-  BadRequestException, 
-  InternalServerErrorException
+import {
+  Injectable,
+  Logger,
+  ForbiddenException,
+  NotFoundException,
+  BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import * as fs from 'fs/promises';
 import * as mammoth from 'mammoth'; // [CTO FIX]: Khôi phục mammoth để xử lý riêng luồng DOCX
 
-import { 
-  AiCourseBuilderPayload, 
-  AiCurriculumResponse, 
+import {
+  AiCourseBuilderPayload,
+  AiCurriculumResponse,
   AiGeneratedSection,
-  AiDocumentFile
+  AiDocumentFile,
 } from '../interfaces/ai-builder.interface';
 import { CoursesRepository } from '../courses.repository';
 import { CurriculumService } from './curriculum.service';
@@ -31,15 +31,21 @@ export class AiCourseBuilderService {
   ) {}
 
   async generateCurriculum(payload: AiCourseBuilderPayload) {
-    const course = await this.coursesRepo.findByIdSafe(payload.courseId, { select: 'teacherId' });
+    const course = await this.coursesRepo.findByIdSafe(payload.courseId, {
+      select: 'teacherId',
+    });
     if (!course) throw new NotFoundException('Khóa học không tồn tại.');
     if (course.teacherId.toString() !== payload.teacherId) {
-      await this.cleanupTempFiles(payload.files.map(f => f.filePath));
-      throw new ForbiddenException('Bạn không có quyền chỉnh sửa khóa học này.');
+      await this.cleanupTempFiles(payload.files.map((f) => f.filePath));
+      throw new ForbiddenException(
+        'Bạn không có quyền chỉnh sửa khóa học này.',
+      );
     }
 
     try {
-      this.logger.debug(`[AI Builder] Bắt đầu phân loại ${payload.files.length} file...`);
+      this.logger.debug(
+        `[AI Builder] Bắt đầu phân loại ${payload.files.length} file...`,
+      );
 
       // ==========================================
       // [KIẾN TRÚC LAI]: PHÂN LOẠI TÀI LIỆU
@@ -49,16 +55,19 @@ export class AiCourseBuilderService {
 
       for (const file of payload.files) {
         const mime = file.mimeType.toLowerCase();
-        
+
         // 1. PDF -> Đẩy vào mảng để Google tự nhai
         if (mime === 'application/pdf') {
           pdfFiles.push(file);
-        } 
+        }
         // 2. DOCX -> Node.js tự bóc chữ siêu tốc bằng Mammoth
-        else if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        else if (
+          mime ===
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        ) {
           const result = await mammoth.extractRawText({ path: file.filePath });
           extractedText += `\n\n--- NỘI DUNG TÀI LIỆU (${file.originalName}) ---\n${result.value}\n`;
-        } 
+        }
         // 3. TXT/JSON -> Node.js tự đọc
         else if (mime === 'text/plain' || mime === 'application/json') {
           const text = await fs.readFile(file.filePath, 'utf-8');
@@ -69,8 +78,11 @@ export class AiCourseBuilderService {
       // ==========================================
       // GỌI AI LLM ENGINE
       // ==========================================
-      const systemPrompt = this.buildInstructionalDesignerPrompt(payload.targetSectionCount, payload.additionalInstructions);
-      
+      const systemPrompt = this.buildInstructionalDesignerPrompt(
+        payload.targetSectionCount,
+        payload.additionalInstructions,
+      );
+
       // Gắn phần text bóc được từ DOCX/TXT vào chung với prompt
       const finalUserMessage = `Dưới đây là nội dung văn bản bóc tách từ tài liệu (nếu có):\n${extractedText}\n\nHãy kết hợp chúng với các file PDF đính kèm (nếu có) để tạo cấu trúc khóa học chuẩn.`;
 
@@ -78,20 +90,27 @@ export class AiCourseBuilderService {
 
       // TH1: Có file PDF -> Gọi luồng Multi-modal Document API
       if (pdfFiles.length > 0) {
-        this.logger.debug(`[AI Engine] Kích hoạt luồng File API cho ${pdfFiles.length} file PDF...`);
+        this.logger.debug(
+          `[AI Engine] Kích hoạt luồng File API cho ${pdfFiles.length} file PDF...`,
+        );
         aiResponse = await this.aiService.processDocumentRequest({
           providerName: AiProviderName.GOOGLE,
-          modelId: 'gemini-2.5-flash', 
-          documents: pdfFiles.map(f => ({ filePath: f.filePath, mimeType: f.mimeType })),
+          modelId: 'gemini-2.5-flash',
+          documents: pdfFiles.map((f) => ({
+            filePath: f.filePath,
+            mimeType: f.mimeType,
+          })),
           systemPrompt: systemPrompt,
           userMessage: finalUserMessage,
-          temperature: 0.2, 
-          responseFormat: 'json_object', 
+          temperature: 0.2,
+          responseFormat: 'json_object',
         });
-      } 
+      }
       // TH2: Chỉ có DOCX/TXT (Mảng pdf rỗng) -> Gọi luồng Text API thuần túy
       else {
-        this.logger.debug(`[AI Engine] Kích hoạt luồng Text API thuần (Do chỉ có DOCX/TXT)...`);
+        this.logger.debug(
+          `[AI Engine] Kích hoạt luồng Text API thuần (Do chỉ có DOCX/TXT)...`,
+        );
         aiResponse = await this.aiService.processTextRequest({
           providerName: AiProviderName.GOOGLE,
           modelId: 'gemini-2.5-flash',
@@ -106,36 +125,60 @@ export class AiCourseBuilderService {
       // LƯU DATABASE
       // ==========================================
       const jsonTree = this.extractJsonFromAiResponse(aiResponse.content);
-      
-      if (!jsonTree.curriculum || !Array.isArray(jsonTree.curriculum) || jsonTree.curriculum.length === 0) {
-        throw new InternalServerErrorException('AI phân tích thành công nhưng không sinh ra được cấu trúc khóa học hợp lệ.');
+
+      if (
+        !jsonTree.curriculum ||
+        !Array.isArray(jsonTree.curriculum) ||
+        jsonTree.curriculum.length === 0
+      ) {
+        throw new InternalServerErrorException(
+          'AI phân tích thành công nhưng không sinh ra được cấu trúc khóa học hợp lệ.',
+        );
       }
 
-      this.logger.debug(`[AI Builder] Đã bóc xuất được ${jsonTree.curriculum.length} chương. Bắt đầu đẩy vào Database...`);
+      this.logger.debug(
+        `[AI Builder] Đã bóc xuất được ${jsonTree.curriculum.length} chương. Bắt đầu đẩy vào Database...`,
+      );
 
       await this.coursesRepo.executeInTransaction(async () => {
-        await this.injectCurriculumTree(payload.courseId, payload.teacherId, jsonTree.curriculum);
+        await this.injectCurriculumTree(
+          payload.courseId,
+          payload.teacherId,
+          jsonTree.curriculum,
+        );
       });
 
-      return { 
+      return {
         status: 'SUCCESS',
         sectionsGenerated: jsonTree.curriculum.length,
-        message: 'Khởi tạo cấu trúc khóa học tự động thành công.'
+        message: 'Khởi tạo cấu trúc khóa học tự động thành công.',
       };
-
     } catch (error: any) {
-      this.logger.error(`[AI Course Builder Lỗi]: ${error.message}`, error.stack);
-      if (error instanceof BadRequestException || error instanceof NotFoundException || error instanceof ForbiddenException) {
-          throw error;
+      this.logger.error(
+        `[AI Course Builder Lỗi]: ${error.message}`,
+        error.stack,
+      );
+      if (
+        error instanceof BadRequestException ||
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
+        throw error;
       }
-      throw new BadRequestException(`Quá trình AI xử lý thất bại: ${error.message}`);
+      throw new BadRequestException(
+        `Quá trình AI xử lý thất bại: ${error.message}`,
+      );
     } finally {
       // Dọn rác an toàn tuyệt đối
-      await this.cleanupTempFiles(payload.files.map(f => f.filePath));
+      await this.cleanupTempFiles(payload.files.map((f) => f.filePath));
     }
   }
 
-  private async injectCurriculumTree(courseId: string, teacherId: string, curriculum: AiGeneratedSection[]) {
+  private async injectCurriculumTree(
+    courseId: string,
+    teacherId: string,
+    curriculum: AiGeneratedSection[],
+  ) {
     for (const section of curriculum) {
       const newSection = await this.curriculumService.createSection({
         courseId,
@@ -151,7 +194,8 @@ export class AiCourseBuilderService {
             sectionId: newSection.id,
             teacherId,
             title: lesson.lesson_title || 'Bài học chưa đặt tên',
-            content: lesson.content || '<p>Nội dung bài học đang được cập nhật...</p>',
+            content:
+              lesson.content || '<p>Nội dung bài học đang được cập nhật...</p>',
             isFreePreview: false,
           });
         }
@@ -161,15 +205,25 @@ export class AiCourseBuilderService {
 
   private extractJsonFromAiResponse(aiText: string): AiCurriculumResponse {
     try {
-      const cleanText = aiText.replace(/```json/gi, '').replace(/```/gi, '').trim();
+      const cleanText = aiText
+        .replace(/```json/gi, '')
+        .replace(/```/gi, '')
+        .trim();
       return JSON.parse(cleanText) as AiCurriculumResponse;
     } catch (error) {
-      this.logger.error(`[JSON Parse Error] AI trả về định dạng rỗng/sai: ${aiText.substring(0, 200)}...`);
-      throw new InternalServerErrorException('AI đã tạo phản hồi nhưng không tuân thủ định dạng cấu trúc hệ thống.');
+      this.logger.error(
+        `[JSON Parse Error] AI trả về định dạng rỗng/sai: ${aiText.substring(0, 200)}...`,
+      );
+      throw new InternalServerErrorException(
+        'AI đã tạo phản hồi nhưng không tuân thủ định dạng cấu trúc hệ thống.',
+      );
     }
   }
 
-  private buildInstructionalDesignerPrompt(targetCount?: number, extraInstructions?: string): string {
+  private buildInstructionalDesignerPrompt(
+    targetCount?: number,
+    extraInstructions?: string,
+  ): string {
     return `
 Bạn là một chuyên gia thiết kế chương trình học (Instructional Designer). Nhiệm vụ của bạn là đọc toàn bộ nội dung giáo trình được cung cấp, sau đó phân tách, gộp nhóm và cấu trúc lại thành một khóa học hoàn chỉnh.
 
@@ -197,8 +251,8 @@ ${extraInstructions ? `5. LƯU Ý THÊM TỪ GIÁO VIÊN: ${extraInstructions}` 
   }
 
   private async cleanupTempFiles(filePaths: string[]) {
-    const unlinkPromises = filePaths.map(path => 
-      fs.unlink(path).catch(() => null)
+    const unlinkPromises = filePaths.map((path) =>
+      fs.unlink(path).catch(() => null),
     );
     await Promise.all(unlinkPromises);
   }

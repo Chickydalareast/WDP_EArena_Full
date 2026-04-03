@@ -1,5 +1,9 @@
 import { Controller, Post, Param, Body, UseGuards } from '@nestjs/common';
-import { EnrollmentsService, EnrollUserPayload, MarkLessonPayload } from '../services/enrollments.service';
+import {
+  EnrollmentsService,
+  EnrollUserPayload,
+  MarkLessonPayload,
+} from '../services/enrollments.service';
 import { MarkLessonDto } from '../dto/enrollment.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
@@ -11,8 +15,8 @@ import { CourseCheckoutService } from '../services/course-checkout.service';
 export class EnrollmentsController {
   constructor(
     private readonly enrollmentsService: EnrollmentsService,
-    private readonly checkoutService: CourseCheckoutService
-  ) { }
+    private readonly checkoutService: CourseCheckoutService,
+  ) {}
   @Post(':courseId/enroll')
   async enrollCourse(
     @Param('courseId') courseId: string,

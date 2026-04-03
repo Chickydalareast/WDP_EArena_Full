@@ -10,9 +10,9 @@ export const AI_QUESTION_UPLOAD_LIMITS = {
 };
 
 export const AI_QUESTION_ALLOWED_MIME_TYPES = [
-  'application/pdf', 
+  'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'text/plain', 
+  'text/plain',
   'application/json',
 ];
 
@@ -25,16 +25,16 @@ export const aiQuestionMulterOptions = {
     if (!AI_QUESTION_ALLOWED_MIME_TYPES.includes(file.mimetype)) {
       return cb(
         new BadRequestException(
-          `Định dạng file ${file.originalname} không được hỗ trợ. AI chỉ đọc đề thi dạng PDF, DOCX, TXT.`
+          `Định dạng file ${file.originalname} không được hỗ trợ. AI chỉ đọc đề thi dạng PDF, DOCX, TXT.`,
         ),
-        false
+        false,
       );
     }
     cb(null, true);
   },
   storage: diskStorage({
     destination: (req, file, cb) => {
-      cb(null, tmpdir()); 
+      cb(null, tmpdir());
     },
     filename: (req, file, cb) => {
       const uniqueSuffix = `${Date.now()}-qbank-${uuidv4()}`;

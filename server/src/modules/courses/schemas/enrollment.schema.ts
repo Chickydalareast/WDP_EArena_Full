@@ -15,7 +15,11 @@ export class Enrollment {
   @Prop({ type: Types.ObjectId, ref: 'Course', required: true, index: true })
   courseId: Types.ObjectId;
 
-  @Prop({ type: String, enum: EnrollmentStatus, default: EnrollmentStatus.ACTIVE })
+  @Prop({
+    type: String,
+    enum: EnrollmentStatus,
+    default: EnrollmentStatus.ACTIVE,
+  })
   status: EnrollmentStatus;
 
   @Prop({ type: [{ type: Types.ObjectId, ref: 'Lesson' }], default: [] })

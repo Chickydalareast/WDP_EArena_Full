@@ -29,7 +29,6 @@ export class PricingPlan {
   @Prop({ default: true, index: true })
   isActive: boolean;
 
-  
   @Prop({ required: true, default: false })
   canCreatePaidCourse: boolean;
 

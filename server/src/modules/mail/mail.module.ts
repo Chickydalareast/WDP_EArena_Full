@@ -1,7 +1,7 @@
 import { Module, Global } from '@nestjs/common';
 import { MailerModule } from '@nestjs-modules/mailer';
 import { HandlebarsAdapter } from '@nestjs-modules/mailer/dist/adapters/handlebars.adapter';
-import { BullModule } from '@nestjs/bullmq'; 
+import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { join } from 'path';
 import { MailService } from './mail.service';
@@ -16,7 +16,7 @@ import { MailController } from './mail.controller';
       useFactory: async (configService: ConfigService) => ({
         connection: {
           host: configService.get('REDIS_HOST'),
-          port: configService.get('REDIS_PORT')
+          port: configService.get('REDIS_PORT'),
         },
       }),
       inject: [ConfigService],

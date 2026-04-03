@@ -28,7 +28,8 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
   protected readonly logger = new Logger(CoursesRepository.name);
 
   constructor(
-    @InjectModel(Course.name) private readonly courseModel: Model<CourseDocument>,
+    @InjectModel(Course.name)
+    private readonly courseModel: Model<CourseDocument>,
     @InjectConnection() connection: Connection,
   ) {
     super(courseModel, connection);
@@ -56,30 +57,51 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
 
     if (!course) return null;
 
-    const { _id, coverImageId, promotionalVideoId, teacherId, subjectId, ...rest } = course as any;
+    const {
+      _id,
+      coverImageId,
+      promotionalVideoId,
+      teacherId,
+      subjectId,
+      ...rest
+    } = course as any;
     return {
       id: _id.toString(),
-      subject: subjectId ? { id: subjectId._id.toString(), name: subjectId.name } : null,
-      teacher: teacherId ? {
-        id: teacherId._id.toString(),
-        fullName: teacherId.fullName,
-        avatar: teacherId.avatar,
-        bio: teacherId.bio || null
-      } : null,
-      coverImage: coverImageId ? { id: coverImageId._id.toString(), url: coverImageId.url, blurHash: coverImageId.blurHash } : null,
+      subject: subjectId
+        ? { id: subjectId._id.toString(), name: subjectId.name }
+        : null,
+      teacher: teacherId
+        ? {
+            id: teacherId._id.toString(),
+            fullName: teacherId.fullName,
+            avatar: teacherId.avatar,
+            bio: teacherId.bio || null,
+          }
+        : null,
+      coverImage: coverImageId
+        ? {
+            id: coverImageId._id.toString(),
+            url: coverImageId.url,
+            blurHash: coverImageId.blurHash,
+          }
+        : null,
 
-      promotionalVideo: promotionalVideoId ? {
-        id: promotionalVideoId._id.toString(),
-        url: promotionalVideoId.url,
-        blurHash: promotionalVideoId.blurHash || null,
-        duration: promotionalVideoId.duration || null
-      } : null,
-      ...rest
+      promotionalVideo: promotionalVideoId
+        ? {
+            id: promotionalVideoId._id.toString(),
+            url: promotionalVideoId.url,
+            blurHash: promotionalVideoId.blurHash || null,
+            duration: promotionalVideoId.duration || null,
+          }
+        : null,
+      ...rest,
     };
   }
 
-  // [CTO FIX]: Thêm options để điều khiển luồng lấy dữ liệu linh hoạt, mặc định maskMediaUrls = false để dĩ hòa vi quý với hệ thống cũ
-  async getFullCourseCurriculum(courseId: string | Types.ObjectId, options?: GetCurriculumOptions) {
+  async getFullCourseCurriculum(
+    courseId: string | Types.ObjectId,
+    options?: GetCurriculumOptions,
+  ) {
     const maskUrls = options?.maskMediaUrls ?? false;
 
     const pipeline: PipelineStage[] = [
@@ -98,33 +120,69 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
                 foreignField: 'sectionId',
                 pipeline: [
                   { $sort: { order: 1 } },
-                  // 1. Chỉnh lại Sub-pipeline của primaryVideoData
+                  
+                  {
+                    $lookup: {
+                      from: 'exams',
+                      localField: 'examId',
+                      foreignField: '_id',
+                      as: 'examData'
+                    }
+                  },
+                  {
+                    $unwind: {
+                      path: '$examData',
+                      preserveNullAndEmptyArrays: true
+                    }
+                  },
+
                   {
                     $lookup: {
                       from: 'media',
                       let: { videoId: '$primaryVideoId' },
                       pipeline: [
                         { $match: { $expr: { $eq: ['$_id', '$$videoId'] } } },
-                        // [CTO FIX]: Lấy thêm duration
-                        { $project: { _id: 1, url: 1, blurHash: 1, duration: 1 } }
+                        {
+                          $project: {
+                            _id: 1,
+                            url: 1,
+                            blurHash: 1,
+                            duration: 1,
+                          },
+                        },
                       ],
-                      as: 'primaryVideoData'
-                    }
+                      as: 'primaryVideoData',
+                    },
                   },
-                  { $unwind: { path: '$primaryVideoData', preserveNullAndEmptyArrays: true } },
-                  // 2. Chỉnh lại Sub-pipeline của attachmentsData
+                  {
+                    $unwind: {
+                      path: '$primaryVideoData',
+                      preserveNullAndEmptyArrays: true,
+                    },
+                  },
                   {
                     $lookup: {
                       from: 'media',
                       let: { attachmentIds: { $ifNull: ['$attachments', []] } },
                       pipeline: [
-                        { $match: { $expr: { $in: ['$_id', '$$attachmentIds'] } } },
-                        // [CTO FIX]: Lấy thêm size
-                        { $project: { _id: 1, url: 1, originalName: 1, mimetype: 1, size: 1 } }
+                        {
+                          $match: {
+                            $expr: { $in: ['$_id', '$$attachmentIds'] },
+                          },
+                        },
+                        {
+                          $project: {
+                            _id: 1,
+                            url: 1,
+                            originalName: 1,
+                            mimetype: 1,
+                            size: 1,
+                          },
+                        },
                       ],
-                      as: 'attachmentsData'
-                    }
-                  }
+                      as: 'attachmentsData',
+                    },
+                  },
                 ],
                 as: 'lessons',
               },
@@ -136,33 +194,70 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
       {
         $addFields: {
           id: { $toString: '$_id' },
-          totalLessons: { $sum: { $map: { input: '$sections', as: 's', in: { $size: '$$s.lessons' } } } },
+          totalLessons: {
+            $sum: {
+              $map: {
+                input: '$sections',
+                as: 's',
+                in: { $size: '$$s.lessons' },
+              },
+            },
+          },
           totalVideos: {
             $sum: {
               $map: {
                 input: '$sections',
                 as: 's',
-                in: { $size: { $filter: { input: '$$s.lessons', as: 'l', cond: { $ifNull: ['$$l.primaryVideoId', false] } } } }
-              }
-            }
+                in: {
+                  $size: {
+                    $filter: {
+                      input: '$$s.lessons',
+                      as: 'l',
+                      cond: { $ifNull: ['$$l.primaryVideoId', false] },
+                    },
+                  },
+                },
+              },
+            },
           },
           totalDocuments: {
             $sum: {
               $map: {
                 input: '$sections',
                 as: 's',
-                in: { $size: { $filter: { input: '$$s.lessons', as: 'l', cond: { $gt: [{ $size: { $ifNull: ['$$l.attachments', []] } }, 0] } } } }
-              }
-            }
+                in: {
+                  $size: {
+                    $filter: {
+                      input: '$$s.lessons',
+                      as: 'l',
+                      cond: {
+                        $gt: [
+                          { $size: { $ifNull: ['$$l.attachments', []] } },
+                          0,
+                        ],
+                      },
+                    },
+                  },
+                },
+              },
+            },
           },
           totalQuizzes: {
             $sum: {
               $map: {
                 input: '$sections',
                 as: 's',
-                in: { $size: { $filter: { input: '$$s.lessons', as: 'l', cond: { $ifNull: ['$$l.examId', false] } } } }
-              }
-            }
+                in: {
+                  $size: {
+                    $filter: {
+                      input: '$$s.lessons',
+                      as: 'l',
+                      cond: { $ifNull: ['$$l.examId', false] },
+                    },
+                  },
+                },
+              },
+            },
           },
 
           sections: {
@@ -185,49 +280,78 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
                       order: '$$lesson.order',
                       isFreePreview: '$$lesson.isFreePreview',
                       content: '$$lesson.content',
-                      examId: { $cond: [{ $ifNull: ['$$lesson.examId', false] }, { $toString: '$$lesson.examId' }, null] },
+                      examId: {
+                        $cond: [
+                          { $ifNull: ['$$lesson.examId', false] },
+                          { $toString: '$$lesson.examId' },
+                          null,
+                        ],
+                      },
+                      
+                      examMode: {
+                        $cond: [
+                          { $ifNull: ['$$lesson.examData', false] },
+                          '$$lesson.examData.mode',
+                          null,
+                        ],
+                      },
+                      examType: {
+                        $cond: [
+                          { $ifNull: ['$$lesson.examData', false] },
+                          '$$lesson.examData.type',
+                          null,
+                        ],
+                      },
 
-                      // Khối Video chính
                       primaryVideo: {
                         $cond: [
                           { $ifNull: ['$$lesson.primaryVideoData', false] },
                           {
                             id: { $toString: '$$lesson.primaryVideoData._id' },
-                            // [CTO FIX]: Khóa van rò rỉ URL. Nếu cờ maskUrls bật, DB tự động check xem có phải isFreePreview không mới trả URL, nếu không nhả null.
                             url: maskUrls
-                              ? { $cond: [{ $eq: ['$$lesson.isFreePreview', true] }, '$$lesson.primaryVideoData.url', null] }
+                              ? {
+                                  $cond: [
+                                    { $eq: ['$$lesson.isFreePreview', true] },
+                                    '$$lesson.primaryVideoData.url',
+                                    null,
+                                  ],
+                                }
                               : '$$lesson.primaryVideoData.url',
                             blurHash: '$$lesson.primaryVideoData.blurHash',
-                            duration: '$$lesson.primaryVideoData.duration' // Nhả duration
+                            duration: '$$lesson.primaryVideoData.duration',
                           },
-                          null
-                        ]
+                          null,
+                        ],
                       },
 
-                      // Khối tệp đính kèm
                       attachments: {
                         $map: {
                           input: '$$lesson.attachmentsData',
                           as: 'att',
                           in: {
                             id: { $toString: '$$att._id' },
-                            // [CTO FIX]: Tương tự với attachments, khóa van nếu được yêu cầu.
                             url: maskUrls
-                              ? { $cond: [{ $eq: ['$$lesson.isFreePreview', true] }, '$$att.url', null] }
+                              ? {
+                                  $cond: [
+                                    { $eq: ['$$lesson.isFreePreview', true] },
+                                    '$$att.url',
+                                    null,
+                                  ],
+                                }
                               : '$$att.url',
                             originalName: '$$att.originalName',
                             mimetype: '$$att.mimetype',
-                            size: '$$att.size' // Nhả size bằng bytes
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
+                            size: '$$att.size',
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
       {
         $project: {
@@ -237,17 +361,28 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
           subjectId: 0,
           coverImageId: 0,
           promotionalVideoId: 0,
-        }
-      }
+        },
+      },
     ];
 
-    const result = await this.courseModel.aggregate(pipeline, { session: this.currentSession }).exec();
+    const result = await this.courseModel
+      .aggregate(pipeline, { session: this.currentSession })
+      .exec();
     return result[0] || null;
   }
 
   // [CTO UPGRADE]: Viết lại lõi Search Engine sử dụng Dynamic Query Builder (Đã Fix Lỗi Data Rác)
   async searchPublicCourses(options: SearchPublicCoursesOptions) {
-    const { keyword, subjectId, page, limit, isFree, minPrice, maxPrice, sort } = options;
+    const {
+      keyword,
+      subjectId,
+      page,
+      limit,
+      isFree,
+      minPrice,
+      maxPrice,
+      sort,
+    } = options;
 
     // 1. Build Query (Mảng chứa các điều kiện AND)
     const andConditions: any[] = [{ status: 'PUBLISHED' }];
@@ -257,7 +392,7 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
         $or: [
           { title: { $regex: keyword, $options: 'i' } },
           { description: { $regex: keyword, $options: 'i' } },
-        ]
+        ],
       });
     }
 
@@ -283,10 +418,14 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
 
           // TH2: KHÔNG sale (discountPrice = 0 do rác, hoặc null, hoặc không tồn tại) -> Áp dụng cho giá gốc
           {
-            $or: [{ discountPrice: 0 }, { discountPrice: null }, { discountPrice: { $exists: false } }],
-            price: priceCondition
-          }
-        ]
+            $or: [
+              { discountPrice: 0 },
+              { discountPrice: null },
+              { discountPrice: { $exists: false } },
+            ],
+            price: priceCondition,
+          },
+        ],
       });
     }
 
@@ -320,7 +459,9 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
     const [data, total] = await Promise.all([
       this.courseModel
         .find(filter)
-        .select('title slug price discountPrice coverImageId teacherId subjectId status createdAt averageRating totalReviews')
+        .select(
+          'title slug price discountPrice coverImageId teacherId subjectId status createdAt averageRating totalReviews',
+        )
         .populate('teacherId', 'fullName avatar')
         .populate('subjectId', 'name')
         .populate('coverImageId', 'url blurHash')
@@ -329,7 +470,7 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
         .limit(limit)
         .lean()
         .exec(),
-      this.courseModel.countDocuments(filter).exec()
+      this.courseModel.countDocuments(filter).exec(),
     ]);
 
     // 4. Transform Data về chuẩn Output
@@ -337,16 +478,30 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
       const { _id, teacherId, coverImageId, subjectId, ...rest } = item;
       return {
         id: _id.toString(),
-        subject: subjectId ? { id: subjectId._id.toString(), name: subjectId.name } : null,
-        teacher: teacherId ? { id: teacherId._id.toString(), fullName: teacherId.fullName, avatar: teacherId.avatar } : null,
-        coverImage: coverImageId ? { id: coverImageId._id.toString(), url: coverImageId.url, blurHash: coverImageId.blurHash } : null,
-        ...rest
+        subject: subjectId
+          ? { id: subjectId._id.toString(), name: subjectId.name }
+          : null,
+        teacher: teacherId
+          ? {
+              id: teacherId._id.toString(),
+              fullName: teacherId.fullName,
+              avatar: teacherId.avatar,
+            }
+          : null,
+        coverImage: coverImageId
+          ? {
+              id: coverImageId._id.toString(),
+              url: coverImageId.url,
+              blurHash: coverImageId.blurHash,
+            }
+          : null,
+        ...rest,
       };
     });
 
     return {
       data: mappedData,
-      meta: { page, limit, total, totalPages: Math.ceil(total / limit) }
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 
@@ -359,22 +514,22 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
           from: 'enrollments',
           localField: '_id',
           foreignField: 'courseId',
-          as: 'enrollments'
-        }
+          as: 'enrollments',
+        },
       },
       {
         $lookup: {
           from: 'media',
           localField: 'coverImageId',
           foreignField: '_id',
-          as: 'coverImageData'
-        }
+          as: 'coverImageData',
+        },
       },
       {
         $unwind: {
           path: '$coverImageData',
-          preserveNullAndEmptyArrays: true
-        }
+          preserveNullAndEmptyArrays: true,
+        },
       },
       {
         $project: {
@@ -393,24 +548,28 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
               then: {
                 id: { $toString: '$coverImageData._id' },
                 url: '$coverImageData.url',
-                blurHash: '$coverImageData.blurHash'
+                blurHash: '$coverImageData.blurHash',
               },
-              else: null
-            }
-          }
-        }
-      }
+              else: null,
+            },
+          },
+        },
+      },
     ];
 
     return this.courseModel.aggregate(pipeline).exec();
   }
 
-  async countTeacherActiveCourses(teacherId: string | Types.ObjectId): Promise<number> {
-    return this.courseModel.countDocuments({
-      teacherId: new Types.ObjectId(teacherId.toString()),
-      status: { 
-        $in: [CourseStatus.PUBLISHED, CourseStatus.PENDING_REVIEW] 
-      }
-    }).exec();
+  async countTeacherActiveCourses(
+    teacherId: string | Types.ObjectId,
+  ): Promise<number> {
+    return this.courseModel
+      .countDocuments({
+        teacherId: new Types.ObjectId(teacherId.toString()),
+        status: {
+          $in: [CourseStatus.PUBLISHED, CourseStatus.PENDING_REVIEW],
+        },
+      })
+      .exec();
   }
 }

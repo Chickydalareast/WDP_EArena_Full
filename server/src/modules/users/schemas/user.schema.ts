@@ -18,7 +18,13 @@ export enum AuthProvider {
 
 @Schema({ timestamps: true, collection: 'users' })
 export class User {
-  @Prop({ required: true, unique: true, index: true, lowercase: true, trim: true })
+  @Prop({
+    required: true,
+    unique: true,
+    index: true,
+    lowercase: true,
+    trim: true,
+  })
   email: string;
 
   @Prop({ required: false, select: false })
@@ -42,7 +48,12 @@ export class User {
   @Prop({ type: String, enum: UserRole, default: UserRole.STUDENT })
   role: UserRole;
 
-  @Prop({ type: String, enum: UserStatus, default: UserStatus.ACTIVE, index: true })
+  @Prop({
+    type: String,
+    enum: UserStatus,
+    default: UserStatus.ACTIVE,
+    index: true,
+  })
   status: UserStatus;
 
   @Prop({ type: String, enum: AuthProvider, default: AuthProvider.LOCAL })
@@ -60,7 +71,12 @@ export class User {
   @Prop({ required: false })
   lastLoginAt?: Date;
 
-  @Prop({ type: Types.ObjectId, ref: 'PricingPlan', required: false, index: true })
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'PricingPlan',
+    required: false,
+    index: true,
+  })
   currentPlanId?: Types.ObjectId;
 
   @Prop({ type: Date, required: false, index: true })

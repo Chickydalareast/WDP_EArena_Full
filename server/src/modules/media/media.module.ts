@@ -6,7 +6,10 @@ import { MediaService } from './media.service';
 import { MediaProcessor } from './media.processor';
 import { CloudinaryAdapter } from './providers/cloudinary.provider';
 import { GoogleDriveAdapter } from './providers/google-drive.provider';
-import { CLOUDINARY_PROVIDER, VIDEO_PROVIDER } from './interfaces/storage-provider.interface';
+import {
+  CLOUDINARY_PROVIDER,
+  VIDEO_PROVIDER,
+} from './interfaces/storage-provider.interface';
 import { Media, MediaSchema } from './schemas/media.schema';
 import { MediaRepository } from './media.repository';
 
@@ -27,4 +30,4 @@ import { MediaRepository } from './media.repository';
   ],
   exports: [MediaService, MediaRepository],
 })
-export class MediaModule { }
+export class MediaModule {}

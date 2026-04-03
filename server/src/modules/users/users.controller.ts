@@ -1,4 +1,13 @@
-import { Controller, Post, Body, Get, Patch, UseGuards, Query, Param } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Patch,
+  UseGuards,
+  Query,
+  Param,
+} from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { UsersService } from './users.service';
 import { CreateUserDto, UpdateProfileDto, UserResponseDto } from './dto';
@@ -16,7 +25,7 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN) 
+  @Roles(UserRole.ADMIN)
   @Post()
   async create(@Body() dto: CreateUserDto) {
     return this.usersService.create({
@@ -28,7 +37,7 @@ export class UsersController {
   }
 
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN) 
+  @Roles(UserRole.ADMIN)
   @Get()
   async findAll(@Query() query: PaginationDto) {
     return this.usersService.findAll(query.page, query.limit);
@@ -42,7 +51,7 @@ export class UsersController {
   @Patch('me/profile')
   async updateProfile(
     @CurrentUser() user: JwtPayload,
-    @Body() dto: UpdateProfileDto
+    @Body() dto: UpdateProfileDto,
   ) {
     return this.usersService.updateProfile(user.userId, {
       fullName: dto.fullName,
@@ -55,10 +64,12 @@ export class UsersController {
   @Get('me')
   async getMeFast(@CurrentUser() user: JwtPayload) {
     const fullUser = await this.usersService.getBasicUserInfo(user.userId);
-    
-    return { 
-      data: plainToInstance(UserResponseDto, fullUser, { excludeExtraneousValues: true }),
-      message: 'Lấy thông tin cơ bản thành công'
+
+    return {
+      data: plainToInstance(UserResponseDto, fullUser, {
+        excludeExtraneousValues: true,
+      }),
+      message: 'Lấy thông tin cơ bản thành công',
     };
   }
 
@@ -66,11 +77,12 @@ export class UsersController {
   @Get(':id/public-profile')
   async getPublicProfile(@Param('id') id: string) {
     const profile = await this.usersService.getPublicProfile(id);
-    
+
     return {
       message: 'Lấy hồ sơ công khai thành công',
-      data: plainToInstance(PublicProfileResponseDto, profile, { excludeExtraneousValues: true })
+      data: plainToInstance(PublicProfileResponseDto, profile, {
+        excludeExtraneousValues: true,
+      }),
     };
   }
-  
 }

@@ -10,7 +10,10 @@ import { EnrollmentsRepository } from '../repositories/enrollments.repository';
 import { LessonsRepository } from '../repositories/lessons.repository';
 import { CoursesRepository } from '../courses.repository';
 import { CreateEnrollmentPayload } from '../interfaces/course.interface';
-import { CourseEventPattern, CourseCompletedEventPayload } from '../constants/course-event.constant';
+import {
+  CourseEventPattern,
+  CourseCompletedEventPayload,
+} from '../constants/course-event.constant';
 
 export type EnrollUserPayload = {
   userId: string;
@@ -30,31 +33,47 @@ export class EnrollmentsService {
     private readonly lessonsRepo: LessonsRepository,
     private readonly coursesRepo: CoursesRepository,
     private readonly eventEmitter: EventEmitter2,
-  ) { }
+  ) {}
 
-  async validateCourseExamAccess(userId: string, courseId: string, examId: string): Promise<boolean> {
+  async validateCourseExamAccess(
+    userId: string,
+    courseId: string,
+    examId: string,
+  ): Promise<boolean> {
     if (!Types.ObjectId.isValid(courseId) || !Types.ObjectId.isValid(examId)) {
       throw new BadRequestException('ID khóa học hoặc bài thi không hợp lệ.');
     }
 
-    const lesson = await this.lessonsRepo.findOneSafe({
-      courseId: new Types.ObjectId(courseId),
-      examId: new Types.ObjectId(examId)
-    }, { select: 'isFreePreview' });
+    const lesson = await this.lessonsRepo.findOneSafe(
+      {
+        courseId: new Types.ObjectId(courseId),
+        examId: new Types.ObjectId(examId),
+      },
+      { select: 'isFreePreview' },
+    );
 
     if (!lesson) {
-      throw new ForbiddenException('Phát hiện truy cập trái phép! Bài thi không thuộc khóa học này.');
+      throw new ForbiddenException(
+        'Phát hiện truy cập trái phép! Bài thi không thuộc khóa học này.',
+      );
     }
 
     if (lesson.isFreePreview) return true;
 
-    const course = await this.coursesRepo.findByIdSafe(courseId, { select: 'teacherId' });
+    const course = await this.coursesRepo.findByIdSafe(courseId, {
+      select: 'teacherId',
+    });
     if (course && course.teacherId.toString() === userId) return true;
 
-    const enrollment = await this.enrollmentsRepo.findUserEnrollment(userId, courseId);
+    const enrollment = await this.enrollmentsRepo.findUserEnrollment(
+      userId,
+      courseId,
+    );
     if (enrollment && (enrollment as any).status === 'ACTIVE') return true;
 
-    throw new ForbiddenException('Bạn chưa ghi danh khóa học này. Vui lòng nâng cấp để làm bài thi.');
+    throw new ForbiddenException(
+      'Bạn chưa ghi danh khóa học này. Vui lòng nâng cấp để làm bài thi.',
+    );
   }
 
   async createEnrollment(payload: CreateEnrollmentPayload) {
@@ -64,33 +83,49 @@ export class EnrollmentsService {
       completedLessons: [],
       progress: 0,
     });
-    return { id: (enrollment._id as Types.ObjectId).toString() };
+    return { id: enrollment._id.toString() };
   }
 
   async markLessonCompleted(payload: MarkLessonPayload) {
-    if (!Types.ObjectId.isValid(payload.courseId) || !Types.ObjectId.isValid(payload.lessonId)) {
+    if (
+      !Types.ObjectId.isValid(payload.courseId) ||
+      !Types.ObjectId.isValid(payload.lessonId)
+    ) {
       throw new BadRequestException('ID không hợp lệ.');
     }
 
-    const enrollment = await this.enrollmentsRepo.findUserEnrollment(payload.userId, payload.courseId);
-    if (!enrollment) throw new ForbiddenException('Bạn chưa ghi danh khóa học này.');
+    const enrollment = await this.enrollmentsRepo.findUserEnrollment(
+      payload.userId,
+      payload.courseId,
+    );
+    if (!enrollment)
+      throw new ForbiddenException('Bạn chưa ghi danh khóa học này.');
 
     const lessonObjectId = new Types.ObjectId(payload.lessonId);
-    const isAlreadyCompleted = enrollment.completedLessons.some(id => id.toString() === lessonObjectId.toString());
-    if (isAlreadyCompleted) return { message: 'Bài học đã được hoàn thành trước đó.', progress: enrollment.progress };
+    const isAlreadyCompleted = enrollment.completedLessons.some(
+      (id) => id.toString() === lessonObjectId.toString(),
+    );
+    if (isAlreadyCompleted)
+      return {
+        message: 'Bài học đã được hoàn thành trước đó.',
+        progress: enrollment.progress,
+      };
 
-    const totalLessons = await this.lessonsRepo.countLessonsByCourse(payload.courseId);
+    const totalLessons = await this.lessonsRepo.countLessonsByCourse(
+      payload.courseId,
+    );
 
-    if (totalLessons === 0) return { message: 'Khóa học chưa có bài học nào.', progress: 0 };
+    if (totalLessons === 0)
+      return { message: 'Khóa học chưa có bài học nào.', progress: 0 };
 
     const newCompletedCount = enrollment.completedLessons.length + 1;
     let newProgress = Math.floor((newCompletedCount / totalLessons) * 100);
     newProgress = Math.min(newProgress, 100);
 
     const updated = await this.enrollmentsRepo.atomicUpdateProgress(
-      enrollment._id as Types.ObjectId,
+      enrollment._id,
       lessonObjectId,
-      newProgress
+      newProgress,
     );
 
     const finalProgress = updated?.progress || newProgress;

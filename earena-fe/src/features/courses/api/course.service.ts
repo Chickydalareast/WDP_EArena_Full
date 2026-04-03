@@ -9,7 +9,14 @@ import {
     CourseTeacherDetail,
     PublicCourseDetail,
     UpdateCourseDTO,
-    CourseDashboardStats
+    CourseDashboardStats,
+    TeacherLessonQuizDetail,
+    QuizRulePreviewPayloadDTO,
+    QuizRulePreviewResponse,
+    QuizMatricesResponse,
+    QuizBuilderPreviewPayloadDTO,
+    QuizBuilderPreviewResponse,
+    QuizHealthResponse
 } from '../types/course.schema';
 import { AiBuilderFormDTO, AiBuilderResponse, CreateLessonDTO, CreateQuizLessonDTO, CreateSectionDTO, UpdateLessonDTO, UpdateQuizLessonDTO, UpdateSectionDTO } from '../types/curriculum.schema';
 import { CreateQuizLessonResponse } from '@/features/exam-builder/types/exam.schema';
@@ -149,6 +156,47 @@ export const courseService = {
         return axiosClient.delete(API_ENDPOINTS.COURSES.DETAIL(courseId));
     },
 
+    getTeacherLessonQuizDetail: async (
+        courseId: string,
+        lessonId: string,
+    ): Promise<TeacherLessonQuizDetail> => {
+        return axiosClient.get<unknown, TeacherLessonQuizDetail>(
+            API_ENDPOINTS.COURSES.LESSON_DETAIL(courseId, lessonId),
+        );
+    },
+
+    previewQuizRule: async (
+        payload: QuizRulePreviewPayloadDTO,
+    ): Promise<QuizRulePreviewResponse> => {
+        return axiosClient.post<unknown, QuizRulePreviewResponse>(
+            API_ENDPOINTS.COURSES.QUIZ_BUILDER_RULE_PREVIEW,
+            payload,
+        );
+    },
+
+    previewQuizConfig: async (
+        payload: QuizBuilderPreviewPayloadDTO,
+    ): Promise<QuizBuilderPreviewResponse> => {
+        return axiosClient.post<unknown, QuizBuilderPreviewResponse>(
+            API_ENDPOINTS.COURSES.QUIZ_BUILDER_PREVIEW,
+            payload,
+            { timeout: 20000 },
+        );
+    },
+
+    getQuizMatrices: async (params: {
+        courseId: string;
+        page?: number;
+        limit?: number;
+        search?: string;
+    }): Promise<QuizMatricesResponse> => {
+        return axiosClient.get<unknown, QuizMatricesResponse>(
+            API_ENDPOINTS.COURSES.QUIZ_BUILDER_MATRICES,
+            { params },
+        );
+    },
+
+
     createQuizLesson: async (payload: CreateQuizLessonDTO): Promise<CreateQuizLessonResponse> => {
         return axiosClient.post<unknown, CreateQuizLessonResponse>(
             API_ENDPOINTS.COURSES.QUIZ_BUILDER,
@@ -167,6 +215,12 @@ export const courseService = {
         return axiosClient.delete<unknown, void>(
             API_ENDPOINTS.COURSES.QUIZ_BUILDER,
             { params: { courseId, lessonId } }
+        );
+    },
+
+    getQuizHealth: async (lessonId: string): Promise<QuizHealthResponse> => {
+        return axiosClient.get<unknown, QuizHealthResponse>(
+            API_ENDPOINTS.COURSES.QUIZ_BUILDER_HEALTH(lessonId)
         );
     },
 };

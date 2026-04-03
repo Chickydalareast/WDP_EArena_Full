@@ -28,19 +28,43 @@ const AnswerOptionSchema = SchemaFactory.createForClass(AnswerOption);
 
 @Schema({ timestamps: true, collection: 'questions' })
 export class Question {
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  })
   ownerId: Types.ObjectId;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'QuestionFolder', required: true, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'QuestionFolder',
+    required: true,
+    index: true,
+  })
   folderId: Types.ObjectId;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'KnowledgeTopic', default: null })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'KnowledgeTopic',
+    default: null,
+  })
   topicId: Types.ObjectId;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Question', default: null, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'Question',
+    default: null,
+    index: true,
+  })
   parentPassageId: Types.ObjectId;
 
-  @Prop({ type: String, enum: QuestionType, default: QuestionType.MULTIPLE_CHOICE, index: true })
+  @Prop({
+    type: String,
+    enum: QuestionType,
+    default: QuestionType.MULTIPLE_CHOICE,
+    index: true,
+  })
   type: QuestionType;
 
   @Prop({ required: true })
@@ -55,10 +79,18 @@ export class Question {
   @Prop({ type: [AnswerOptionSchema], default: [] })
   answers: AnswerOption[];
 
-  @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Media' }], default: [] })
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Media' }],
+    default: [],
+  })
   attachedMedia: Types.ObjectId[];
 
-  @Prop({ type: String, enum: DifficultyLevel, default: DifficultyLevel.UNKNOWN, index: true })
+  @Prop({
+    type: String,
+    enum: DifficultyLevel,
+    default: DifficultyLevel.UNKNOWN,
+    index: true,
+  })
   difficultyLevel: DifficultyLevel;
 
   @Prop({ type: [String], default: [], index: true })

@@ -10,7 +10,13 @@ export type WalletDocument = Wallet & Document;
 
 @Schema({ timestamps: true, collection: 'wallets' })
 export class Wallet {
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, unique: true, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    unique: true,
+    index: true,
+  })
   userId: Types.ObjectId;
 
   @Prop({ required: true, default: 0, min: 0 })

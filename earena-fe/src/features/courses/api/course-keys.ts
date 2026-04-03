@@ -24,4 +24,10 @@ export const courseQueryKeys = {
     
     teacherDashboardStats: (courseId: string) => [...courseQueryKeys.teacherDetails(), courseId, 'stats'] as const,
     teacherCurriculumView: (courseId: string) => [...courseQueryKeys.teacherDetails(), courseId, 'curriculum-view'] as const,
+
+    lessonQuizDetails: () => [...courseQueryKeys.all, 'lesson-quiz', 'detail'] as const,
+    lessonQuizDetail: (courseId: string, lessonId: string) =>
+        [...courseQueryKeys.lessonQuizDetails(), courseId, lessonId] as const,
+    quizMatrices: (courseId: string, params?: Record<string, unknown>) =>
+        [...courseQueryKeys.all, 'quiz-matrices', courseId, params ?? {}] as const,
 };

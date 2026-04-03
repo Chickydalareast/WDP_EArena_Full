@@ -41,7 +41,9 @@ export class UsersRepository extends AbstractRepository<UserDocument> {
       .exec() as Promise<UserDocument | null>;
   }
 
-  async findByIdWithPassword(id: string | Types.ObjectId): Promise<UserDocument | null> {
+  async findByIdWithPassword(
+    id: string | Types.ObjectId,
+  ): Promise<UserDocument | null> {
     return this.model
       .findById(new Types.ObjectId(id.toString()))
       .select('+password')
@@ -54,31 +56,38 @@ export class UsersRepository extends AbstractRepository<UserDocument> {
   }
 
   async checkEmailExists(email: string): Promise<boolean> {
-    const result = await this.model.exists({ email } as QueryFilter<UserDocument>);
+    const result = await this.model.exists({
+      email,
+    } as QueryFilter<UserDocument>);
     return !!result;
   }
 
-  async findAllPaginated(page: number, limit: number): Promise<{ data: UserDocument[]; total: number }> {
+  async findAllPaginated(
+    page: number,
+    limit: number,
+  ): Promise<{ data: UserDocument[]; total: number }> {
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
-      this.model
-        .find({})
-        .skip(skip)
-        .limit(limit)
-        .lean() 
-        .exec() as Promise<UserDocument[]>,
-      this.model.countDocuments({}).exec()
+      this.model.find({}).skip(skip).limit(limit).lean().exec() as Promise<
+        UserDocument[]
+      >,
+      this.model.countDocuments({}).exec(),
     ]);
 
     return { data, total };
   }
 
-  async findUserWithSubscription(userId: string | Types.ObjectId): Promise<UserSubscriptionData | null> {
+  async findUserWithSubscription(
+    userId: string | Types.ObjectId,
+  ): Promise<UserSubscriptionData | null> {
     const user = await this.model
       .findById(new Types.ObjectId(userId.toString()))
       .select('currentPlanId planExpiresAt role status')
-      .populate('currentPlanId', 'code name isActive canCreatePaidCourse isUnlimitedCourses maxCourses')
+      .populate(
+        'currentPlanId',
+        'code name isActive canCreatePaidCourse isUnlimitedCourses maxCourses',
+      )
       .lean()
       .exec();
 

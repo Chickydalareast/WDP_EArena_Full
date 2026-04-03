@@ -1,8 +1,23 @@
-import { Controller, Get, Param, Query, UseGuards, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Param,
+  Query,
+  UseGuards,
+  BadRequestException,
+} from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
-import { CourseReaderService, SearchPublicCoursesPayload, GetStudyTreePayload, GetLessonContentPayload } from '../services/course-reader.service';
+import {
+  CourseReaderService,
+  SearchPublicCoursesPayload,
+  GetStudyTreePayload,
+  GetLessonContentPayload,
+} from '../services/course-reader.service';
 import { SearchPublicCoursesDto } from '../dto/course-reader.dto';
-import { CoursePublicDetailResponseDto, StudyTreeResponseDto } from '../dto/course-reader-response.dto';
+import {
+  CoursePublicDetailResponseDto,
+  StudyTreeResponseDto,
+} from '../dto/course-reader-response.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { OptionalAuth } from '../../../common/decorators/optional-auth.decorator';
@@ -18,11 +33,17 @@ export class CourseReaderController {
   @Get('public')
   async searchPublicCourses(
     @Query() dto: SearchPublicCoursesDto,
-    @CurrentUser('userId') userId: string 
+    @CurrentUser('userId') userId: string,
   ) {
     // [CTO UPGRADE]: Fail-Fast validation. Chặn đứng query vô nghĩa tránh tốn tải DB.
-    if (dto.minPrice !== undefined && dto.maxPrice !== undefined && dto.minPrice > dto.maxPrice) {
-      throw new BadRequestException('minPrice không được phép lớn hơn maxPrice.');
+    if (
+      dto.minPrice !== undefined &&
+      dto.maxPrice !== undefined &&
+      dto.minPrice > dto.maxPrice
+    ) {
+      throw new BadRequestException(
+        'minPrice không được phép lớn hơn maxPrice.',
+      );
     }
 
     // [CTO UPGRADE]: Map DTO thành Domain Payload (Service hoàn toàn "mù" về DTO)
@@ -37,7 +58,7 @@ export class CourseReaderController {
       sort: dto.sort,
       userId,
     };
-    
+
     const result = await this.courseReaderService.searchPublicCourses(payload);
     return { message: 'Lấy danh sách khóa học thành công', ...result };
   }
@@ -48,13 +69,23 @@ export class CourseReaderController {
     @Param('slug') slug: string,
     @CurrentUser('userId') userId: string,
   ) {
-    const data = await this.courseReaderService.getPublicCourseDetail(slug, userId);
-    
-    const serializedData = plainToInstance(CoursePublicDetailResponseDto, data, {
-      excludeExtraneousValues: true,
-    });
+    const data = await this.courseReaderService.getPublicCourseDetail(
+      slug,
+      userId,
+    );
 
-    return { message: 'Lấy chi tiết khóa học thành công', data: serializedData };
+    const serializedData = plainToInstance(
+      CoursePublicDetailResponseDto,
+      data,
+      {
+        excludeExtraneousValues: true,
+      },
+    );
+
+    return {
+      message: 'Lấy chi tiết khóa học thành công',
+      data: serializedData,
+    };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -89,7 +120,7 @@ export class CourseReaderController {
       userId,
     };
     const data = await this.courseReaderService.getLessonContent(payload);
-    
+
     return { message: 'Lấy nội dung bài học thành công', data };
   }
 
@@ -98,16 +129,16 @@ export class CourseReaderController {
   @Get('my-learning')
   async getMyLearning(
     @CurrentUser('userId') userId: string,
-    @Query() query: PaginationDto
+    @Query() query: PaginationDto,
   ) {
     const payload = {
       userId,
       page: query.page || 1,
-      limit: query.limit || 10
+      limit: query.limit || 10,
     };
 
     const result = await this.courseReaderService.getMyLearningCourses(payload);
-    
+
     return { message: 'Lấy danh sách khóa học của tôi thành công', ...result };
   }
 }

@@ -1,8 +1,15 @@
 import { Type, Transform } from 'class-transformer';
-import { 
-  IsArray, IsBoolean, IsEnum, IsMongoId, 
-  IsNotEmpty, IsOptional, IsString, 
-  ValidateNested, ArrayMinSize, ValidateIf 
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsMongoId,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  ValidateNested,
+  ArrayMinSize,
+  ValidateIf,
 } from 'class-validator';
 import { DifficultyLevel, QuestionType } from '../schemas/question.schema';
 import { IsRequiredIfPublished } from './create-question.dto';

@@ -2,8 +2,8 @@ import { IsNumber, Min, IsOptional, IsInt } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class MockDepositDto {
-  @IsNumber() 
-  @Min(1000, { message: 'Số tiền nạp tối thiểu là 1000 Coin.' }) 
+  @IsNumber()
+  @Min(1000, { message: 'Số tiền nạp tối thiểu là 1000 Coin.' })
   amount: number;
 }
 

@@ -1,28 +1,25 @@
 'use client';
 
-import React, { useEffect, useMemo } from 'react';
-import { useFormContext, useWatch } from 'react-hook-form';
-import { Trash2, FolderTree, Loader2 } from 'lucide-react';
+import React, { useMemo } from 'react';
+import { useFormContext, useWatch, Path } from 'react-hook-form';
+import { Trash2, FolderTree, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form';
 import { Input } from '@/shared/components/ui/input';
 import { MultiSelect } from '@/shared/components/ui/multi-select';
 import { TreeSelectMulti } from '@/features/exam-builder/components/TreeSelectMulti';
 
-import { FolderNode } from '@/features/exam-builder/hooks/useFolders';
-import { FlatTopic } from '@/features/exam-builder/hooks/useTopics';
-import { useActiveFilters } from '@/features/exam-builder/hooks/useActiveFilters';
-import { useDynamicPreview } from '../../hooks/useDynamicPreview';
 import { useDebounce } from '@/shared/hooks/useDebounce';
 import { cn } from '@/shared/lib/utils';
-import { MatrixRuleDTO } from '@/features/exam-builder/types/exam.schema';
-import { UpdateLessonDTO } from '../../types/curriculum.schema';
+import { CreateQuizLessonDTO } from '../../types/curriculum.schema';
+import { useRuleHealthCheck } from '../../hooks/useRuleHealthCheck';
 
 interface DynamicRuleItemProps {
     sectionIndex: number;
     ruleIndex: number;
-    folders: FolderNode[];
-    topics: FlatTopic[];
+    folders: any[];
+    topics: any[];
+    activeFilters: any;
     disabled: boolean;
     onRemove: () => void;
     canRemove: boolean;
@@ -33,192 +30,136 @@ export function DynamicRuleItem({
     ruleIndex,
     folders,
     topics,
+    activeFilters, // Đã được fetch sẵn 1 lần từ Cha, truyền xuống đây
     disabled,
     onRemove,
     canRemove
 }: DynamicRuleItemProps) {
-    // Ép kiểu chuẩn xác UpdateLessonDTO, nhưng dùng as any cho các path sâu để vượt qua RHF Type Inference Issue
-    const { control, setValue, getValues, setError, clearErrors } = useFormContext<UpdateLessonDTO>();
+    const { control } = useFormContext<CreateQuizLessonDTO>();
+    const basePath = `dynamicConfig.adHocSections.${sectionIndex}.rules.${ruleIndex}` as const;
+
+    // 1. Lấy dữ liệu Real-time từ Form
+    const watchedRule = useWatch({ control, name: basePath });
     
-    const basePath = `dynamicConfig.adHocSections.${sectionIndex}.rules.${ruleIndex}` as any;
+    // 2. Chuẩn bị payload cho Backend (Debounce để không bị DdoS)
+    const rulePayload = useMemo(() => ({
+        folderIds: watchedRule?.folderIds || [],
+        topicIds: watchedRule?.topicIds || [],
+        difficulties: watchedRule?.difficulties || [],
+        tags: watchedRule?.tags || [],
+        limit: watchedRule?.limit || 1
+    }), [watchedRule]);
 
-    const watchedFolderIds = useWatch({ control, name: `${basePath}.folderIds` }) || [];
-    const watchedTopicIds = useWatch({ control, name: `${basePath}.topicIds` }) || [];
-    const watchedDifficulties = useWatch({ control, name: `${basePath}.difficulties` }) || [];
-    const watchedTags = useWatch({ control, name: `${basePath}.tags` }) || [];
-    const watchedLimit = useWatch({ control, name: `${basePath}.limit` }) || 1;
+    const debouncedPayload = useDebounce(rulePayload, 600);
 
-    const rulePayload: MatrixRuleDTO = useMemo(() => ({
-        folderIds: watchedFolderIds,
-        topicIds: watchedTopicIds,
-        difficulties: watchedDifficulties,
-        tags: watchedTags,
-        limit: watchedLimit
-    }), [watchedFolderIds, watchedTopicIds, watchedDifficulties, watchedTags, watchedLimit]);
+    // 3. Gọi Hook Health Check để lấy tình trạng Kho câu hỏi
+    const isReadyToCheck = debouncedPayload.folderIds.length > 0;
+    const { data: healthData, isFetching: isChecking } = useRuleHealthCheck(isReadyToCheck ? debouncedPayload : null);
 
-    const debouncedPayload = useDebounce(rulePayload, 500);
+    // 4. Xác định trạng thái UI dựa vào Business Rules
+    const isSufficient = healthData?.isSufficient ?? true;
+    const safetyRatio = healthData?.safetyRatio ?? 1.0;
+    const available = healthData?.availableCount ?? 0;
 
-    // [CTO FIX 1]: Loại bỏ trường 'limit' ra khỏi payload ném lên Active Filters để BE không chửi
-    const filterPayload = useMemo(() => {
-        const { limit: _ignored, ...rest } = debouncedPayload;
-        return rest;
-    }, [debouncedPayload]);
+    const healthStatus = useMemo(() => {
+        if (!isReadyToCheck) return 'IDLE';
+        if (isChecking) return 'CHECKING';
+        if (!isSufficient) return 'ERROR';
+        if (safetyRatio < 1.5) return 'WARNING';
+        return 'HEALTHY';
+    }, [isReadyToCheck, isChecking, isSufficient, safetyRatio]);
 
-    const { data: rawFilterData, isFetching: isFetchingFilters } = useActiveFilters({
-        ...filterPayload,
-        isDraft: false, 
-    });
-
-    // [CTO FIX 2]: Gói payload chạy thử vào đúng cấu trúc `adHocSections` mà BE yêu cầu
-    const previewRequest = useMemo(() => {
-        if (!debouncedPayload.folderIds || debouncedPayload.folderIds.length === 0) return null;
-        return { 
-            adHocSections: [{
-                name: 'Temp Section',
-                orderIndex: 0,
-                rules: [debouncedPayload]
-            }] 
-        };
-    }, [debouncedPayload]);
-
-    const { data: rawPreviewData, isFetching: isFetchingPreview } = useDynamicPreview(previewRequest);
-
-    // [CTO FIX 3]: Xử lý bẫy Axios Unwrap (Luôn lấy đúng data dù có bị lột vỏ hay chưa)
-    const actualFilterData = (rawFilterData as any)?.data || rawFilterData;
-    const actualPreviewData = (rawPreviewData as any)?.data || rawPreviewData;
-
-    const availableFolderIds = actualFilterData?.folders?.map((f: any) => f.id || f._id) || actualFilterData?.folderIds;
-    const availableTags = actualFilterData?.tags || [];
-    const maxAvailable = actualPreviewData?.totalActualQuestions;
-
-    // AUTO-CLEARING BẪY CHỐNG INFINITE LOOP
-    useEffect(() => {
-        if (!actualFilterData) return;
-
-        const currentFolderIds = getValues(`${basePath}.folderIds`) || [];
-        const currentTags = getValues(`${basePath}.tags`) || [];
-
-        if (currentFolderIds.length > 0 && availableFolderIds) {
-            const validFolderIds = currentFolderIds.filter((id: string) => availableFolderIds.includes(id));
-            if (validFolderIds.join(',') !== currentFolderIds.join(',')) {
-                setValue(`${basePath}.folderIds`, validFolderIds, { shouldValidate: true });
-            }
-        }
-
-        if (currentTags.length > 0) {
-            const validTags = currentTags.filter((tag: string) => availableTags.includes(tag));
-            if (validTags.join(',') !== currentTags.join(',')) {
-                setValue(`${basePath}.tags`, validTags, { shouldValidate: true });
-            }
-        }
-    }, [actualFilterData, availableFolderIds, availableTags, basePath, setValue, getValues]);
-
-    useEffect(() => {
-        if (maxAvailable !== undefined) {
-            if (watchedLimit > maxAvailable) {
-                setError(`${basePath}.limit`, { type: 'manual', message: `Kho chỉ còn ${maxAvailable} câu` });
-            } else if (watchedLimit <= 0) {
-                setError(`${basePath}.limit`, { type: 'manual', message: 'Lớn hơn 0' });
-            } else {
-                clearErrors(`${basePath}.limit`);
-            }
-        }
-    }, [maxAvailable, watchedLimit, basePath, setError, clearErrors]);
-
-    // Dữ liệu Selectors
-    const validTopicIds = useMemo(() => {
-        if (!actualFilterData?.topics) return null; 
-        const ids = new Set<string>();
-        const extractIds = (nodes: any[]) => {
-            nodes.forEach(node => {
-                // [CTO FIX 4]: Bắt cả _id và id đề phòng BE trả về bất nhất
-                ids.add(node.id || node._id); 
-                if (node.children && node.children.length > 0) extractIds(node.children);
-            });
-        };
-        extractIds(actualFilterData.topics);
-        return ids;
-    }, [actualFilterData?.topics]);
-
-    const topicOptions = useMemo(() => {
-        return topics.map(t => ({ 
-            label: t.path, 
-            value: t.id,
-            disabled: validTopicIds ? !validTopicIds.has(t.id) : false
-        }));
-    }, [topics, validTopicIds]);
-
-    const diffOptions = useMemo(() => {
-        const baseOptions = [{ label: 'Nhận biết', value: 'NB' }, { label: 'Thông hiểu', value: 'TH' }, { label: 'Vận dụng', value: 'VD' }, { label: 'Vận dụng cao', value: 'VDC' }];
-        if (!actualFilterData?.difficulties) return baseOptions;
-        return baseOptions.map(opt => ({ ...opt, disabled: !actualFilterData.difficulties.includes(opt.value) }));
-    }, [actualFilterData?.difficulties]);
-
-    const tagOptions = useMemo(() => {
-        const allVisibleTags = Array.from(new Set([...availableTags, ...watchedTags]));
-        return allVisibleTags.map(tag => ({ 
-            label: tag, value: tag, disabled: actualFilterData?.tags ? !actualFilterData.tags.includes(tag) : false
-        }));
-    }, [availableTags, watchedTags, actualFilterData?.tags]);
+    // Options tĩnh lấy từ Cha
+    const topicOptions = topics.map(t => ({ label: t.path, value: t.id }));
+    const diffOptions = [
+        { label: 'Nhận biết', value: 'NB' }, { label: 'Thông hiểu', value: 'TH' }, 
+        { label: 'Vận dụng', value: 'VD' }, { label: 'Vận dụng cao', value: 'VDC' }
+    ];
+    const tagOptions = (activeFilters?.tags || []).map((tag: string) => ({ label: tag, value: tag }));
 
     return (
-        <div className={cn("grid grid-cols-12 gap-4 items-start bg-slate-50 border p-4 rounded-xl relative group transition-all", maxAvailable === 0 && "border-destructive/50 bg-destructive/5")}>
+        <div className={cn(
+            "grid grid-cols-12 gap-4 items-start bg-white border p-4 rounded-xl relative group transition-all shadow-sm",
+            healthStatus === 'ERROR' && "border-red-400 bg-red-50/30",
+            healthStatus === 'WARNING' && "border-amber-300 bg-amber-50/30",
+            healthStatus === 'HEALTHY' && "border-green-300"
+        )}>
+            {/* Folder Select - BẮT BUỘC */}
             <div className="col-span-12 md:col-span-3">
-                <FormField control={control} name={`${basePath}.folderIds`} render={({ field }) => (
-                    <FormItem>
-                        <FormLabel className="text-[11px] uppercase text-muted-foreground font-bold flex items-center"><FolderTree className="w-3 h-3 mr-1" /> Thư mục</FormLabel>
-                        <FormControl><TreeSelectMulti data={folders} selectedIds={field.value || []} onChange={field.onChange} disabled={disabled} availableIds={availableFolderIds} /></FormControl>
-                        <FormMessage />
-                    </FormItem>
-                )}/>
-            </div>
-            
-            <div className="col-span-12 md:col-span-4">
-                <FormField control={control} name={`${basePath}.topicIds`} render={({ field }) => (
-                    <FormItem>
-                        <FormLabel className="text-[11px] uppercase text-muted-foreground font-bold">Chuyên đề</FormLabel>
-                        <FormControl><MultiSelect options={topicOptions} selected={field.value || []} onChange={field.onChange} disabled={disabled} placeholder="Tất cả chuyên đề" /></FormControl>
-                    </FormItem>
-                )}/>
-            </div>
-
-            <div className="col-span-6 md:col-span-2">
-                <FormField control={control} name={`${basePath}.difficulties`} render={({ field }) => (
-                    <FormItem>
-                        <FormLabel className="text-[11px] uppercase text-muted-foreground font-bold">Độ khó</FormLabel>
-                        <FormControl><MultiSelect options={diffOptions} selected={field.value || []} onChange={field.onChange} disabled={disabled} placeholder="Tất cả" /></FormControl>
-                    </FormItem>
-                )}/>
-            </div>
-
-            <div className="col-span-6 md:col-span-3">
-                <FormField control={control} name={`${basePath}.limit`} render={({ field }) => (
-                    <FormItem>
-                        <FormLabel className="text-[11px] uppercase text-muted-foreground font-bold flex items-center justify-between">
-                            <span>Số Câu</span>
-                            {isFetchingPreview ? <Loader2 className="w-3 h-3 animate-spin text-primary" /> : maxAvailable !== undefined ? <span className={cn("text-[10px] lowercase px-1.5 rounded-sm", maxAvailable === 0 ? "bg-destructive text-destructive-foreground" : "bg-primary/10 text-primary")}>Max: {maxAvailable}</span> : null}
-                        </FormLabel>
-                        <FormControl><Input type="number" min="1" max={maxAvailable !== undefined ? maxAvailable : undefined} disabled={disabled || (watchedFolderIds.length === 0)} {...field} onChange={e => field.onChange(Number(e.target.value))} className="h-10"/></FormControl>
-                        {watchedFolderIds.length === 0 && <p className="text-[10px] text-muted-foreground leading-tight">Vui lòng chọn thư mục trước</p>}
-                        <FormMessage />
-                    </FormItem>
-                )}/>
-            </div>
-            
-            <div className="col-span-12">
-                <FormField control={control} name={`${basePath}.tags`} render={({ field }) => (
+                <FormField control={control} name={`${basePath}.folderIds` as const} render={({ field }) => (
                     <FormItem>
                         <FormLabel className="text-[11px] uppercase text-muted-foreground font-bold flex items-center">
-                            Lọc theo Tags {isFetchingFilters && <Loader2 className="w-3 h-3 ml-2 animate-spin text-primary" />}
+                            <FolderTree className="w-3 h-3 mr-1" /> Thư mục <span className="text-red-500 ml-1">*</span>
                         </FormLabel>
-                        <FormControl><MultiSelect options={tagOptions} selected={field.value || []} onChange={field.onChange} disabled={disabled || isFetchingFilters} placeholder={availableTags.length === 0 ? "Không có Tag nào" : "Chọn Tags..."} /></FormControl>
+                        <FormControl>
+                            <TreeSelectMulti data={folders} selectedIds={field.value || []} onChange={field.onChange} disabled={disabled} />
+                        </FormControl>
                         <FormMessage />
                     </FormItem>
                 )}/>
             </div>
+            
+            {/* Chuyên Đề - OPTIONAL */}
+            <div className="col-span-12 md:col-span-4">
+                <FormField control={control} name={`${basePath}.topicIds` as const} render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="text-[11px] uppercase text-muted-foreground font-bold">Chuyên đề (Tùy chọn)</FormLabel>
+                        <FormControl>
+                            <MultiSelect options={topicOptions} selected={field.value || []} onChange={field.onChange} disabled={disabled} placeholder="Tất cả chuyên đề" />
+                        </FormControl>
+                    </FormItem>
+                )}/>
+            </div>
 
-            <Button type="button" variant="destructive" size="icon" className="absolute -top-3 -right-3 w-6 h-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm" disabled={disabled || !canRemove} onClick={onRemove}>
-                <Trash2 className="w-3 h-3" />
+            {/* Độ Khó - OPTIONAL */}
+            <div className="col-span-6 md:col-span-2">
+                <FormField control={control} name={`${basePath}.difficulties` as const} render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="text-[11px] uppercase text-muted-foreground font-bold">Độ khó (Tùy chọn)</FormLabel>
+                        <FormControl>
+                            <MultiSelect options={diffOptions} selected={field.value || []} onChange={field.onChange} disabled={disabled} placeholder="Trộn ngẫu nhiên" />
+                        </FormControl>
+                    </FormItem>
+                )}/>
+            </div>
+
+            {/* Số Lượng & Cảnh Báo - BẮT BUỘC */}
+            <div className="col-span-6 md:col-span-3">
+                <FormField control={control} name={`${basePath}.limit` as const} render={({ field }) => (
+                    <FormItem>
+                        <FormLabel className="text-[11px] uppercase text-muted-foreground font-bold flex items-center justify-between">
+                            <span>Số Lượng <span className="text-red-500">*</span></span>
+                        </FormLabel>
+                        <div className="flex items-center gap-2">
+                            <FormControl>
+                                <Input type="number" min="1" disabled={disabled} {...field} onChange={e => field.onChange(Number(e.target.value))} className="h-10 w-20 text-center font-bold text-lg"/>
+                            </FormControl>
+                            
+                            {/* [CTO UX]: Indicator sức khỏe */}
+                            <div className="flex-1 flex flex-col justify-center">
+                                {healthStatus === 'IDLE' && <span className="text-xs text-muted-foreground">Chọn thư mục</span>}
+                                {healthStatus === 'CHECKING' && <Loader2 className="w-4 h-4 animate-spin text-primary" />}
+                                {healthStatus === 'HEALTHY' && (
+                                    <div className="text-[10px] leading-tight font-bold text-green-600 flex flex-col"><CheckCircle2 className="w-3 h-3 inline mr-1"/>Kho: {available} câu</div>
+                                )}
+                                {healthStatus === 'WARNING' && (
+                                    <div className="text-[10px] leading-tight font-bold text-amber-600 flex flex-col" title="Cần bổ sung thêm câu hỏi để tránh trùng đề">
+                                        <AlertCircle className="w-3 h-3 inline mr-1"/>Kho: {available} câu
+                                    </div>
+                                )}
+                                {healthStatus === 'ERROR' && (
+                                    <div className="text-[10px] leading-tight font-bold text-red-600 flex flex-col" title={`Thiếu ${debouncedPayload.limit - available} câu`}>
+                                        <AlertCircle className="w-3 h-3 inline mr-1"/>Chỉ có {available} câu
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </FormItem>
+                )}/>
+            </div>
+
+            <Button type="button" variant="ghost" size="icon" className="absolute -top-3 -right-3 w-7 h-7 rounded-full bg-red-100 text-red-600 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm border border-red-200" disabled={disabled || !canRemove} onClick={onRemove}>
+                <Trash2 className="w-3.5 h-3.5" />
             </Button>
         </div>
     );

@@ -11,17 +11,32 @@ export class QuestionFolder {
   @Prop({ trim: true, default: '' })
   description: string;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  })
   ownerId: Types.ObjectId;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'QuestionFolder', default: null, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'QuestionFolder',
+    default: null,
+    index: true,
+  })
   parentId: Types.ObjectId | null;
 
-  @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'QuestionFolder' }], default: [], index: true })
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'QuestionFolder' }],
+    default: [],
+    index: true,
+  })
   ancestors: Types.ObjectId[];
 }
 
-export const QuestionFolderSchema = SchemaFactory.createForClass(QuestionFolder);
+export const QuestionFolderSchema =
+  SchemaFactory.createForClass(QuestionFolder);
 
 QuestionFolderSchema.index({ ownerId: 1, ancestors: 1 });
 QuestionFolderSchema.index({ ownerId: 1, parentId: 1 });

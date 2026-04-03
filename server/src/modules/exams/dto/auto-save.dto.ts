@@ -6,5 +6,5 @@ export class AutoSaveDto {
 
   @IsString()
   @IsOptional()
-  selectedAnswerId?: string; 
+  selectedAnswerId?: string;
 }

@@ -1,4 +1,16 @@
-import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsMongoId, IsArray, IsInt, Min, Max, IsEnum, ValidateNested } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsBoolean,
+  IsMongoId,
+  IsArray,
+  IsInt,
+  Min,
+  Max,
+  IsEnum,
+  ValidateNested,
+} from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { ShowResultMode } from '../schemas/lesson.schema';
 import { EmbeddedExamConfigDto } from './embedded-exam-config.dto';
@@ -28,7 +40,7 @@ export class CreateSectionDto {
 
   @IsString()
   @IsOptional()
-  @Transform(({ value }) => value === '' ? undefined : value)
+  @Transform(({ value }) => (value === '' ? undefined : value))
   description?: string;
 }
 
@@ -43,7 +55,7 @@ export class CreateLessonDto {
 
   @IsMongoId({ message: 'primaryVideoId không hợp lệ' })
   @IsOptional()
-  @Transform(({ value }) => value === '' ? undefined : value)
+  @Transform(({ value }) => (value === '' ? undefined : value))
   primaryVideoId?: string;
 
   @IsArray({ message: 'attachments phải là một mảng' })
@@ -53,7 +65,7 @@ export class CreateLessonDto {
 
   @IsMongoId({ message: 'examId không hợp lệ' })
   @IsOptional()
-  @Transform(({ value }) => value === '' ? undefined : value)
+  @Transform(({ value }) => (value === '' ? undefined : value))
   examId?: string;
 
   @IsOptional()
@@ -78,7 +90,7 @@ export class UpdateSectionDto {
 
   @IsString()
   @IsOptional()
-  @Transform(({ value }) => value === '' ? undefined : value)
+  @Transform(({ value }) => (value === '' ? undefined : value))
   description?: string;
 }
 
@@ -93,7 +105,7 @@ export class UpdateLessonDto {
 
   @IsMongoId({ message: 'primaryVideoId không hợp lệ' })
   @IsOptional()
-  @Transform(({ value }) => value === '' ? undefined : value)
+  @Transform(({ value }) => (value === '' ? undefined : value))
   primaryVideoId?: string;
 
   @IsArray({ message: 'attachments phải là một mảng' })
@@ -108,7 +120,7 @@ export class UpdateLessonDto {
 
   @IsMongoId({ message: 'examId không hợp lệ' })
   @IsOptional()
-  @Transform(({ value }) => value === '' ? undefined : value)
+  @Transform(({ value }) => (value === '' ? undefined : value))
   examId?: string;
 
   @IsOptional()

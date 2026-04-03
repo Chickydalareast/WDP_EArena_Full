@@ -8,7 +8,10 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { LessonProgressRepository } from '../repositories/lesson-progress.repository';
 import { LessonsRepository } from '../repositories/lessons.repository';
 import { EnrollmentsService } from '../services/enrollments.service';
-import { ProgressEventPattern, LessonCompletedEventPayload } from '../constants/progress-event.constant';
+import {
+  ProgressEventPattern,
+  LessonCompletedEventPayload,
+} from '../constants/progress-event.constant';
 
 @Processor('learning-tracking')
 export class HeartbeatSyncProcessor extends WorkerHost {
@@ -49,8 +52,10 @@ export class HeartbeatSyncProcessor extends WorkerHost {
         const lastPos = parseFloat(data.lastPosition);
 
         const updatedProgress = await this.progressRepo.atomicUpsertProgress(
-          userId, courseId, lessonId,
-          { incWatchTime: watchTimeInc, setLastPosition: lastPos }
+          userId,
+          courseId,
+          lessonId,
+          { incWatchTime: watchTimeInc, setLastPosition: lastPos },
         );
 
         if (!updatedProgress) continue;
@@ -60,44 +65,61 @@ export class HeartbeatSyncProcessor extends WorkerHost {
 
           if (duration === 0) {
             const lessonDoc = await this.lessonsRepo.findByIdSafe(lessonId, {
-              populate: [{ path: 'primaryVideoId', select: 'duration' }]
+              populate: [{ path: 'primaryVideoId', select: 'duration' }],
             });
 
             const video = lessonDoc?.primaryVideoId as any;
-            duration = (video && typeof video.duration === 'number') ? video.duration : 0;
+            duration =
+              video && typeof video.duration === 'number' ? video.duration : 0;
 
             if (duration === 0) {
-              this.logger.warn(`[DATA BLIND SPOT]: Video của Bài học ${lessonId} bị thiếu trường 'duration' trong DB Media! Đang kích hoạt Fallback 10 giây để test.`);
+              this.logger.warn(
+                `[DATA BLIND SPOT]: Video của Bài học ${lessonId} bị thiếu trường 'duration' trong DB Media! Đang kích hoạt Fallback 10 giây để test.`,
+              );
               duration = 10;
             }
 
             lessonDurationCache.set(lessonId, duration);
           }
 
-          if (updatedProgress.watchTime >= duration * this.COMPLETION_THRESHOLD) {
-            await this.progressRepo.updateByIdSafe(
-              updatedProgress._id as Types.ObjectId,
-              { $set: { isCompleted: true, completedAt: new Date() } }
+          if (
+            updatedProgress.watchTime >=
+            duration * this.COMPLETION_THRESHOLD
+          ) {
+            await this.progressRepo.updateByIdSafe(updatedProgress._id, {
+              $set: { isCompleted: true, completedAt: new Date() },
+            });
+
+            this.logger.log(
+              `🎉 [Heartbeat] User ${userId} đã hoàn thành Video Bài ${lessonId}`,
             );
 
-            this.logger.log(`🎉 [Heartbeat] User ${userId} đã hoàn thành Video Bài ${lessonId}`);
-
             try {
-              await this.enrollmentsService.markLessonCompleted({ userId, courseId, lessonId });
-              this.logger.log(`[Heartbeat] Đã đồng bộ % Progress khóa học cho User ${userId}`);
+              await this.enrollmentsService.markLessonCompleted({
+                userId,
+                courseId,
+                lessonId,
+              });
+              this.logger.log(
+                `[Heartbeat] Đã đồng bộ % Progress khóa học cho User ${userId}`,
+              );
             } catch (enrollErr: any) {
-              this.logger.error(`[Heartbeat] Lỗi cập nhật Enrollment: ${enrollErr.message}`);
+              this.logger.error(
+                `[Heartbeat] Lỗi cập nhật Enrollment: ${enrollErr.message}`,
+              );
             }
 
             this.eventEmitter.emit(ProgressEventPattern.LESSON_COMPLETED, {
-              userId, courseId, lessonId, isFirstCompletion: true
+              userId,
+              courseId,
+              lessonId,
+              isFirstCompletion: true,
             } as LessonCompletedEventPayload);
           }
         }
 
         await this.redisClient.srem('learning:hb_buckets', key);
         await this.redisClient.del(key);
-
       } catch (error: any) {
         this.logger.error(`Lỗi đồng bộ bucket ${key}: ${error.message}`);
       }

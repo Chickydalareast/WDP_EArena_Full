@@ -1,22 +1,45 @@
-import { Controller, Post, Get, Patch, Param, Body, UseGuards, HttpCode, HttpStatus, Query } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Patch,
+  Param,
+  Body,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+  Query,
+} from '@nestjs/common';
 import { ExamTakeService } from './exam-take.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { StartExamDto, AutoSaveDto, GetStudentHistoryDto, GetStudentHistoryOverviewDto, GetLessonAttemptsParamDto, GetLessonAttemptsQueryDto } from './dto/exam-take.dto';
+import {
+  StartExamDto,
+  AutoSaveDto,
+  GetStudentHistoryDto,
+  GetStudentHistoryOverviewDto,
+  GetLessonAttemptsParamDto,
+  GetLessonAttemptsQueryDto,
+} from './dto/exam-take.dto';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
-import { GetLessonAttemptsPayload, GetStudentHistoryOverviewPayload, GetStudentHistoryPayload, StartExamPayload } from './interfaces/exam-take.interface';
+import {
+  GetLessonAttemptsPayload,
+  GetStudentHistoryOverviewPayload,
+  GetStudentHistoryPayload,
+  StartExamPayload,
+} from './interfaces/exam-take.interface';
 
 @Controller('exam-take')
 @UseGuards(JwtAuthGuard)
 export class ExamTakeController {
-  constructor(private readonly examTakeService: ExamTakeService) { }
+  constructor(private readonly examTakeService: ExamTakeService) {}
 
   @Post('start')
   async startExam(
     @CurrentUser('userId') userId: string,
-    @Body() dto: StartExamDto
+    @Body() dto: StartExamDto,
   ) {
     const payload: StartExamPayload = {
       studentId: userId,
@@ -38,7 +61,7 @@ export class ExamTakeController {
       submissionId,
       studentId,
       questionId: dto.questionId,
-      selectedAnswerId: dto.selectedAnswerId
+      selectedAnswerId: dto.selectedAnswerId,
     });
   }
 
@@ -61,8 +84,6 @@ export class ExamTakeController {
   ) {
     return this.examTakeService.getSubmissionResult(submissionId, studentId);
   }
-
-
 
   @Get('history')
   @Roles(UserRole.STUDENT)
@@ -91,7 +112,7 @@ export class ExamTakeController {
   ) {
     const payload: GetStudentHistoryOverviewPayload = {
       studentId,
-      page: dto.page || 1, 
+      page: dto.page || 1,
       limit: dto.limit || 10,
       courseId: dto.courseId,
     };
