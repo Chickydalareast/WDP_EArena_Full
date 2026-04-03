@@ -5,7 +5,7 @@ import {
   InternalServerErrorException,
   BadRequestException,
   NotFoundException,
-  ForbiddenException
+  ForbiddenException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -18,7 +18,11 @@ import { UsersRepository } from '../users/users.repository';
 import { MediaRepository } from '../media/media.repository';
 import { MediaStatus } from '../media/schemas/media.schema';
 import { CourseValidatorService } from './services/course-validator.service';
-import { CourseDeactivatedEventPayload, CourseEventPattern, CourseSubmittedEventPayload } from './constants/course-event.constant';
+import {
+  CourseDeactivatedEventPayload,
+  CourseEventPattern,
+  CourseSubmittedEventPayload,
+} from './constants/course-event.constant';
 import { EnrollmentsRepository } from './repositories/enrollments.repository';
 import { EnrollmentStatus } from './schemas/enrollment.schema';
 
@@ -65,8 +69,8 @@ export class CoursesService {
     private readonly eventEmitter: EventEmitter2,
     private readonly enrollmentsRepo: EnrollmentsRepository,
     private readonly courseReviewsRepo: CourseReviewsRepository,
-    private readonly walletTransactionsRepo: WalletTransactionsRepository
-  ) { }
+    private readonly walletTransactionsRepo: WalletTransactionsRepository,
+  ) {}
 
   private generateSlug(title: string): string {
     return title
@@ -86,13 +90,18 @@ export class CoursesService {
       pipeline.unlink(`course:detail:v2:${slug}`);
       await pipeline.exec();
 
-      this.clearPublicListCacheBackground().catch(err => {
+      this.clearPublicListCacheBackground().catch((err) => {
         this.logger.error(`[Background Cache Sweeper] Lỗi chạy ngầm:`, err);
       });
 
-      this.logger.debug(`[Cache Invalidation] Đã trigger dọn dẹp an toàn cho course: ${slug}`);
+      this.logger.debug(
+        `[Cache Invalidation] Đã trigger dọn dẹp an toàn cho course: ${slug}`,
+      );
     } catch (error) {
-      this.logger.error(`[Cache Error] Lỗi khi xóa cache khóa học ${slug}:`, error);
+      this.logger.error(
+        `[Cache Error] Lỗi khi xóa cache khóa học ${slug}:`,
+        error,
+      );
     }
   }
 
@@ -114,20 +123,35 @@ export class CoursesService {
     finalPipeline.unlink(TAG_KEY);
     await finalPipeline.exec();
 
-    this.logger.debug(`[Background Cache Sweeper] Đã dọn dẹp thành công ${publicKeys.length} list queries.`);
+    this.logger.debug(
+      `[Background Cache Sweeper] Đã dọn dẹp thành công ${publicKeys.length} list queries.`,
+    );
   }
 
-  async createCourse(payload: CreateCoursePayload): Promise<{ id: string; slug: string }> {
-    const { title, teacherId, price, description, progressionMode, isStrictExam } = payload;
+  async createCourse(
+    payload: CreateCoursePayload,
+  ): Promise<{ id: string; slug: string }> {
+    const {
+      title,
+      teacherId,
+      price,
+      description,
+      progressionMode,
+      isStrictExam,
+    } = payload;
 
     if (!Types.ObjectId.isValid(teacherId)) {
       throw new BadRequestException('ID giáo viên không hợp lệ.');
     }
 
-    const teacher = await this.usersRepo.findByIdSafe(teacherId, { select: 'subjectIds' });
+    const teacher = await this.usersRepo.findByIdSafe(teacherId, {
+      select: 'subjectIds',
+    });
 
     if (!teacher || !teacher.subjectIds || teacher.subjectIds.length === 0) {
-      throw new BadRequestException('Giáo viên chưa được cấu hình bộ môn chuyên trách. Vui lòng cập nhật hồ sơ trước khi tạo khóa học.');
+      throw new BadRequestException(
+        'Giáo viên chưa được cấu hình bộ môn chuyên trách. Vui lòng cập nhật hồ sơ trước khi tạo khóa học.',
+      );
     }
     const autoMappedSubjectId = teacher.subjectIds[0];
 
@@ -152,42 +176,68 @@ export class CoursesService {
 
         const createdCourse = await this.coursesRepo.createDocument(courseData);
         return {
-          id: (createdCourse._id as Types.ObjectId).toString(),
-          slug: createdCourse.slug
+          id: createdCourse._id.toString(),
+          slug: createdCourse.slug,
         };
       } catch (error: unknown) {
-        if (typeof error === 'object' && error !== null && 'code' in error && error.code === 11000) {
+        if (
+          typeof error === 'object' &&
+          error !== null &&
+          'code' in error &&
+          error.code === 11000
+        ) {
           retryCount++;
           finalSlug = `${baseSlug}-${Math.random().toString(36).substring(2, 8)}`;
           continue;
         }
-        this.logger.error(`Lỗi tạo khóa học: ${error instanceof Error ? error.message : 'Unknown'}`);
+        this.logger.error(
+          `Lỗi tạo khóa học: ${error instanceof Error ? error.message : 'Unknown'}`,
+        );
         throw new InternalServerErrorException('Không thể khởi tạo khóa học.');
       }
     }
 
-    throw new ConflictException('Không thể tạo đường dẫn duy nhất cho khóa học này. Vui lòng đổi tên khác.');
+    throw new ConflictException(
+      'Không thể tạo đường dẫn duy nhất cho khóa học này. Vui lòng đổi tên khác.',
+    );
   }
 
-  private async verifyMediaOwnershipStrict(mediaIds: (string | null | undefined)[], teacherId: string): Promise<void> {
-    const validIds = mediaIds.filter((id): id is string => !!id && Types.ObjectId.isValid(id));
+  private async verifyMediaOwnershipStrict(
+    mediaIds: (string | null | undefined)[],
+    teacherId: string,
+  ): Promise<void> {
+    const validIds = mediaIds.filter(
+      (id): id is string => !!id && Types.ObjectId.isValid(id),
+    );
     if (validIds.length === 0) return;
 
-    const medias = await this.mediaRepo.modelInstance.find({
-      _id: { $in: validIds.map(id => new Types.ObjectId(id)) }
-    }).lean().select('uploadedBy status originalName').exec();
+    const medias = await this.mediaRepo.modelInstance
+      .find({
+        _id: { $in: validIds.map((id) => new Types.ObjectId(id)) },
+      })
+      .lean()
+      .select('uploadedBy status originalName')
+      .exec();
 
     if (medias.length !== validIds.length) {
-      throw new BadRequestException('Một hoặc nhiều tệp đính kèm không tồn tại trong hệ thống.');
+      throw new BadRequestException(
+        'Một hoặc nhiều tệp đính kèm không tồn tại trong hệ thống.',
+      );
     }
 
     for (const media of medias) {
       if (media.uploadedBy.toString() !== teacherId) {
-        this.logger.warn(`[SECURITY ALERT] User ${teacherId} cố gắng gán Media ${media._id} của người khác!`);
-        throw new ForbiddenException(`Tệp tin "${media.originalName}" không thuộc quyền sở hữu của bạn.`);
+        this.logger.warn(
+          `[SECURITY ALERT] User ${teacherId} cố gắng gán Media ${media._id} của người khác!`,
+        );
+        throw new ForbiddenException(
+          `Tệp tin "${media.originalName}" không thuộc quyền sở hữu của bạn.`,
+        );
       }
       if (media.status !== MediaStatus.READY) {
-        throw new BadRequestException(`Tệp tin "${media.originalName}" đang xử lý hoặc bị lỗi, chưa thể sử dụng.`);
+        throw new BadRequestException(
+          `Tệp tin "${media.originalName}" đang xử lý hoặc bị lỗi, chưa thể sử dụng.`,
+        );
       }
     }
   }
@@ -195,54 +245,78 @@ export class CoursesService {
   async updateCourse(payload: UpdateCoursePayload) {
     const { courseId, teacherId, ...updateData } = payload;
 
-    if (!Types.ObjectId.isValid(courseId)) throw new BadRequestException('ID khóa học không hợp lệ.');
+    if (!Types.ObjectId.isValid(courseId))
+      throw new BadRequestException('ID khóa học không hợp lệ.');
 
     const course = await this.coursesRepo.findByIdSafe(courseId, {
-      select: 'teacherId slug status title progressionMode isStrictExam'
+      select: 'teacherId slug status title progressionMode isStrictExam',
     });
 
     if (!course) throw new NotFoundException('Khóa học không tồn tại.');
-    if (course.teacherId.toString() !== teacherId) throw new ForbiddenException('Bạn không có quyền sửa khóa học này.');
+    if (course.teacherId.toString() !== teacherId)
+      throw new ForbiddenException('Bạn không có quyền sửa khóa học này.');
 
     if (course.status === CourseStatus.PENDING_REVIEW) {
-      throw new ForbiddenException('Khóa học đang trong quá trình xét duyệt, bạn không thể chỉnh sửa nội dung lúc này.');
+      throw new ForbiddenException(
+        'Khóa học đang trong quá trình xét duyệt, bạn không thể chỉnh sửa nội dung lúc này.',
+      );
     }
 
-    const isChangingProgression = updateData.progressionMode !== undefined && updateData.progressionMode !== course.progressionMode;
-    const isChangingStrictExam = updateData.isStrictExam !== undefined && updateData.isStrictExam !== course.isStrictExam;
+    const isChangingProgression =
+      updateData.progressionMode !== undefined &&
+      updateData.progressionMode !== course.progressionMode;
+    const isChangingStrictExam =
+      updateData.isStrictExam !== undefined &&
+      updateData.isStrictExam !== course.isStrictExam;
 
     if (isChangingProgression || isChangingStrictExam) {
-      const studentCount = await this.enrollmentsRepo.modelInstance.countDocuments({
-        courseId: new Types.ObjectId(courseId),
-        status: EnrollmentStatus.ACTIVE
-      });
+      const studentCount =
+        await this.enrollmentsRepo.modelInstance.countDocuments({
+          courseId: new Types.ObjectId(courseId),
+          status: EnrollmentStatus.ACTIVE,
+        });
 
       if (studentCount > 0) {
         throw new ForbiddenException(
-          'Hành động bị từ chối! Không thể thay đổi Chế độ học tập hoặc Cấu hình thi khi khóa học đã có học viên ghi danh, nhằm tránh gây lỗi tiến độ học của hệ thống.'
+          'Hành động bị từ chối! Không thể thay đổi Chế độ học tập hoặc Cấu hình thi khi khóa học đã có học viên ghi danh, nhằm tránh gây lỗi tiến độ học của hệ thống.',
         );
       }
     }
 
-    const mediaToVerify = [updateData.coverImageId, updateData.promotionalVideoId];
+    const mediaToVerify = [
+      updateData.coverImageId,
+      updateData.promotionalVideoId,
+    ];
     // Giả định hàm verifyMediaOwnershipStrict nằm trong validatorService hoặc service này
-    await this.validatorService.verifyMediaOwnershipStrict(mediaToVerify, teacherId);
+    await this.validatorService.verifyMediaOwnershipStrict(
+      mediaToVerify,
+      teacherId,
+    );
 
     const sanitizedUpdate = Object.keys(updateData).reduce((acc, key) => {
-      const k = key as keyof Omit<UpdateCoursePayload, 'courseId' | 'teacherId'>;
+      const k = key as keyof Omit<
+        UpdateCoursePayload,
+        'courseId' | 'teacherId'
+      >;
       if (updateData[k] !== undefined) acc[k] = updateData[k] as any;
       return acc;
     }, {} as any);
 
     if (sanitizedUpdate.coverImageId !== undefined) {
-      sanitizedUpdate.coverImageId = sanitizedUpdate.coverImageId ? new Types.ObjectId(sanitizedUpdate.coverImageId) : null;
+      sanitizedUpdate.coverImageId = sanitizedUpdate.coverImageId
+        ? new Types.ObjectId(sanitizedUpdate.coverImageId)
+        : null;
     }
 
     if (sanitizedUpdate.promotionalVideoId !== undefined) {
-      sanitizedUpdate.promotionalVideoId = sanitizedUpdate.promotionalVideoId ? new Types.ObjectId(sanitizedUpdate.promotionalVideoId) : null;
+      sanitizedUpdate.promotionalVideoId = sanitizedUpdate.promotionalVideoId
+        ? new Types.ObjectId(sanitizedUpdate.promotionalVideoId)
+        : null;
     }
 
-    const updated = await this.coursesRepo.updateByIdSafe(courseId, { $set: sanitizedUpdate });
+    const updated = await this.coursesRepo.updateByIdSafe(courseId, {
+      $set: sanitizedUpdate,
+    });
 
     this.clearCourseCache(course.slug);
 
@@ -258,14 +332,20 @@ export class CoursesService {
 
       if (!course) throw new NotFoundException('Khóa học không tồn tại.');
       if (course.teacherId.toString() !== teacherId) {
-        throw new ForbiddenException('Bạn không có quyền gửi duyệt khóa học này.');
+        throw new ForbiddenException(
+          'Bạn không có quyền gửi duyệt khóa học này.',
+        );
       }
 
       if (course.status === CourseStatus.PENDING_REVIEW) {
-        throw new BadRequestException('Khóa học này đã được gửi đi và đang chờ Admin duyệt.');
+        throw new BadRequestException(
+          'Khóa học này đã được gửi đi và đang chờ Admin duyệt.',
+        );
       }
       if (course.status === CourseStatus.PUBLISHED) {
-        throw new BadRequestException('Khóa học này đã được xuất bản công khai.');
+        throw new BadRequestException(
+          'Khóa học này đã được xuất bản công khai.',
+        );
       }
       if (course.price === undefined || course.price < 0) {
         throw new BadRequestException('Khóa học chưa được thiết lập giá.');
@@ -277,27 +357,29 @@ export class CoursesService {
       await this.validatorService.validateCourseSubmissionRules({
         courseId,
         teacherId,
-        price: course.price
+        price: course.price,
       });
 
       const hasSection = await this.sectionsRepo.findOneSafe(
         { courseId: new Types.ObjectId(courseId) },
-        { select: '_id' }
+        { select: '_id' },
       );
-      if (!hasSection) throw new BadRequestException('Khóa học phải có ít nhất 1 chương.');
+      if (!hasSection)
+        throw new BadRequestException('Khóa học phải có ít nhất 1 chương.');
 
       const hasLesson = await this.lessonsRepo.findOneSafe(
         { courseId: new Types.ObjectId(courseId) },
-        { select: '_id' }
+        { select: '_id' },
       );
-      if (!hasLesson) throw new BadRequestException('Khóa học phải có ít nhất 1 bài học.');
+      if (!hasLesson)
+        throw new BadRequestException('Khóa học phải có ít nhất 1 bài học.');
 
       await this.coursesRepo.updateByIdSafe(courseId, {
         $set: {
           status: CourseStatus.PENDING_REVIEW,
           submittedAt: new Date(),
-          rejectionReason: null
-        }
+          rejectionReason: null,
+        },
       });
     });
 
@@ -308,85 +390,133 @@ export class CoursesService {
     this.eventEmitter.emit(CourseEventPattern.COURSE_SUBMITTED, {
       courseId,
       teacherId,
-      courseTitle
+      courseTitle,
     } as CourseSubmittedEventPayload);
 
-    return { message: 'Đã gửi yêu cầu xuất bản. Vui lòng chờ Admin xét duyệt.' };
+    return {
+      message: 'Đã gửi yêu cầu xuất bản. Vui lòng chờ Admin xét duyệt.',
+    };
   }
 
-
   async deleteCourse(courseId: string, teacherId: string) {
-    const course = await this.coursesRepo.findByIdSafe(courseId, { select: 'teacherId slug status' });
-    if (!course) throw new NotFoundException('Khóa học không tồn tại.');
-    if (course.teacherId.toString() !== teacherId) throw new ForbiddenException('Bạn không có quyền thao tác trên khóa học này.');
-
-    const studentCount = await this.enrollmentsRepo.modelInstance.countDocuments({
-      courseId: new Types.ObjectId(courseId),
-      status: EnrollmentStatus.ACTIVE
+    const course = await this.coursesRepo.findByIdSafe(courseId, {
+      select: 'teacherId slug status',
     });
+    if (!course) throw new NotFoundException('Khóa học không tồn tại.');
+    if (course.teacherId.toString() !== teacherId)
+      throw new ForbiddenException(
+        'Bạn không có quyền thao tác trên khóa học này.',
+      );
+
+    const studentCount =
+      await this.enrollmentsRepo.modelInstance.countDocuments({
+        courseId: new Types.ObjectId(courseId),
+        status: EnrollmentStatus.ACTIVE,
+      });
 
     if (course.status !== CourseStatus.DRAFT || studentCount > 0) {
-      await this.coursesRepo.updateByIdSafe(courseId, { $set: { status: CourseStatus.ARCHIVED } });
+      await this.coursesRepo.updateByIdSafe(courseId, {
+        $set: { status: CourseStatus.ARCHIVED },
+      });
       this.eventEmitter.emit(CourseEventPattern.COURSE_STATUS_DEACTIVATED, {
         courseId,
         reason: 'ARCHIVED',
       } as CourseDeactivatedEventPayload);
       this.clearCourseCache(course.slug);
       return {
-        message: 'Khóa học đã được chuyển sang trạng thái Lưu trữ (Archived) nhằm bảo vệ quyền lợi của học viên đã mua.'
+        message:
+          'Khóa học đã được chuyển sang trạng thái Lưu trữ (Archived) nhằm bảo vệ quyền lợi của học viên đã mua.',
       };
     }
 
     await this.coursesRepo.executeInTransaction(async () => {
-      await this.lessonsRepo.deleteManySafe({ courseId: new Types.ObjectId(courseId) });
-      await this.sectionsRepo.deleteManySafe({ courseId: new Types.ObjectId(courseId) });
-      await this.coursesRepo.deleteOneSafe({ _id: new Types.ObjectId(courseId) });
+      await this.lessonsRepo.deleteManySafe({
+        courseId: new Types.ObjectId(courseId),
+      });
+      await this.sectionsRepo.deleteManySafe({
+        courseId: new Types.ObjectId(courseId),
+      });
+      await this.coursesRepo.deleteOneSafe({
+        _id: new Types.ObjectId(courseId),
+      });
     });
 
     this.clearCourseCache(course.slug);
 
-    return { message: 'Đã xóa vĩnh viễn khóa học bản nháp và toàn bộ giáo án.' };
+    return {
+      message: 'Đã xóa vĩnh viễn khóa học bản nháp và toàn bộ giáo án.',
+    };
   }
 
   async getMyCourses(teacherId: string) {
-    const courses = await this.coursesRepo.getTeacherCoursesWithMetrics(teacherId);
+    const courses =
+      await this.coursesRepo.getTeacherCoursesWithMetrics(teacherId);
     return courses;
   }
 
   async getTeacherCourseDetail(courseId: string, teacherId: string) {
-    if (!Types.ObjectId.isValid(courseId)) throw new BadRequestException('ID không hợp lệ.');
+    if (!Types.ObjectId.isValid(courseId))
+      throw new BadRequestException('ID không hợp lệ.');
 
     const course: any = await this.coursesRepo.getCourseDetailById(courseId);
 
     if (!course) throw new NotFoundException('Khóa học không tồn tại.');
-    if (course.teacherId.toString() !== teacherId) throw new ForbiddenException('Bạn không có quyền xem khóa học này.');
+    if (course.teacherId.toString() !== teacherId)
+      throw new ForbiddenException('Bạn không có quyền xem khóa học này.');
 
-    const { _id, teacherId: tId, coverImageId, promotionalVideoId, ...rest } = course;
+    const {
+      _id,
+      teacherId: tId,
+      coverImageId,
+      promotionalVideoId,
+      ...rest
+    } = course;
 
     return {
       id: _id.toString(),
       teacherId: tId.toString(),
-      coverImage: coverImageId ? { id: coverImageId._id.toString(), url: coverImageId.url, blurHash: coverImageId.blurHash } : null,
-      promotionalVideo: promotionalVideoId ? { id: promotionalVideoId._id.toString(), url: promotionalVideoId.url, blurHash: promotionalVideoId.blurHash } : null,
-      ...rest
+      coverImage: coverImageId
+        ? {
+            id: coverImageId._id.toString(),
+            url: coverImageId.url,
+            blurHash: coverImageId.blurHash,
+          }
+        : null,
+      promotionalVideo: promotionalVideoId
+        ? {
+            id: promotionalVideoId._id.toString(),
+            url: promotionalVideoId.url,
+            blurHash: promotionalVideoId.blurHash,
+          }
+        : null,
+      ...rest,
     };
   }
 
   async getTeacherCourseCurriculum(courseId: string, teacherId: string) {
-    if (!Types.ObjectId.isValid(courseId)) throw new BadRequestException('ID khóa học không hợp lệ.');
+    if (!Types.ObjectId.isValid(courseId))
+      throw new BadRequestException('ID khóa học không hợp lệ.');
 
-    const course = await this.coursesRepo.findByIdSafe(courseId, { select: 'teacherId' });
+    const course = await this.coursesRepo.findByIdSafe(courseId, {
+      select: 'teacherId',
+    });
     if (!course) throw new NotFoundException('Khóa học không tồn tại.');
     if (course.teacherId.toString() !== teacherId) {
-      throw new ForbiddenException('Bạn không có quyền xem cấu trúc khóa học này.');
+      throw new ForbiddenException(
+        'Bạn không có quyền xem cấu trúc khóa học này.',
+      );
     }
 
-    const curriculum = await this.coursesRepo.getFullCourseCurriculum(courseId, { maskMediaUrls: false });
+    const curriculum = await this.coursesRepo.getFullCourseCurriculum(
+      courseId,
+      { maskMediaUrls: false },
+    );
     return curriculum;
   }
 
   async getTeacherCourseStats(courseId: string, teacherId: string) {
-    if (!Types.ObjectId.isValid(courseId)) throw new BadRequestException('ID khóa học không hợp lệ.');
+    if (!Types.ObjectId.isValid(courseId))
+      throw new BadRequestException('ID khóa học không hợp lệ.');
 
     // [PERFORMANCE TUNE]: Check Cache Redis (TTL: 5 phút) để tránh Hammering DB mỗi khi F5
     const cacheKey = `teacher:dashboard:stats:${courseId}`;
@@ -396,7 +526,7 @@ export class CoursesService {
     }
 
     const course = await this.coursesRepo.findByIdSafe(courseId, {
-      select: 'teacherId averageRating totalReviews'
+      select: 'teacherId averageRating totalReviews',
     });
 
     if (!course) throw new NotFoundException('Khóa học không tồn tại.');
@@ -405,15 +535,16 @@ export class CoursesService {
     }
 
     // [CTO UPGRADE]: Chạy song song 4 truy vấn nặng để tối đa hóa hiệu suất I/O
-    const [studentCount, averageProgress, pendingReviews, totalRevenue] = await Promise.all([
-      this.enrollmentsRepo.modelInstance.countDocuments({
-        courseId: new Types.ObjectId(courseId),
-        status: EnrollmentStatus.ACTIVE
-      }),
-      this.enrollmentsRepo.getCourseAverageProgress(courseId),
-      this.courseReviewsRepo.countUnrepliedReviews(courseId),
-      this.walletTransactionsRepo.calculateTotalRevenueByCourse(courseId)
-    ]);
+    const [studentCount, averageProgress, pendingReviews, totalRevenue] =
+      await Promise.all([
+        this.enrollmentsRepo.modelInstance.countDocuments({
+          courseId: new Types.ObjectId(courseId),
+          status: EnrollmentStatus.ACTIVE,
+        }),
+        this.enrollmentsRepo.getCourseAverageProgress(courseId),
+        this.courseReviewsRepo.countUnrepliedReviews(courseId),
+        this.walletTransactionsRepo.calculateTotalRevenueByCourse(courseId),
+      ]);
 
     const stats = {
       totalStudents: studentCount,
@@ -421,7 +552,7 @@ export class CoursesService {
       averageRating: course.averageRating || 0,
       totalReviews: course.totalReviews || 0,
       pendingReviews: pendingReviews,
-      totalRevenue: totalRevenue
+      totalRevenue: totalRevenue,
     };
 
     await this.redisService.set(cacheKey, JSON.stringify(stats), 300);

@@ -1,13 +1,13 @@
-import { 
-  IsEmail, 
-  IsEnum, 
-  IsNotEmpty, 
-  IsOptional, 
-  IsString, 
-  MinLength, 
-  IsArray, 
-  IsMongoId, 
-  ArrayUnique 
+import {
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+  IsArray,
+  IsMongoId,
+  ArrayUnique,
 } from 'class-validator';
 import { UserRole } from 'src/common/enums/user-role.enum';
 

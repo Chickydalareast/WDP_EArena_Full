@@ -1,18 +1,37 @@
-import { Controller, Post, Put, Delete, Body, Param, UseGuards, Patch } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+  Patch,
+} from '@nestjs/common';
 import { CurriculumService } from '../services/curriculum.service';
-import { CreateSectionDto, CreateLessonDto, UpdateSectionDto, UpdateLessonDto } from '../dto/curriculum.dto';
+import {
+  CreateSectionDto,
+  CreateLessonDto,
+  UpdateSectionDto,
+  UpdateLessonDto,
+} from '../dto/curriculum.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { ReorderCurriculumDto } from '../dto/course.dto';
-import { CreateLessonPayload, CreateSectionPayload, UpdateLessonPayload, UpdateSectionPayload } from '../interfaces/course.interface';
+import {
+  CreateLessonPayload,
+  CreateSectionPayload,
+  UpdateLessonPayload,
+  UpdateSectionPayload,
+} from '../interfaces/course.interface';
 
 @Controller('courses')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class CurriculumController {
-  constructor(private readonly curriculumService: CurriculumService) { }
+  constructor(private readonly curriculumService: CurriculumService) {}
 
   @Post(':courseId/sections')
   @Roles(UserRole.TEACHER, UserRole.ADMIN)
@@ -71,7 +90,7 @@ export class CurriculumController {
     @Param('courseId') courseId: string,
     @Param('lessonId') lessonId: string,
     @Body() dto: UpdateLessonDto,
-    @CurrentUser('userId') userId: string
+    @CurrentUser('userId') userId: string,
   ) {
     const payload: UpdateLessonPayload = {
       courseId,
@@ -93,7 +112,7 @@ export class CurriculumController {
   async deleteLesson(
     @Param('courseId') courseId: string,
     @Param('lessonId') lessonId: string,
-    @CurrentUser('userId') userId: string
+    @CurrentUser('userId') userId: string,
   ) {
     return this.curriculumService.deleteLesson(courseId, lessonId, userId);
   }
@@ -103,13 +122,13 @@ export class CurriculumController {
   async reorderCurriculum(
     @Param('courseId') courseId: string,
     @Body() dto: ReorderCurriculumDto,
-    @CurrentUser('userId') userId: string
+    @CurrentUser('userId') userId: string,
   ) {
     return this.curriculumService.reorderCurriculum({
       courseId,
       teacherId: userId,
       sections: dto.sections,
-      lessons: dto.lessons
+      lessons: dto.lessons,
     });
   }
 

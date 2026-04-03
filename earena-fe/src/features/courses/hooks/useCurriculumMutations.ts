@@ -3,7 +3,7 @@ import { courseService } from '../api/course.service';
 import { courseQueryKeys } from '../api/course-keys';
 import { toast } from 'sonner';
 import { parseApiError } from '@/shared/lib/error-parser';
-import { CreateSectionDTO, CreateLessonDTO, UpdateSectionDTO, UpdateLessonDTO, AiBuilderFormDTO } from '../types/curriculum.schema';
+import { CreateSectionDTO, CreateLessonDTO, UpdateSectionDTO, UpdateLessonDTO, AiBuilderFormDTO, UpdateQuizLessonDTO, CreateQuizLessonDTO } from '../types/curriculum.schema';
 import { useRouter } from 'next/navigation';
 import { ROUTES } from '@/config/routes';
 import { useUpgradeUIStore } from '@/features/billing/stores/upgrade-ui.store';
@@ -178,6 +178,59 @@ export const useSubmitForReview = (courseId: string) => {
       } else {
         toast.error('Lỗi hệ thống', { description: parsed.message });
       }
+    },
+  });
+};
+
+export const useCreateQuizLesson = (courseId: string, sectionId: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (formData: Omit<CreateQuizLessonDTO, 'courseId' | 'sectionId'>) =>
+      courseService.createQuizLesson({
+        ...formData,
+        courseId,
+        sectionId,
+      }),
+    onSuccess: () => {
+      toast.success('Đã tạo bài kiểm tra động mới');
+      invalidateCurriculumCache(queryClient, courseId);
+    },
+    onError: (error: unknown) => {
+      const parsed = parseApiError(error);
+      if (parsed.statusCode === 409 || parsed.message?.includes('11000')) {
+        toast.error('Lỗi tạo bài học', {
+          description: 'Hệ thống đang xử lý thứ tự bài học. Vui lòng thử lại sau 1-2 giây.',
+          duration: 5000,
+        });
+        return;
+      }
+      toast.error('Lỗi tạo bài kiểm tra', { description: parsed.message });
+    },
+  });
+};
+
+export const useUpdateQuizLesson = (courseId: string) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: UpdateQuizLessonDTO) =>
+      courseService.updateQuizLesson(payload),
+    onSuccess: (_data, variables) => {
+      toast.success('Cập nhật bài kiểm tra thành công');
+      invalidateCurriculumCache(queryClient, courseId);
+      if (variables.lessonId) {
+        queryClient.invalidateQueries({
+          queryKey: courseQueryKeys.lessonQuizDetail(courseId, variables.lessonId),
+        });
+      }
+    },
+    onError: (error: unknown) => {
+      const parsed = parseApiError(error);
+      if (parsed.statusCode === 409) {
+        throw error; 
+      }
+      toast.error('Lỗi cập nhật bài kiểm tra', { description: parsed.message });
     },
   });
 };

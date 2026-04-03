@@ -24,7 +24,12 @@ export class BankDetail {
 
 @Schema({ timestamps: true, collection: 'withdrawal_requests' })
 export class WithdrawalRequest {
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  })
   teacherId: Types.ObjectId;
 
   @Prop({ required: true, min: 100000 })
@@ -33,7 +38,12 @@ export class WithdrawalRequest {
   @Prop({ type: BankDetail, required: true })
   bankInfo: BankDetail;
 
-  @Prop({ type: String, enum: WithdrawalStatus, default: WithdrawalStatus.PENDING, index: true })
+  @Prop({
+    type: String,
+    enum: WithdrawalStatus,
+    default: WithdrawalStatus.PENDING,
+    index: true,
+  })
   status: WithdrawalStatus;
 
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User' })
@@ -44,12 +54,13 @@ export class WithdrawalRequest {
 
   @Prop({ type: String, trim: true })
   rejectionReason?: string;
-  
+
   @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'WalletTransaction' })
   transactionId?: Types.ObjectId;
 }
 
-export const WithdrawalRequestSchema = SchemaFactory.createForClass(WithdrawalRequest);
+export const WithdrawalRequestSchema =
+  SchemaFactory.createForClass(WithdrawalRequest);
 
 WithdrawalRequestSchema.index({ teacherId: 1, status: 1 });
 WithdrawalRequestSchema.index({ status: 1, createdAt: -1 });

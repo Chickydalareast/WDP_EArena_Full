@@ -11,31 +11,31 @@ import { Public } from '../../common/decorators/public.decorator';
 
 @Controller('subscriptions')
 export class SubscriptionsController {
-    constructor(private readonly subscriptionsService: SubscriptionsService) { }
+  constructor(private readonly subscriptionsService: SubscriptionsService) {}
 
-    @Public()
-    @Get('plans')
-    async getAllPlans() {
-        const data = await this.subscriptionsService.getAllPlans();
-        return {
-            message: 'Lấy danh sách gói cước thành công.',
-            data
-        };
-    }
+  @Public()
+  @Get('plans')
+  async getAllPlans() {
+    const data = await this.subscriptionsService.getAllPlans();
+    return {
+      message: 'Lấy danh sách gói cước thành công.',
+      data,
+    };
+  }
 
-    @UseGuards(JwtAuthGuard, RolesGuard)
-    @Post('upgrade')
-    @Roles(UserRole.TEACHER)
-    async upgradePlan(
-        @Body() dto: UpgradePlanDto,
-        @CurrentUser('userId') userId: string
-    ) {
-        const payload: UpgradePlanPayload = {
-            teacherId: userId,
-            planId: dto.planId,
-            billingCycle: dto.billingCycle,
-        };
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Post('upgrade')
+  @Roles(UserRole.TEACHER)
+  async upgradePlan(
+    @Body() dto: UpgradePlanDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    const payload: UpgradePlanPayload = {
+      teacherId: userId,
+      planId: dto.planId,
+      billingCycle: dto.billingCycle,
+    };
 
-        return this.subscriptionsService.upgradePlan(payload);
-    }
+    return this.subscriptionsService.upgradePlan(payload);
+  }
 }

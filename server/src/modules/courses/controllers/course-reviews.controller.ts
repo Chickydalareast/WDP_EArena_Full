@@ -1,7 +1,22 @@
-import { Controller, Post, Patch, Body, Param, UseGuards, Get, Query } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Patch,
+  Body,
+  Param,
+  UseGuards,
+  Get,
+  Query,
+} from '@nestjs/common';
 import { CourseReviewsService } from '../services/course-reviews.service';
-import { CreateCourseReviewDto, ReplyCourseReviewDto } from '../dto/course-review.dto';
-import { CreateCourseReviewPayload, ReplyCourseReviewPayload } from '../interfaces/course.interface';
+import {
+  CreateCourseReviewDto,
+  ReplyCourseReviewDto,
+} from '../dto/course-review.dto';
+import {
+  CreateCourseReviewPayload,
+  ReplyCourseReviewPayload,
+} from '../interfaces/course.interface';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
@@ -13,13 +28,13 @@ import { PaginationDto } from 'src/common/dto/pagination.dto';
 @Controller('courses')
 @UseGuards(JwtAuthGuard)
 export class CourseReviewsController {
-  constructor(private readonly courseReviewsService: CourseReviewsService) { }
+  constructor(private readonly courseReviewsService: CourseReviewsService) {}
 
   @Post(':courseId/reviews')
   async createReview(
     @Param('courseId') courseId: string,
     @Body() dto: CreateCourseReviewDto,
-    @CurrentUser('userId') userId: string, // 
+    @CurrentUser('userId') userId: string, //
   ) {
     const payload: CreateCourseReviewPayload = {
       courseId,
@@ -54,7 +69,7 @@ export class CourseReviewsController {
   @Public()
   async getReviews(
     @Param('courseId') courseId: string,
-    @Query() query: PaginationDto
+    @Query() query: PaginationDto,
   ) {
     const payload = {
       courseId,
@@ -67,7 +82,7 @@ export class CourseReviewsController {
     return {
       message: 'Lấy danh sách đánh giá thành công',
       data: data.items,
-      meta: data.meta
+      meta: data.meta,
     };
   }
 }

@@ -2,7 +2,7 @@ import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { SubjectsService } from './subjects.service';
 import { KnowledgeTopicsService } from './knowledge-topics.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { Public } from '../../common/decorators/public.decorator'; 
+import { Public } from '../../common/decorators/public.decorator';
 
 @Controller('taxonomy')
 export class TaxonomyController {
@@ -11,7 +11,7 @@ export class TaxonomyController {
     private readonly topicsService: KnowledgeTopicsService,
   ) {}
 
-  @Public() 
+  @Public()
   @Get('subjects')
   async getAllSubjects() {
     return this.subjectsService.getAllActiveSubjects();

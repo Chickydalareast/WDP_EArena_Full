@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { KnowledgeTopicsRepository } from './knowledge-topics.repository';
-import { RedisService } from '../../common/redis/redis.service'; 
+import { RedisService } from '../../common/redis/redis.service';
 
 @Injectable()
 export class KnowledgeTopicsService {
@@ -27,7 +27,7 @@ export class KnowledgeTopicsService {
       .exec();
 
     const map = new Map<string, any>();
-    const tree: any[] = []; 
+    const tree: any[] = [];
     flatList.forEach((node: any) => {
       map.set(node._id.toString(), { ...node, children: [] });
     });

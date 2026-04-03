@@ -12,7 +12,7 @@ import { RichTextEditor } from '@/shared/components/ui/rich-text-editor';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/shared/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/components/ui/tabs';
 
-import { updateLessonSchema, UpdateLessonDTO } from '../../types/curriculum.schema';
+import { updateLessonSchema, UpdateLessonDTO, DynamicConfigDTO, ExamRuleDTO } from '../../types/curriculum.schema';
 import { LessonPreview } from '../../types/course.schema';
 import { useUpdateLesson } from '../../hooks/useCurriculumMutations';
 import { useCloudinaryUpload } from '@/shared/hooks/useCloudinaryUpload';
@@ -21,14 +21,15 @@ import { toast } from 'sonner';
 
 import { ExamSelectorSheet } from './ExamSelectorSheet';
 import { useTeacherExams } from '@/features/exam-builder/hooks/useTeacherExams';
-
-import { useCourseTeacherDetail } from '../../hooks/useCourseTeacherDetail';
 import { useFoldersList } from '@/features/exam-builder/hooks/useFolders';
 import { useTopicsTree } from '@/features/exam-builder/hooks/useTopics';
+import { useActiveFilters } from '@/features/exam-builder/hooks/useActiveFilters';
+import { useAuthStore } from '@/features/auth/stores/auth.store';
 
-// [CTO NEW IMPORTS]: Dynamic Quiz Engine Components
-import { DynamicRuleList } from './DynamicRuleList';
-import { DynamicQuizPreviewer } from './DynamicQuizPreviewer';
+import { usePreviewQuizConfig } from '../../hooks/usePreviewQuizConfig';
+import { buildNestedQuestions, NestedQuestionPreview } from '../../lib/quiz-utils';
+import { QuizLivePreviewModal } from './QuizLivePreviewModal';
+
 import { DynamicQuizBuilder } from './DynamicQuizBuilder';
 
 interface EditLessonModalProps {
@@ -41,33 +42,38 @@ type LocalAttachment = { id: string; name: string; url: string };
 
 export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonModalProps) {
   const { mutate: updateLesson, isPending: isUpdatingDB } = useUpdateLesson(courseId, lessonData?.lesson?.id || '');
+  const { mutateAsync: fetchPreview, isPending: isPreviewing } = usePreviewQuizConfig();
   
   const { uploadDirectly: uploadVideo, isUploading: isUploadingVideo, progress: videoProgress } = useCloudinaryUpload();
   const { uploadDirectly: uploadDoc, isUploading: isUploadingDoc, progress: docProgress } = useCloudinaryUpload();
   
-  const isFormLocked = isUpdatingDB || isUploadingVideo || isUploadingDoc;
+  const isFormLocked = isUpdatingDB || isUploadingVideo || isUploadingDoc || isPreviewing;
 
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const [localAttachments, setLocalAttachments] = useState<LocalAttachment[]>([]);
 
-  // [STATE KÉP]: Phân biệt Mode đang soạn
   const [quizMode, setQuizMode] = useState<'STATIC' | 'DYNAMIC'>('STATIC');
 
-  const { data: courseData } = useCourseTeacherDetail(courseId);
-  const subjectId = courseData?.subject?.id;
+  const user = useAuthStore((state) => state.user);
+  const subjectId = user?.subjects?.[0]?.id;
   
   const { data: folders = [] } = useFoldersList();
   const { data: topics = [] } = useTopicsTree(subjectId);
+  const { data: globalFilters, isFetching: isLoadingFilters } = useActiveFilters({ isDraft: false });
+  const activeFilters = (globalFilters as any)?.data || globalFilters;
 
   const { data: examsData } = useTeacherExams(); 
   const [isExamSheetOpen, setIsExamSheetOpen] = useState(false);
   const [selectedExamTitle, setSelectedExamTitle] = useState<string | null>(null);
 
+  const [previewData, setPreviewData] = useState<{ questions: NestedQuestionPreview[], totalItems: number, actual: number } | null>(null);
+  const [cooldown, setCooldown] = useState(0);
+
   const methods = useForm<UpdateLessonDTO>({
     resolver: zodResolver(updateLessonSchema),
   });
 
-  const { register, handleSubmit, control, watch, setValue, clearErrors, formState: { errors, isDirty }, reset } = methods;
+  const { register, handleSubmit, control, watch, setValue, clearErrors, getValues, trigger, formState: { errors, isDirty }, reset } = methods;
 
   useEffect(() => {
     return () => {
@@ -79,12 +85,18 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
   }, [videoPreviewUrl, localAttachments]);
 
   useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setInterval(() => setCooldown(prev => prev - 1), 1000);
+    return () => clearInterval(timer);
+  }, [cooldown]);
+
+  useEffect(() => {
     if (lessonData?.lesson) {
-      const l = lessonData.lesson as any; 
+      const l = lessonData.lesson as LessonPreview & { dynamicConfig?: DynamicConfigDTO; examRules?: ExamRuleDTO }; 
       
       const defaultDynamicConfig = {
         adHocSections: [{
-          name: 'Phần 1: Trắc nghiệm ngẫu nhiên',
+          name: 'Phần 1: Trắc nghiệm',
           orderIndex: 0,
           rules: [{ limit: 10, folderIds: [], topicIds: [], difficulties: [], tags: [] }]
         }]
@@ -103,7 +115,6 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
         dynamicConfig: l.dynamicConfig || defaultDynamicConfig, 
       });
 
-      // Xác định Mode khởi tạo dựa trên dữ liệu cũ
       if (!l.examId && l.dynamicConfig) {
         setQuizMode('DYNAMIC');
       } else {
@@ -123,7 +134,6 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
     }
   }, [lessonData, reset, examsData]);
 
-  // Handle Tab Switch (Dọn dẹp Validation Error của tab ẩn)
   const handleModeChange = (mode: string) => {
     setQuizMode(mode as 'STATIC' | 'DYNAMIC');
     if (mode === 'STATIC') clearErrors('dynamicConfig');
@@ -175,11 +185,26 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
     });
   };
 
-  // [CTO FIX]: INTERCEPTOR HỖ TRỢ DUAL-ENGINE
+  const handlePreview = async () => {
+    if (cooldown > 0) return;
+    const isValid = await trigger('dynamicConfig');
+    if (!isValid) {
+        toast.warning('Vui lòng hoàn thiện cấu trúc bốc đề trước khi xem trước.');
+        return;
+    }
+    const config = getValues('dynamicConfig');
+    try {
+        const response = await fetchPreview({ matrixId: config?.matrixId, adHocSections: config?.adHocSections });
+        const actualData = (response as any)?.data || response;
+        const nested = buildNestedQuestions(actualData.previewData.questions);
+        setPreviewData({ questions: nested, totalItems: actualData.totalItems, actual: actualData.totalActualQuestions });
+        setCooldown(10);
+        toast.success('Sinh đề nháp thành công!');
+    } catch (error) {}
+  };
+
   const onSubmit = (data: UpdateLessonDTO) => {
     const sanitizedPayload = { ...data, content: (!data.content || data.content.trim() === '') ? '<p></p>' : data.content };
-
-    // Tỉa gọn Payload trước khi gửi dựa vào Mode
     if (quizMode === 'STATIC') {
       delete sanitizedPayload.dynamicConfig;
       if (!sanitizedPayload.examId) delete sanitizedPayload.examRules;
@@ -187,8 +212,12 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
       delete sanitizedPayload.examId;
       if (!sanitizedPayload.dynamicConfig?.adHocSections?.length) delete sanitizedPayload.examRules;
     }
-
     updateLesson(sanitizedPayload, { onSuccess: onClose });
+  };
+
+  const onValidationError = (errs: Record<string, unknown>) => {
+    console.error("Lỗi Validation Form:", errs);
+    toast.error("Thiếu thông tin bắt buộc!", { description: "Vui lòng kiểm tra lại Tên bài, Thư mục hoặc Luật thi."});
   };
 
   return (
@@ -200,7 +229,7 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
           </DialogHeader>
 
           <FormProvider {...methods}>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 py-2">
+            <form onSubmit={handleSubmit(onSubmit, onValidationError)} className="space-y-6 py-2">
               
               <div className="space-y-4 bg-muted/10 p-5 rounded-xl border border-border">
                 <div className="space-y-2">
@@ -221,7 +250,6 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
                 </div>
               </div>
 
-              {/* SECTION: BÀI KIỂM TRA (QUIZ) - SIÊU MODAL DUAL ENGINE */}
               <div className="p-1 rounded-xl border-2 border-purple-500/20 bg-purple-500/5">
                 <div className="p-4 border-b border-purple-500/10 flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-purple-600" />
@@ -235,7 +263,6 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
                       <TabsTrigger value="DYNAMIC" className="font-bold gap-2 text-sm"><Zap className="w-4 h-4 text-amber-500"/> Sinh Đề Tự Động (AI)</TabsTrigger>
                     </TabsList>
 
-                    {/* ENGINE 1: STATIC (ĐỀ CŨ) */}
                     <TabsContent value="STATIC" className="space-y-4 mt-0 animate-in fade-in">
                       {watch('examId') && quizMode === 'STATIC' ? (
                         <div className="bg-white border border-purple-200 rounded-lg p-4 shadow-sm">
@@ -262,23 +289,19 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
                       )}
                     </TabsContent>
 
-                    {/* ENGINE 2: DYNAMIC (SMART BLUEPRINT BUILDER) */}
-                    <TabsContent value="DYNAMIC" className="mt-0 animate-in fade-in">
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                        <div className="lg:col-span-7">
-                          <div className="mb-3 flex items-center justify-between">
+                    <TabsContent value="DYNAMIC" className="mt-0 animate-in fade-in space-y-4">
+                        <div className="mb-3">
                             <h4 className="text-sm font-bold text-slate-700">Quy tắc bốc đề ngẫu nhiên</h4>
-                          </div>
-                         <DynamicQuizBuilder folders={folders} topics={topics} disabled={isFormLocked} />
+                            {!subjectId && <p className="text-xs text-red-600 font-bold mt-1">CẢNH BÁO: Tài khoản của bạn chưa thiết lập Môn học.</p>}
                         </div>
-                        <div className="lg:col-span-5 h-[500px]">
-                          <DynamicQuizPreviewer />
-                        </div>
-                      </div>
+                        {isLoadingFilters ? (
+                            <div className="flex justify-center p-10"><Loader2 className="w-6 h-6 animate-spin text-purple-500" /></div>
+                        ) : (
+                            <DynamicQuizBuilder folders={folders} topics={topics} activeFilters={activeFilters} disabled={isFormLocked} />
+                        )}
                     </TabsContent>
                   </Tabs>
 
-                  {/* SHARED CONFIG: LUẬT THI (CHUNG CHO CẢ 2 MODE) */}
                   {((quizMode === 'STATIC' && watch('examId')) || (quizMode === 'DYNAMIC')) && (
                     <div className="bg-card border border-border rounded-xl p-4 space-y-4 shadow-sm animate-in fade-in slide-in-from-bottom-4">
                       <h4 className="text-sm font-bold text-slate-700 flex items-center gap-1.5"><Settings2 className="w-4 h-4 text-primary"/> Cấu hình Luật thi (Áp dụng chung)</h4>
@@ -303,9 +326,7 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
                               control={control}
                               render={({ field }) => (
                                 <Select disabled={isFormLocked} value={field.value} onValueChange={(val) => { field.onChange(val); setValue('examRules.showResultMode', val as any, { shouldDirty: true }); }}>
-                                  <SelectTrigger className="h-10 text-sm font-medium">
-                                    <SelectValue placeholder="Chọn mode" />
-                                  </SelectTrigger>
+                                  <SelectTrigger className="h-10 text-sm font-medium"><SelectValue placeholder="Chọn mode" /></SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="IMMEDIATELY">Xem ngay lập tức</SelectItem>
                                     <SelectItem value="AFTER_END_TIME">Sau khi hết thời gian</SelectItem>
@@ -321,21 +342,15 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
                 </div>
               </div>
 
-              {/* CÁC SECTION KHÁC: VIDEO, DOCUMENT... (Giữ Layout Grid) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 bg-blue-500/5 rounded-xl border border-blue-500/20 space-y-4">
-                  <label className="text-sm font-bold flex items-center gap-2 text-blue-600">
-                    <Video className="w-4 h-4" /> Video bài giảng
-                  </label>
-                  
+                  <label className="text-sm font-bold flex items-center gap-2 text-blue-600"><Video className="w-4 h-4" /> Video bài giảng</label>
                   <Input type="file" accept="video/mp4,video/webm" className="hidden" id="edit-video" onChange={handleUploadVideo} disabled={isFormLocked} />
                   <Button type="button" variant="outline" className="w-full h-10 border-blue-200" onClick={() => document.getElementById('edit-video')?.click()} disabled={isFormLocked}>
                     {isUploadingVideo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UploadCloud className="mr-2 h-4 w-4 text-blue-500" />}
                     Thay đổi Video (MP4)
                   </Button>
-
                   {isUploadingVideo && <Progress value={videoProgress} className="h-1.5" />}
-                  
                   {videoPreviewUrl && !isUploadingVideo && (
                     <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden border border-border flex items-center justify-center mt-3 shadow-inner">
                       <video src={videoPreviewUrl} controls controlsList="nodownload" className="w-full h-full object-contain" />
@@ -345,29 +360,21 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
 
                 <div className="p-4 bg-orange-500/5 rounded-xl border border-orange-500/20 space-y-4">
                   <div className="flex items-center justify-between">
-                    <label className="text-sm font-bold flex items-center gap-2 text-orange-600">
-                      <FileText className="w-4 h-4" /> Tài liệu đính kèm
-                    </label>
+                    <label className="text-sm font-bold flex items-center gap-2 text-orange-600"><FileText className="w-4 h-4" /> Tài liệu đính kèm</label>
                     <Input type="file" accept=".pdf,.doc,.docx,.zip" multiple className="hidden" id="edit-docs" onChange={handleUploadAttachments} disabled={isFormLocked} />
                     <Button type="button" variant="secondary" size="sm" onClick={() => document.getElementById('edit-docs')?.click()} disabled={isFormLocked}>
                       {isUploadingDoc ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : '+ Thêm tệp'}
                     </Button>
                   </div>
-                  
                   {isUploadingDoc && <Progress value={docProgress} className="h-1.5" />}
-                  
                   {localAttachments.length > 0 && (
                     <div className="space-y-2 mt-2">
                       {localAttachments.map((file) => (
                         <div key={file.id} className="flex items-center justify-between text-sm bg-background p-2 rounded-md border border-border group">
                           <span className="truncate flex-1 font-medium px-2">{file.name}</span>
                           <div className="flex items-center gap-1">
-                            <a href={file.url} target="_blank" rel="noopener noreferrer" className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors" title="Xem trước file">
-                              <Eye className="w-4 h-4" />
-                            </a>
-                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeAttachment(file.id)} disabled={isFormLocked}>
-                              <X className="w-4 h-4" />
-                            </Button>
+                            <a href={file.url} target="_blank" rel="noopener noreferrer" className="p-1.5 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-md transition-colors"><Eye className="w-4 h-4" /></a>
+                            <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={() => removeAttachment(file.id)} disabled={isFormLocked}><X className="w-4 h-4" /></Button>
                           </div>
                         </div>
                       ))}
@@ -378,15 +385,23 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
 
               <div className="flex items-center space-x-3 bg-muted/40 p-4 rounded-xl border border-border">
                 <Checkbox id="isFreePreviewEdit" checked={watch('isFreePreview')} onCheckedChange={(c) => setValue('isFreePreview', c as boolean, { shouldDirty: true })} disabled={isFormLocked} className="w-5 h-5 rounded" />
-                <label htmlFor="isFreePreviewEdit" className="text-sm font-semibold cursor-pointer select-none">Mở khóa học thử miễn phí (Học sinh không cần mua vẫn xem được)</label>
+                <label htmlFor="isFreePreviewEdit" className="text-sm font-semibold cursor-pointer select-none">Mở khóa học thử miễn phí</label>
               </div>
               
-              <div className="flex justify-end gap-3 pt-6 mt-4 border-t border-border sticky bottom-0 bg-background/95 backdrop-blur py-4 -mx-6 px-6 z-10">
+              <div className="flex items-center justify-between pt-6 mt-4 border-t border-border sticky bottom-0 bg-background/95 backdrop-blur py-4 -mx-6 px-6 z-10">
                 <Button type="button" variant="ghost" onClick={onClose} disabled={isFormLocked} className="font-semibold px-6">Hủy bỏ</Button>
-                <Button type="submit" disabled={isFormLocked || !isDirty} className="font-bold px-8 shadow-md">
-                  {isUpdatingDB && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Lưu thay đổi
-                </Button>
+                
+                <div className="flex items-center gap-3">
+                    {quizMode === 'DYNAMIC' && (
+                        <Button type="button" variant="outline" className="border-purple-300 text-purple-700 bg-purple-50 hover:bg-purple-100" onClick={handlePreview} disabled={isFormLocked || cooldown > 0}>
+                            {isPreviewing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Eye className="w-4 h-4 mr-2" />}
+                            {cooldown > 0 ? `Xem trước (${cooldown}s)` : 'Xem thử Đề'}
+                        </Button>
+                    )}
+                    <Button type="submit" disabled={isFormLocked || !isDirty} className="font-bold px-8 shadow-md bg-blue-600 hover:bg-blue-700 text-white">
+                      {isUpdatingDB && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Lưu thay đổi
+                    </Button>
+                </div>
               </div>
 
             </form>
@@ -399,11 +414,12 @@ export function EditLessonModal({ courseId, lessonData, onClose }: EditLessonMod
           isOpen={isExamSheetOpen}
           onClose={() => setIsExamSheetOpen(false)}
           currentExamId={watch('examId')}
-          onSelectExam={(id, title) => {
-            setValue('examId', id, { shouldValidate: true, shouldDirty: true });
-            setSelectedExamTitle(title);
-          }}
+          onSelectExam={(id, title) => { setValue('examId', id, { shouldValidate: true, shouldDirty: true }); setSelectedExamTitle(title); }}
         />
+      )}
+
+      {previewData && (
+          <QuizLivePreviewModal isOpen={!!previewData} onClose={() => setPreviewData(null)} questions={previewData.questions} totalItems={previewData.totalItems} totalActualQuestions={previewData.actual} />
       )}
     </>
   );

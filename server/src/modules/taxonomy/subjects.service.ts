@@ -1,4 +1,4 @@
-import { Injectable, Inject, forwardRef } from '@nestjs/common'; 
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { SubjectsRepository } from './subjects.repository';
 import { UsersService } from '../users/users.service';
@@ -13,8 +13,8 @@ export class SubjectsService {
 
   async getAllActiveSubjects() {
     return (this.subjectsRepo as any).model
-      .find({ isActive: true }) 
-      .select('name code description') 
+      .find({ isActive: true })
+      .select('name code description')
       .sort({ name: 1 })
       .lean()
       .exec();
@@ -27,9 +27,9 @@ export class SubjectsService {
     }
 
     return (this.subjectsRepo as any).model
-      .find({ 
+      .find({
         _id: { $in: user.subjectIds },
-        isActive: true 
+        isActive: true,
       })
       .select('name code')
       .lean()

@@ -1,4 +1,12 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, Min, IsEnum, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsNumber,
+  Min,
+  IsEnum,
+  IsBoolean,
+} from 'class-validator';
 import { ProgressionMode } from '../enums/progression-mode.enum';
 
 export class CreateCourseDto {

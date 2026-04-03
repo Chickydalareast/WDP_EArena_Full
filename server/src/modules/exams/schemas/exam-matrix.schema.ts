@@ -6,10 +6,16 @@ export type ExamMatrixDocument = ExamMatrix & Document;
 
 @Schema({ _id: false })
 export class MatrixRule {
-  @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'QuestionFolder' }], default: [] })
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'QuestionFolder' }],
+    default: [],
+  })
   folderIds: Types.ObjectId[];
 
-  @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'KnowledgeTopic' }], default: [] })
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'KnowledgeTopic' }],
+    default: [],
+  })
   topicIds: Types.ObjectId[];
 
   @Prop({ type: [String], enum: DifficultyLevel, default: [] })
@@ -44,10 +50,20 @@ export class ExamMatrix {
   @Prop({ trim: true, default: '' })
   description: string;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  })
   teacherId: Types.ObjectId;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Subject', required: true, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'Subject',
+    required: true,
+    index: true,
+  })
   subjectId: Types.ObjectId;
 
   @Prop({ type: [MatrixSectionSchema], required: true })

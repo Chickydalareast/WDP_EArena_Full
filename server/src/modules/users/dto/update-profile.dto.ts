@@ -1,4 +1,10 @@
-import { IsOptional, IsString, IsDate, MaxLength, Matches } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsDate,
+  MaxLength,
+  Matches,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateProfileDto {
@@ -9,17 +15,23 @@ export class UpdateProfileDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^(https?:\/\/res\.cloudinary\.com\/.*|https?:\/\/.*\.googleusercontent\.com\/.*)$/, {
-    message: 'Nguồn ảnh đại diện không được phép. Vui lòng upload qua hệ thống.',
-  })
+  @Matches(
+    /^(https?:\/\/res\.cloudinary\.com\/.*|https?:\/\/.*\.googleusercontent\.com\/.*)$/,
+    {
+      message:
+        'Nguồn ảnh đại diện không được phép. Vui lòng upload qua hệ thống.',
+    },
+  )
   avatar?: string;
 
   @IsOptional()
-  @Matches(/^(84|0[3|5|7|8|9])[0-9]{8}$/, { message: 'Số điện thoại không đúng định dạng VN' })
+  @Matches(/^(84|0[3|5|7|8|9])[0-9]{8}$/, {
+    message: 'Số điện thoại không đúng định dạng VN',
+  })
   phone?: string;
 
   @IsOptional()
-  @Type(() => Date) 
+  @Type(() => Date)
   @IsDate({ message: 'Ngày sinh phải là một ngày hợp lệ' })
   dateOfBirth?: Date;
 

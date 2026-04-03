@@ -9,7 +9,8 @@ export class SectionsRepository extends AbstractRepository<SectionDocument> {
   protected readonly logger = new Logger(SectionsRepository.name);
 
   constructor(
-    @InjectModel(Section.name) private readonly sectionModel: Model<SectionDocument>,
+    @InjectModel(Section.name)
+    private readonly sectionModel: Model<SectionDocument>,
     @InjectConnection() connection: Connection,
   ) {
     super(sectionModel, connection);
@@ -25,9 +26,11 @@ export class SectionsRepository extends AbstractRepository<SectionDocument> {
     return lastSection ? lastSection.order + 1 : 1;
   }
 
-  async bulkUpdateOrder(updates: { id: string; order: number }[]): Promise<any> {
+  async bulkUpdateOrder(
+    updates: { id: string; order: number }[],
+  ): Promise<any> {
     if (!updates.length) return;
-    const ops = updates.map(u => ({
+    const ops = updates.map((u) => ({
       updateOne: {
         filter: { _id: new Types.ObjectId(u.id) },
         update: { $set: { order: u.order } },
@@ -36,25 +39,38 @@ export class SectionsRepository extends AbstractRepository<SectionDocument> {
     return this.model.bulkWrite(ops, { ordered: false });
   }
 
-  async bulkUpdateOrderAndSection(updates: { id: string; order: number; sectionId: string }[]): Promise<any> {
+  async bulkUpdateOrderAndSection(
+    updates: { id: string; order: number; sectionId: string }[],
+  ): Promise<any> {
     if (!updates.length) return;
-    const ops = updates.map(u => ({
+    const ops = updates.map((u) => ({
       updateOne: {
         filter: { _id: new Types.ObjectId(u.id) },
-        update: { $set: { order: u.order, sectionId: new Types.ObjectId(u.sectionId) } },
+        update: {
+          $set: { order: u.order, sectionId: new Types.ObjectId(u.sectionId) },
+        },
       },
     }));
     return this.model.bulkWrite(ops, { ordered: false });
   }
 
-  async bulkUpdateOrderStrict(courseId: string, updates: { id: string; order: number }[]): Promise<any> {
+  async bulkUpdateOrderStrict(
+    courseId: string,
+    updates: { id: string; order: number }[],
+  ): Promise<any> {
     if (!updates.length) return;
-    const ops = updates.map(u => ({
+    const ops = updates.map((u) => ({
       updateOne: {
-        filter: { _id: new Types.ObjectId(u.id), courseId: new Types.ObjectId(courseId) },
+        filter: {
+          _id: new Types.ObjectId(u.id),
+          courseId: new Types.ObjectId(courseId),
+        },
         update: { $set: { order: u.order } },
       },
     }));
-    return this.model.bulkWrite(ops, { ordered: false, session: this.currentSession });
+    return this.model.bulkWrite(ops, {
+      ordered: false,
+      session: this.currentSession,
+    });
   }
 }

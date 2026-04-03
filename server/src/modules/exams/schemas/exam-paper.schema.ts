@@ -1,6 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema, Types } from 'mongoose';
-import { DifficultyLevel, QuestionType } from '../../questions/schemas/question.schema';
+import {
+  DifficultyLevel,
+  QuestionType,
+} from '../../questions/schemas/question.schema';
 
 export type ExamPaperDocument = ExamPaper & Document;
 
@@ -37,7 +40,10 @@ export class PaperQuestion {
   @Prop({ type: [PaperAnswerOptionSchema], default: [] })
   answers: PaperAnswerOption[];
 
-  @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Media' }], default: [] })
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Media' }],
+    default: [],
+  })
   attachedMedia: Types.ObjectId[];
 
   @Prop({ type: Number, default: null })
@@ -57,10 +63,20 @@ const PaperAnswerKeySchema = SchemaFactory.createForClass(PaperAnswerKey);
 
 @Schema({ timestamps: true, collection: 'exam_papers' })
 export class ExamPaper {
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Exam', required: true, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'Exam',
+    required: true,
+    index: true,
+  })
   examId: Types.ObjectId;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'ExamSubmission', default: null, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'ExamSubmission',
+    default: null,
+    index: true,
+  })
   submissionId?: Types.ObjectId;
 
   @Prop({ type: [PaperQuestionSchema], required: true })

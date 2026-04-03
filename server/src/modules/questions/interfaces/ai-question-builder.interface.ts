@@ -3,37 +3,37 @@ import { BulkSubQuestionPayload } from './question.interface';
 
 // Khuôn chuẩn ép LLM nhả ra
 export interface AiGeneratedAnswer {
-    id: string;
-    content: string;
-    isCorrect: boolean;
+  id: string;
+  content: string;
+  isCorrect: boolean;
 }
 
 export interface AiGeneratedSubQuestion {
-    content: string;
-    explanation?: string;
-    difficultyLevel?: DifficultyLevel;
-    answers: AiGeneratedAnswer[];
+  content: string;
+  explanation?: string;
+  difficultyLevel?: DifficultyLevel;
+  answers: AiGeneratedAnswer[];
 }
 
 export interface AiGeneratedQuestion {
-    type: QuestionType;
-    content: string;
-    explanation?: string;
-    difficultyLevel?: DifficultyLevel;
-    topicId?: string;
-    tags?: string[];
-    answers?: AiGeneratedAnswer[];
-    subQuestions?: AiGeneratedSubQuestion[];
+  type: QuestionType;
+  content: string;
+  explanation?: string;
+  difficultyLevel?: DifficultyLevel;
+  topicId?: string;
+  tags?: string[];
+  answers?: AiGeneratedAnswer[];
+  subQuestions?: AiGeneratedSubQuestion[];
 }
 
 export interface AiQuestionBankResponse {
-    questions: AiGeneratedQuestion[];
+  questions: AiGeneratedQuestion[];
 }
 export interface AiDocumentFile {
-    originalName: string;
-    mimeType: string;
-    size: number;
-    filePath: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  filePath: string;
 }
 
 export interface AiQuestionBuilderPayload {

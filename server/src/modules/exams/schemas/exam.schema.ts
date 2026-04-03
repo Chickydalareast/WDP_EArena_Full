@@ -10,9 +10,12 @@ export type ExamDocument = Exam & Document;
 export enum ExamType {
   OFFICIAL = 'OFFICIAL',
   PRACTICE = 'PRACTICE',
-  COURSE_QUIZ = 'COURSE_QUIZ'
+  COURSE_QUIZ = 'COURSE_QUIZ',
 }
-export enum ExamMode { STATIC = 'STATIC', DYNAMIC = 'DYNAMIC' }
+export enum ExamMode {
+  STATIC = 'STATIC',
+  DYNAMIC = 'DYNAMIC',
+}
 
 @Schema({ _id: false })
 export class DynamicFilter {
@@ -29,7 +32,10 @@ export class DynamicExamConfig {
   // ==========================================
   // [LEGACY FIELDS] - Giữ lại để tương thích ngược
   // ==========================================
-  @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'QuestionFolder' }], default: [] })
+  @Prop({
+    type: [{ type: MongooseSchema.Types.ObjectId, ref: 'QuestionFolder' }],
+    default: [],
+  })
   sourceFolders?: Types.ObjectId[];
 
   @Prop({ type: [DynamicFilterSchema], default: [] })
@@ -38,7 +44,11 @@ export class DynamicExamConfig {
   // ==========================================
   // [NEW MATRIX FIELDS] - Cấu trúc Coursera/Udemy
   // ==========================================
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'ExamMatrix', default: null })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'ExamMatrix',
+    default: null,
+  })
   matrixId?: Types.ObjectId;
 
   @Prop({ type: [MatrixSectionSchema], default: [] })
@@ -54,10 +64,20 @@ export class Exam {
   @Prop({ trim: true })
   description: string;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true,
+  })
   teacherId: Types.ObjectId;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'Subject', required: true, index: true })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'Subject',
+    required: true,
+    index: true,
+  })
   subjectId: Types.ObjectId;
 
   @Prop({ required: true, min: 0 })
@@ -75,7 +95,11 @@ export class Exam {
   @Prop({ type: DynamicExamConfigSchema, default: null })
   dynamicConfig?: DynamicExamConfig;
 
-  @Prop({ type: MongooseSchema.Types.ObjectId, ref: 'QuestionFolder', default: null })
+  @Prop({
+    type: MongooseSchema.Types.ObjectId,
+    ref: 'QuestionFolder',
+    default: null,
+  })
   folderId?: Types.ObjectId;
 }
 

@@ -1,4 +1,11 @@
-import { IsOptional, IsString, IsInt, Min, IsEnum, IsMongoId } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsInt,
+  Min,
+  IsEnum,
+  IsMongoId,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ExamType } from '../schemas/exam.schema';
 

@@ -1,7 +1,7 @@
 // file: src/modules/media/interfaces/storage-provider.interface.ts
 import { MediaContext } from '../schemas/media.schema';
 
-export const CLOUDINARY_PROVIDER = 'CLOUDINARY_PROVIDER'; 
+export const CLOUDINARY_PROVIDER = 'CLOUDINARY_PROVIDER';
 export const VIDEO_PROVIDER = 'VIDEO_PROVIDER';
 
 export type StorageMetadata = {
@@ -23,19 +23,35 @@ export type SyncCloudinaryPayload = {
 };
 
 export interface ITicketStorageProvider {
-  verifyUpload(publicId: string, resourceType?: 'image' | 'video' | 'raw'): Promise<StorageMetadata>;
+  verifyUpload(
+    publicId: string,
+    resourceType?: 'image' | 'video' | 'raw',
+  ): Promise<StorageMetadata>;
 }
 
 export interface ICloudinaryProvider extends ITicketStorageProvider {
-  uploadFileLocal(filePath: string, folder: string, publicId?: string): Promise<StorageMetadata>;
-  deleteFile(publicId: string, resourceType?: 'image' | 'video' | 'raw'): Promise<boolean>;
+  uploadFileLocal(
+    filePath: string,
+    folder: string,
+    publicId?: string,
+  ): Promise<StorageMetadata>;
+  deleteFile(
+    publicId: string,
+    resourceType?: 'image' | 'video' | 'raw',
+  ): Promise<boolean>;
   generateSignature(folder: string): any;
-  
+
   // [CTO UPGRADE]: Thêm hợp đồng sinh chữ ký bảo mật
-  generateSignedUrl(publicId: string, resourceType: 'image' | 'video' | 'raw', expiresInSeconds: number): string;
+  generateSignedUrl(
+    publicId: string,
+    resourceType: 'image' | 'video' | 'raw',
+    expiresInSeconds: number,
+  ): string;
 }
 
 export interface IVideoProvider extends ITicketStorageProvider {
-  createResumableUploadSession(fileMetadata: any): Promise<{ uploadUrl: string; fileId: string }>;
+  createResumableUploadSession(
+    fileMetadata: any,
+  ): Promise<{ uploadUrl: string; fileId: string }>;
   deleteVideo(fileId: string): Promise<boolean>;
 }

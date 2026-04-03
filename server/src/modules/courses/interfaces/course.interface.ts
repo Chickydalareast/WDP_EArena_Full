@@ -1,6 +1,6 @@
-import { Types } from "mongoose";
-import { ProgressionMode } from "../enums/progression-mode.enum";
-import { DifficultyLevel } from "src/modules/questions/schemas/question.schema";
+import { Types } from 'mongoose';
+import { ProgressionMode } from '../enums/progression-mode.enum';
+import { DifficultyLevel } from 'src/modules/questions/schemas/question.schema';
 
 export interface EmbeddedExamRulePayload {
   folderIds?: string[];

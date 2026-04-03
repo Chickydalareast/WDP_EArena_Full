@@ -1,6 +1,6 @@
 import { Exclude, Expose, Transform } from 'class-transformer';
 
-@Exclude() 
+@Exclude()
 export class UserResponseDto {
   @Expose({ name: 'id' })
   @Transform(({ obj }) => obj._id?.toString() || obj.id)
@@ -59,8 +59,13 @@ export class UserResponseDto {
       planId,
       planCode,
       expiresAt: expiresAtStr,
-      isExpired
+      isExpired,
     };
   })
-  subscription: { planId: string; planCode: string; expiresAt: string | null; isExpired: boolean } | null;
+  subscription: {
+    planId: string;
+    planCode: string;
+    expiresAt: string | null;
+    isExpired: boolean;
+  } | null;
 }

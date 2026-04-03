@@ -10,7 +10,6 @@ export class MediaResponseDto {
   @Expose() size?: number;
 }
 
-// [MAX PING]: Khai báo Expose cho cấu hình thi
 export class ExamRuleConfigResponseDto {
   @Expose() timeLimit: number;
   @Expose() maxAttempts: number;
@@ -25,6 +24,10 @@ export class LessonResponseDto {
   @Expose() isFreePreview: boolean;
   @Expose() content?: string | null;
   @Expose() examId?: string | null;
+  
+  @Expose() examMode?: string | null; 
+  @Expose() examType?: string | null;
+
   @Expose() isCompleted?: boolean;
 
   @Expose()

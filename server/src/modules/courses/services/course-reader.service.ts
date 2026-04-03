@@ -1,6 +1,16 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { Types } from 'mongoose';
-import { CoursesRepository, SearchPublicCoursesOptions } from '../courses.repository';
+import {
+  CoursesRepository,
+  SearchPublicCoursesOptions,
+} from '../courses.repository';
 import { EnrollmentsRepository } from '../repositories/enrollments.repository';
 import { LessonsRepository } from '../repositories/lessons.repository';
 import { RedisService } from '../../../common/redis/redis.service';
@@ -51,11 +61,11 @@ export class CourseReaderService {
     private readonly mediaService: MediaService,
     private readonly reviewsRepo: CourseReviewsRepository,
     private readonly lessonProgressRepo: LessonProgressRepository,
-  ) { }
+  ) {}
 
   async searchPublicCourses(payload: SearchPublicCoursesPayload) {
     const { userId, ...dbOptions } = payload;
-    
+
     const cacheIdentifier = [
       dbOptions.keyword ? `k_${dbOptions.keyword}` : '',
       dbOptions.subjectId ? `s_${dbOptions.subjectId}` : '',
@@ -64,8 +74,10 @@ export class CourseReaderService {
       dbOptions.maxPrice !== undefined ? `max_${dbOptions.maxPrice}` : '',
       dbOptions.sort ? `sort_${dbOptions.sort}` : '',
       `p_${dbOptions.page}`,
-      `l_${dbOptions.limit}`
-    ].filter(Boolean).join(':');
+      `l_${dbOptions.limit}`,
+    ]
+      .filter(Boolean)
+      .join(':');
 
     const cacheKey = `courses:public:${cacheIdentifier}`;
     const TAG_KEY = 'cache_tags:courses:public';
@@ -73,39 +85,53 @@ export class CourseReaderService {
 
     const cached = await this.redisService.get(cacheKey);
     if (cached) {
-      this.logger.debug(`[Cache Hit] Trả về danh sách khóa học public: ${cacheKey}`);
+      this.logger.debug(
+        `[Cache Hit] Trả về danh sách khóa học public: ${cacheKey}`,
+      );
       baseResult = JSON.parse(cached);
     } else {
-      baseResult = await this.coursesRepo.searchPublicCourses(dbOptions as SearchPublicCoursesOptions);
+      baseResult = await this.coursesRepo.searchPublicCourses(
+        dbOptions as SearchPublicCoursesOptions,
+      );
 
       if (baseResult.data.length > 0) {
         const pipeline = this.redisService.getPipeline();
         pipeline.set(cacheKey, JSON.stringify(baseResult), 'EX', 300);
         pipeline.sadd(TAG_KEY, cacheKey);
-        pipeline.expire(TAG_KEY, 86400)
+        pipeline.expire(TAG_KEY, 86400);
         await pipeline.exec();
       }
     }
 
     if (payload.userId && baseResult.data.length > 0) {
-      const courseIds = baseResult.data.map((c: any) => new Types.ObjectId(c.id));
+      const courseIds = baseResult.data.map(
+        (c: any) => new Types.ObjectId(c.id),
+      );
 
-      const userEnrollments = await this.enrollmentsRepo.modelInstance.find({
-        userId: new Types.ObjectId(payload.userId),
-        courseId: { $in: courseIds },
-        status: 'ACTIVE'
-      }).lean().select('courseId').exec();
+      const userEnrollments = await this.enrollmentsRepo.modelInstance
+        .find({
+          userId: new Types.ObjectId(payload.userId),
+          courseId: { $in: courseIds },
+          status: 'ACTIVE',
+        })
+        .lean()
+        .select('courseId')
+        .exec();
 
-      const enrolledCourseIds = new Set(userEnrollments.map(e => e.courseId.toString()));
+      const enrolledCourseIds = new Set(
+        userEnrollments.map((e) => e.courseId.toString()),
+      );
 
       baseResult.data = baseResult.data.map((course: any) => ({
         ...course,
-        isEnrolled: (course.teacher && course.teacher.id === payload.userId) || enrolledCourseIds.has(course.id)
+        isEnrolled:
+          (course.teacher && course.teacher.id === payload.userId) ||
+          enrolledCourseIds.has(course.id),
       }));
     } else {
       baseResult.data = baseResult.data.map((course: any) => ({
         ...course,
-        isEnrolled: false
+        isEnrolled: false,
       }));
     }
 
@@ -122,14 +148,19 @@ export class CourseReaderService {
     } else {
       const course = await this.coursesRepo.findBySlug(slug);
       if (!course || course.status !== 'PUBLISHED') {
-        throw new NotFoundException('Khóa học không tồn tại hoặc chưa xuất bản.');
+        throw new NotFoundException(
+          'Khóa học không tồn tại hoặc chưa xuất bản.',
+        );
       }
 
-      const curriculum = await this.coursesRepo.getFullCourseCurriculum(course.id, { maskMediaUrls: true });
+      const curriculum = await this.coursesRepo.getFullCourseCurriculum(
+        course.id,
+        { maskMediaUrls: true },
+      );
 
       baseData = {
         course,
-        curriculum
+        curriculum,
       };
 
       await this.redisService.set(cacheKey, JSON.stringify(baseData), 300);
@@ -141,7 +172,10 @@ export class CourseReaderService {
       if (baseData.course.teacher && baseData.course.teacher.id === userId) {
         isEnrolled = true;
       } else {
-        const enrollment = await this.enrollmentsRepo.findUserEnrollment(userId, baseData.course.id);
+        const enrollment = await this.enrollmentsRepo.findUserEnrollment(
+          userId,
+          baseData.course.id,
+        );
         if (enrollment && enrollment.status === 'ACTIVE') {
           isEnrolled = true;
         }
@@ -150,14 +184,17 @@ export class CourseReaderService {
 
     return {
       ...baseData,
-      isEnrolled
+      isEnrolled,
     };
   }
 
   async getStudyTree(payload: GetStudyTreePayload) {
-    if (!Types.ObjectId.isValid(payload.courseId)) throw new BadRequestException('ID khóa học không hợp lệ.');
+    if (!Types.ObjectId.isValid(payload.courseId))
+      throw new BadRequestException('ID khóa học không hợp lệ.');
 
-    const course = await this.coursesRepo.findByIdSafe(payload.courseId, { select: 'teacherId' });
+    const course = await this.coursesRepo.findByIdSafe(payload.courseId, {
+      select: 'teacherId',
+    });
     if (!course) throw new NotFoundException('Khóa học không tồn tại.');
 
     const isTeacher = course.teacherId.toString() === payload.userId;
@@ -166,17 +203,24 @@ export class CourseReaderService {
     let myReview = null;
 
     if (!isTeacher) {
-      enrollment = await this.enrollmentsRepo.findUserEnrollment(payload.userId, payload.courseId);
-      if (!enrollment) throw new ForbiddenException('Bạn chưa ghi danh khóa học này.');
+      enrollment = await this.enrollmentsRepo.findUserEnrollment(
+        payload.userId,
+        payload.courseId,
+      );
+      if (!enrollment)
+        throw new ForbiddenException('Bạn chưa ghi danh khóa học này.');
 
-      const reviewDoc = await this.reviewsRepo.findOneSafe({
-        courseId: new Types.ObjectId(payload.courseId),
-        userId: new Types.ObjectId(payload.userId)
-      }, { select: 'rating comment teacherReply repliedAt createdAt' });
+      const reviewDoc = await this.reviewsRepo.findOneSafe(
+        {
+          courseId: new Types.ObjectId(payload.courseId),
+          userId: new Types.ObjectId(payload.userId),
+        },
+        { select: 'rating comment teacherReply repliedAt createdAt' },
+      );
 
       if (reviewDoc) {
         myReview = {
-          id: (reviewDoc._id as Types.ObjectId).toString(),
+          id: reviewDoc._id.toString(),
           rating: reviewDoc.rating,
           comment: reviewDoc.comment || null,
           teacherReply: reviewDoc.teacherReply || null,
@@ -186,11 +230,16 @@ export class CourseReaderService {
       }
     }
 
-    const curriculum = await this.coursesRepo.getFullCourseCurriculum(payload.courseId, { maskMediaUrls: true });
-    
+    const curriculum = await this.coursesRepo.getFullCourseCurriculum(
+      payload.courseId,
+      { maskMediaUrls: true },
+    );
+
     if (!curriculum) throw new NotFoundException('Khóa học bị lỗi cấu trúc.');
 
-    const completedSet = new Set(enrollment ? enrollment.completedLessons.map(id => id.toString()) : []);
+    const completedSet = new Set(
+      enrollment ? enrollment.completedLessons.map((id) => id.toString()) : [],
+    );
 
     if (curriculum.sections) {
       curriculum.sections = curriculum.sections.map((section: any) => ({
@@ -198,28 +247,41 @@ export class CourseReaderService {
         lessons: section.lessons.map((lesson: any) => ({
           ...lesson,
           isCompleted: isTeacher ? true : completedSet.has(lesson.id),
-        }))
+        })),
       }));
     }
 
     return {
-      progress: isTeacher ? 100 : (enrollment?.progress || 0),
-      status: isTeacher ? 'ACTIVE' : (enrollment?.status || 'ACTIVE'),
+      progress: isTeacher ? 100 : enrollment?.progress || 0,
+      status: isTeacher ? 'ACTIVE' : enrollment?.status || 'ACTIVE',
       curriculum,
       myReview,
     };
   }
 
   async getLessonContent(payload: GetLessonContentPayload) {
-    if (!Types.ObjectId.isValid(payload.courseId) || !Types.ObjectId.isValid(payload.lessonId)) {
+    if (
+      !Types.ObjectId.isValid(payload.courseId) ||
+      !Types.ObjectId.isValid(payload.lessonId)
+    ) {
       throw new BadRequestException('ID không hợp lệ.');
     }
 
     const lesson = await this.lessonsRepo.findByIdSafe(payload.lessonId, {
       populate: [
-        { path: 'primaryVideoId', select: 'publicId url blurHash duration mimetype' },
-        { path: 'attachments', select: 'publicId url originalName mimetype size' }
-      ]
+        {
+          path: 'primaryVideoId',
+          select: 'publicId url blurHash duration mimetype',
+        },
+        {
+          path: 'attachments',
+          select: 'publicId url originalName mimetype size',
+        },
+        {
+          path: 'examId',
+          select: 'mode type',
+        }
+      ],
     });
 
     if (!lesson) throw new NotFoundException('Bài học không tồn tại.');
@@ -230,42 +292,61 @@ export class CourseReaderService {
     let hasAccess = lesson.isFreePreview;
 
     if (!hasAccess) {
-      const course = await this.coursesRepo.findByIdSafe(payload.courseId, { select: 'teacherId' });
+      const course = await this.coursesRepo.findByIdSafe(payload.courseId, {
+        select: 'teacherId',
+      });
       if (course && course.teacherId.toString() === payload.userId) {
         hasAccess = true;
       }
     }
 
     if (!hasAccess) {
-      const enrollment = await this.enrollmentsRepo.findUserEnrollment(payload.userId, payload.courseId);
+      const enrollment = await this.enrollmentsRepo.findUserEnrollment(
+        payload.userId,
+        payload.courseId,
+      );
       if (enrollment && enrollment.status === 'ACTIVE') {
         hasAccess = true;
       }
     }
 
-    if (!hasAccess) throw new ForbiddenException('Vui lòng ghi danh khóa học để xem nội dung này.');
+    if (!hasAccess)
+      throw new ForbiddenException(
+        'Vui lòng ghi danh khóa học để xem nội dung này.',
+      );
 
-    const courseInfo = await this.coursesRepo.findByIdSafe(payload.courseId, { select: 'progressionMode teacherId' });
+    const courseInfo = await this.coursesRepo.findByIdSafe(payload.courseId, {
+      select: 'progressionMode teacherId',
+    });
     const mode = courseInfo?.progressionMode || 'FREE';
 
-    if (mode === 'STRICT_LINEAR' && courseInfo?.teacherId?.toString() !== payload.userId) {
-      const currentLesson = await this.lessonsRepo.findByIdSafe(payload.lessonId, {
-        populate: [{ path: 'sectionId', select: 'order' }]
-      });
+    if (
+      mode === 'STRICT_LINEAR' &&
+      courseInfo?.teacherId?.toString() !== payload.userId
+    ) {
+      const currentLesson = await this.lessonsRepo.findByIdSafe(
+        payload.lessonId,
+        {
+          populate: [{ path: 'sectionId', select: 'order' }],
+        },
+      );
 
       const sectionData = currentLesson?.sectionId as any;
       if (currentLesson && sectionData) {
         const prevLessonId = await this.lessonsRepo.getPreviousLessonId(
           payload.courseId,
           sectionData.order,
-          currentLesson.order
+          currentLesson.order,
         );
 
         if (prevLessonId) {
-          const prevProgress = await this.lessonProgressRepo.findOneSafe({
-            userId: new Types.ObjectId(payload.userId),
-            lessonId: new Types.ObjectId(prevLessonId)
-          }, { select: 'isCompleted' });
+          const prevProgress = await this.lessonProgressRepo.findOneSafe(
+            {
+              userId: new Types.ObjectId(payload.userId),
+              lessonId: new Types.ObjectId(prevLessonId),
+            },
+            { select: 'isCompleted' },
+          );
 
           if (!prevProgress || !prevProgress.isCompleted) {
             throw new ProgressionLockedException(prevLessonId);
@@ -276,39 +357,52 @@ export class CourseReaderService {
 
     const primaryVideo = lesson.primaryVideoId as any;
     const attachments = (lesson.attachments || []) as any[];
+    
+    const examData = lesson.examId as any;
 
     let progressData = null;
     if (payload.userId) {
-      const history = await this.lessonProgressRepo.findOneSafe({
-        userId: new Types.ObjectId(payload.userId),
-        lessonId: new Types.ObjectId(payload.lessonId)
-      }, { select: 'watchTime lastPosition isCompleted' });
+      const history = await this.lessonProgressRepo.findOneSafe(
+        {
+          userId: new Types.ObjectId(payload.userId),
+          lessonId: new Types.ObjectId(payload.lessonId),
+        },
+        { select: 'watchTime lastPosition isCompleted' },
+      );
 
       if (history) {
         progressData = {
           watchTime: history.watchTime,
           lastPosition: history.lastPosition,
-          isCompleted: history.isCompleted
+          isCompleted: history.isCompleted,
         };
       }
     }
 
     return {
-      id: (lesson._id as Types.ObjectId).toString(),
+      id: lesson._id.toString(),
       title: lesson.title,
       content: lesson.content || null,
-      examId: lesson.examId ? lesson.examId.toString() : null,
       
-      progress: progressData, 
+      examId: examData ? examData._id.toString() : null,
+      examMode: examData ? examData.mode : null,
+      examType: examData ? examData.type : null,
 
-      primaryVideo: primaryVideo ? {
-        id: primaryVideo._id.toString(),
-        url: this.mediaService.getSecureUrl(primaryVideo.publicId, primaryVideo.mimetype || 'video/mp4'),
-        blurHash: primaryVideo.blurHash,
-        duration: primaryVideo.duration || null,
-      } : null,
+      progress: progressData,
 
-      attachments: attachments.map(att => ({
+      primaryVideo: primaryVideo
+        ? {
+            id: primaryVideo._id.toString(),
+            url: this.mediaService.getSecureUrl(
+              primaryVideo.publicId,
+              primaryVideo.mimetype || 'video/mp4',
+            ),
+            blurHash: primaryVideo.blurHash,
+            duration: primaryVideo.duration || null,
+          }
+        : null,
+
+      attachments: attachments.map((att) => ({
         id: att._id.toString(),
         url: this.mediaService.getSecureUrl(att.publicId, att.mimetype),
         originalName: att.originalName,
@@ -325,7 +419,11 @@ export class CourseReaderService {
       throw new BadRequestException('ID người dùng không hợp lệ.');
     }
 
-    const { items, total } = await this.enrollmentsRepo.findMyCoursesPaginated(userId, page, limit);
+    const { items, total } = await this.enrollmentsRepo.findMyCoursesPaginated(
+      userId,
+      page,
+      limit,
+    );
 
     return {
       data: items,
@@ -335,8 +433,8 @@ export class CourseReaderService {
         limit,
         totalPages: Math.ceil(total / limit),
         hasNextPage: page * limit < total,
-        hasPrevPage: page > 1
-      }
+        hasPrevPage: page > 1,
+      },
     };
   }
 }

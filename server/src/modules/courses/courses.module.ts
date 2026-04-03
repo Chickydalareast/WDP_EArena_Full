@@ -6,8 +6,14 @@ import { Course, CourseSchema } from './schemas/course.schema';
 import { Section, SectionSchema } from './schemas/section.schema';
 import { Lesson, LessonSchema } from './schemas/lesson.schema';
 import { Enrollment, EnrollmentSchema } from './schemas/enrollment.schema';
-import { CourseReview, CourseReviewSchema } from './schemas/course-review.schema';
-import { LessonProgress, LessonProgressSchema } from './schemas/lesson-progress.schema';
+import {
+  CourseReview,
+  CourseReviewSchema,
+} from './schemas/course-review.schema';
+import {
+  LessonProgress,
+  LessonProgressSchema,
+} from './schemas/lesson-progress.schema';
 
 import { CoursesRepository } from './courses.repository';
 import { SectionsRepository } from './repositories/sections.repository';
@@ -45,8 +51,8 @@ import { UsersModule } from '../users/users.module';
 import { MediaModule } from '../media/media.module';
 import { ExamsModule } from '../exams/exams.module';
 import { AiModule } from '../ai/ai.module';
-
-import { NotificationsModule } from '../notifications/notifications.module'; 
+import { NotificationsModule } from '../notifications/notifications.module';
+import { QuestionsModule } from '../questions/questions.module';
 
 @Module({
   imports: [
@@ -66,7 +72,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
     MediaModule,
     AiModule,
     NotificationsModule,
-    forwardRef(() => ExamsModule)
+    QuestionsModule,
+    forwardRef(() => ExamsModule),
   ],
   controllers: [
     CoursesController,
@@ -85,7 +92,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     EnrollmentsRepository,
     CourseReviewsRepository,
     LessonProgressRepository,
-    
+
     CoursesService,
     CurriculumService,
     CourseReaderService,
@@ -105,7 +112,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     CoursesRepository,
     LessonsRepository,
     EnrollmentsRepository,
-    LessonProgressRepository
+    LessonProgressRepository,
   ],
 })
-export class CoursesModule { }
+export class CoursesModule {}

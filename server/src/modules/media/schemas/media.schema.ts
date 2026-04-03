@@ -40,7 +40,12 @@ export class Media {
   @Prop({ required: true, enum: MediaProvider, index: true })
   provider: MediaProvider;
 
-  @Prop({ required: true, enum: MediaStatus, default: MediaStatus.READY, index: true })
+  @Prop({
+    required: true,
+    enum: MediaStatus,
+    default: MediaStatus.READY,
+    index: true,
+  })
   status: MediaStatus;
 
   @Prop({ required: true })
@@ -64,7 +69,12 @@ export class Media {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
   uploadedBy: Types.ObjectId;
 
-  @Prop({ type: String, enum: MediaContext, default: MediaContext.GENERAL, index: true })
+  @Prop({
+    type: String,
+    enum: MediaContext,
+    default: MediaContext.GENERAL,
+    index: true,
+  })
   context: MediaContext;
 }
 

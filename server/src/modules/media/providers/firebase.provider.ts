@@ -10,13 +10,15 @@ import { Logger } from '@nestjs/common';
  */
 // @Injectable() // [MAX PING]: Comment out Injectable để NestJS hoàn toàn phớt lờ class này
 export class FirebaseAdapter {
-    private readonly logger = new Logger('FirebaseAdapter_Legacy');
+  private readonly logger = new Logger('FirebaseAdapter_Legacy');
 
-    constructor() {
-        this.logger.warn('Class FirebaseAdapter đã bị đóng băng. Luồng code này sẽ không bao giờ được chạy.');
-    }
+  constructor() {
+    this.logger.warn(
+      'Class FirebaseAdapter đã bị đóng băng. Luồng code này sẽ không bao giờ được chạy.',
+    );
+  }
 
-    /* ====================================================================
+  /* ====================================================================
        [DĨ HÒA VI QUÝ] - TOÀN BỘ LOGIC CŨ ĐÃ ĐƯỢC ĐÓNG GÓI CHỜ XÓA
        ====================================================================
     
