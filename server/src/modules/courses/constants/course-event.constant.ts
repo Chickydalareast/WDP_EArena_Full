@@ -11,6 +11,8 @@ export enum CourseEventPattern {
   COURSE_NEW_LESSON = 'course.new_lesson',
   COURSE_ARCHIVED = 'course.archived',
   COURSE_STATUS_DEACTIVATED = 'course.status.deactivated',
+  COURSE_QUESTION_ASKED = 'course.question_asked',
+  COURSE_QUESTION_REPLIED = 'course.question_replied',
 }
 
 export interface CourseSubmittedEventPayload {
@@ -78,3 +80,22 @@ export interface CourseDeactivatedEventPayload {
   courseId: string;
   reason: 'ARCHIVED' | 'REJECTED';
 }
+
+export type CourseQuestionAskedEventPayload = {
+  courseId: string;
+  lessonId: string;
+  teacherId: string;
+  studentId: string;
+  discussionId: string;
+  questionPreview: string;
+};
+
+export type CourseQuestionRepliedEventPayload = {
+  courseId: string;
+  lessonId: string;
+  rootDiscussionId: string;
+  replyId: string;
+  replierId: string;
+  receiverId: string;
+  replyPreview: string;
+};

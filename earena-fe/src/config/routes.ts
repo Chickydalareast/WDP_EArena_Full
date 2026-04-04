@@ -48,6 +48,7 @@ export const ROUTES = {
     COURSE_SETTINGS: (courseId: string) => `/teacher/courses/${courseId}/settings` as const,
     COURSE_BUILDER: (id: string) => `/teacher/courses/${id}/builder`,
     COURSE_MEMBERS: (courseId: string) => `/teacher/courses/${courseId}/members` as const,
+    COURSE_QNA: (courseId: string) => `/teacher/courses/${courseId}/qna` as const,
 
     QUESTIONS: '/teacher/questions',
     WALLET: '/teacher/wallet',

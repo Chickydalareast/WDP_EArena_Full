@@ -18,7 +18,9 @@ import type {
     BulkAutoTagDTO,
     BulkAutoTagResponse,
     BulkPublishResponse,
-    BulkPublishQuestionsDTO
+    BulkPublishQuestionsDTO,
+    AiLectureBuilderResponse,
+    AiLectureBuilderDTO
 } from '../types/question-bank.schema';
 
 export const questionBankService = {
@@ -129,6 +131,32 @@ export const questionBankService = {
         return axiosClient.patch<unknown, BulkPublishResponse>(
             API_ENDPOINTS.QUESTIONS.BULK_PUBLISH,
             data
+        );
+    },
+    
+    generateAiQuestionsFromLecture: async (data: AiLectureBuilderDTO): Promise<AiLectureBuilderResponse> => {
+        const formData = new FormData();
+
+        data.files.forEach((file) => {
+            formData.append('files', file);
+        });
+
+        formData.append('folderId', data.folderId);
+        formData.append('questionCount', String(data.questionCount));
+
+        if (data.additionalInstructions?.trim()) {
+            formData.append('additionalInstructions', data.additionalInstructions.trim());
+        }
+
+        return axiosClient.post<unknown, AiLectureBuilderResponse>(
+            API_ENDPOINTS.QUESTIONS.AI_GENERATE_FROM_LECTURE,
+            formData,
+            {
+                timeout: 120000,
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            }
         );
     },
 };

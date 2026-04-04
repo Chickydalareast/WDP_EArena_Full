@@ -41,10 +41,10 @@ export function TeacherCourseNav({ courseId }: TeacherCourseNavProps) {
         },
         {
             name: 'Q&A',
-            href: '#',
+            href: ROUTES.TEACHER.COURSE_QNA(courseId),
             icon: MessageSquare,
-            isActive: false,
-            disabled: true,
+            isActive: pathname.includes('/qna'),
+            disabled: false,
         },
     ];
 

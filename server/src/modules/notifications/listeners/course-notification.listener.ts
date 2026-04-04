@@ -1,3 +1,5 @@
+// File: src/modules/notifications/listeners/course-notification.listener.ts
+
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { NotificationsService } from '../notifications.service';
@@ -14,10 +16,13 @@ import type {
   CourseSoldEventPayload,
   CoursePurchasedEventPayload,
   CourseNewLessonEventPayload,
+  CourseQuestionAskedEventPayload,
+  CourseQuestionRepliedEventPayload,
 } from '../../courses/constants/course-event.constant';
 import { CourseEventPattern } from '../../courses/constants/course-event.constant';
 import { UsersRepository } from 'src/modules/users/users.repository';
 import { EnrollmentsRepository } from 'src/modules/courses/repositories/enrollments.repository';
+import { LessonsRepository } from 'src/modules/courses/repositories/lessons.repository';
 
 @Injectable()
 export class CourseNotificationListener {
@@ -28,6 +33,7 @@ export class CourseNotificationListener {
     private readonly coursesRepo: CoursesRepository,
     private readonly usersRepo: UsersRepository,
     private readonly enrollmentsRepo: EnrollmentsRepository,
+    private readonly lessonsRepo: LessonsRepository, 
   ) {}
 
   @OnEvent(CourseEventPattern.COURSE_COMPLETED, { async: true })
@@ -218,6 +224,65 @@ export class CourseNotificationListener {
     } catch (error: any) {
       this.logger.error(
         `[Listener Error] COURSE_NEW_LESSON: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  @OnEvent(CourseEventPattern.COURSE_QUESTION_ASKED, { async: true })
+  async handleQuestionAsked(payload: CourseQuestionAskedEventPayload) {
+    try {
+      const [student, course, lesson] = await Promise.all([
+        this.usersRepo.findByIdSafe(payload.studentId, { select: 'fullName' }),
+        this.coursesRepo.findByIdSafe(payload.courseId, { select: 'title' }),
+        this.lessonsRepo.findByIdSafe(payload.lessonId, { select: 'title' }),
+      ]);
+
+      const studentName = student?.fullName || 'Một học viên';
+      const courseTitle = course?.title || 'khóa học';
+      const lessonTitle = lesson?.title || 'bài học';
+
+      await this.notificationsService.createAndDispatch({
+        receiverId: payload.teacherId,
+        type: NotificationType.COURSE,
+        title: 'Có câu hỏi mới trong bài học ❓',
+        message: `${studentName} vừa đặt câu hỏi trong bài "${lessonTitle}" thuộc khóa "${courseTitle}": "${payload.questionPreview}..."`,
+        payload: {
+          courseId: payload.courseId,
+          lessonId: payload.lessonId,
+          discussionId: payload.discussionId,
+          url: `/teacher/courses/${payload.courseId}/qna`,
+        },
+      });
+    } catch (error: any) {
+      this.logger.error(
+        `[Listener Error] COURSE_QUESTION_ASKED: ${error.message}`,
+        error.stack,
+      );
+    }
+  }
+
+  @OnEvent(CourseEventPattern.COURSE_QUESTION_REPLIED, { async: true })
+  async handleQuestionReplied(payload: CourseQuestionRepliedEventPayload) {
+    try {
+      const replier = await this.usersRepo.findByIdSafe(payload.replierId, { select: 'fullName' });
+      const replierName = replier?.fullName || 'Một người dùng';
+
+      await this.notificationsService.createAndDispatch({
+        receiverId: payload.receiverId,
+        type: NotificationType.COURSE,
+        title: 'Có người phản hồi thảo luận của bạn 💬',
+        message: `${replierName} vừa trả lời câu hỏi của bạn: "${payload.replyPreview}..."`,
+        payload: {
+          courseId: payload.courseId,
+          lessonId: payload.lessonId,
+          discussionId: payload.rootDiscussionId,
+          url: `/student/courses/${payload.courseId}/study?lessonId=${payload.lessonId}&discussionId=${payload.rootDiscussionId}`,
+        },
+      });
+    } catch (error: any) {
+      this.logger.error(
+        `[Listener Error] COURSE_QUESTION_REPLIED: ${error.message}`,
         error.stack,
       );
     }

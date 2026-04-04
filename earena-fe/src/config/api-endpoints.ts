@@ -118,6 +118,7 @@ export const API_ENDPOINTS = {
     BULK_DELETE: '/questions/bulk-delete',
     SUGGEST_FOLDERS: '/questions/suggest-folders',
     AI_GENERATE: '/questions/ai-builder/generate',
+    AI_GENERATE_FROM_LECTURE: '/questions/ai-builder/generate-from-lecture',
   
     ORGANIZE_PREVIEW: '/questions/organize/preview',
     ORGANIZE_EXECUTE: '/questions/organize/execute',
@@ -267,5 +268,14 @@ export const API_ENDPOINTS = {
     POST_LOCK_COMMENTS: (id: string) => `/community/admin/posts/${id}/lock-comments` as const,
     USER_STATUS: (userId: string) => `/community/admin/users/${userId}/community-status` as const,
     AUDIT: '/community/admin/audit',
+  },
+
+  DISCUSSIONS: {
+    QUESTIONS: (lessonId: string) => `/courses/discussions/lessons/${lessonId}/questions` as const,
+    REPLIES: (parentId: string) => `/courses/discussions/questions/${parentId}/replies` as const,
+    POST_QUESTION: '/courses/discussions/questions',
+    POST_REPLY: '/courses/discussions/replies',
+
+    COURSE_QUESTIONS: (courseId: string) => `/courses/discussions/courses/${courseId}/questions` as const,
   },
 } as const;
