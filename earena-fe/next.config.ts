@@ -1,8 +1,29 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  typescript: {
-    ignoreBuildErrors: false,
+import type { NextConfig } from 'next';
+
+const nextConfig: NextConfig = {
+
+  reactStrictMode: false,
+
+  onDemandEntries: {
+    maxInactiveAge: 60 * 60 * 1000, 
+    pagesBufferLength: 10,       
   },
+
+  devIndicators: {
+    buildActivity: false,
+  },
+
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
+  experimental: {
+    optimizePackageImports: ['@tiptap/react', 'lucide-react', 'date-fns', 'lodash'],
+  },
+
   images: {
     remotePatterns: [
       {

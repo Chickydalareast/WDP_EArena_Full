@@ -1,13 +1,26 @@
 'use client';
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, MutationCache } from '@tanstack/react-query';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { ApiError } from '../lib/error-parser';
 
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
+        mutationCache: new MutationCache({
+          onError: (error) => {
+            const apiError = error as unknown as ApiError;
+            
+            if (apiError?.statusCode === 401) return;
+
+            if (apiError?.statusCode === 429) return;
+
+            const errorMessage = apiError?.message || 'Đã có lỗi không xác định xảy ra. Vui lòng thử lại sau.';
+            toast.error(errorMessage);
+          },
+        }),
         defaultOptions: {
           queries: {
             staleTime: 1000 * 60 * 5,
