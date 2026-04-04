@@ -70,6 +70,10 @@ export class MailProcessor extends WorkerHost {
   }
 
   async process(job: Job<MailJobPayload>): Promise<any> {
+    if (this.configService.get<string>('SKIP_MAIL_QUEUE') === 'true') {
+      this.logger.log(`[Queue] SKIP_MAIL_QUEUE=true — skipping job ${job.name}`);
+      return;
+    }
     switch (job.name) {
       case 'send_otp':
         return this.handleSendOtp(job as Job<SendOtpPayload>);

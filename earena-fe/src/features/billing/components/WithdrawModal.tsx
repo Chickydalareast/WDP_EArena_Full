@@ -1,12 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useForm, type Resolver } from 'react-hook-form';
 import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { useAuthStore } from '@/features/auth/stores/auth.store';
 import { useTransactionConfirmStore } from '../stores/transaction-confirm.store';
 import { withdrawSchema, WithdrawFormDTO } from '../types/billing.schema';
 import { useWithdrawMutation } from '../hooks/useTeacherWallet';
+import { useSyncWallet } from '../hooks/useBillingFlows';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/shared/components/ui/dialog';
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form';
 import { Input } from '@/shared/components/ui/input';
@@ -16,8 +17,17 @@ import { toast } from 'sonner';
 
 export function WithdrawModal() {
     const [open, setOpen] = useState(false);
-    const balance = useAuthStore((state) => state.user?.balance ?? 0);
+    const authBalance = useAuthStore((state) => state.user?.balance ?? 0);
+    const { data: walletData, refetch: refetchWallet } = useSyncWallet();
+    const balance =
+        typeof walletData?.balance === 'number' ? walletData.balance : authBalance;
     const openConfirm = useTransactionConfirmStore((state) => state.openConfirm);
+
+    useEffect(() => {
+        if (open) {
+            void refetchWallet();
+        }
+    }, [open, refetchWallet]);
 
     const form = useForm<WithdrawFormDTO>({
         resolver: zodResolver(withdrawSchema) as Resolver<WithdrawFormDTO>,
@@ -34,9 +44,16 @@ export function WithdrawModal() {
         form.reset();
     });
 
-    const onSubmit = (data: WithdrawFormDTO) => {
-        if (data.amount > balance) {
-            toast.error('Số dư không đủ', { description: `Bạn chỉ có thể rút tối đa ${balance.toLocaleString()}đ` });
+    const onSubmit = async (data: WithdrawFormDTO) => {
+        const { data: fresh } = await refetchWallet();
+        const effective =
+            typeof fresh?.balance === 'number' ? fresh.balance : balance;
+        useAuthStore.getState().updateBalance(effective);
+
+        if (data.amount > effective) {
+            toast.error('Số dư không đủ', {
+                description: `Bạn chỉ có thể rút tối đa ${effective.toLocaleString('vi-VN')}đ`,
+            });
             form.setError('amount', { type: 'manual', message: 'Vượt quá số dư khả dụng' });
             return;
         }
@@ -46,7 +63,7 @@ export function WithdrawModal() {
             description: `Rút tiền về tài khoản ngân hàng: ${data.bankName} - ${data.accountNumber}`,
             actionType: 'WITHDRAW',
             amount: data.amount,
-            currentBalance: balance,
+            currentBalance: effective,
             onConfirm: async () => {
                 await mutateAsync(data).catch(() => {});
             }
@@ -73,6 +90,10 @@ export function WithdrawModal() {
                     </DialogTitle>
                     <DialogDescription>
                         Vui lòng nhập thông tin ngân hàng thụ hưởng.
+                        <span className="mt-2 block text-foreground font-semibold">
+                            Số dư khả dụng:{' '}
+                            <span className="text-primary">{balance.toLocaleString('vi-VN')}đ</span>
+                        </span>
                     </DialogDescription>
                 </DialogHeader>
 

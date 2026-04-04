@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { useSyncWallet, useMyTransactions } from '../hooks/useBillingFlows';
 import { Button } from '@/shared/components/ui/button';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { Wallet, ArrowUpRight, ArrowDownRight, History } from 'lucide-react';
 import { TransactionType } from '../types/billing.schema';
+import { PayOsReturnHandler } from '../components/PayOsReturnHandler';
 
 const TRANSACTION_UI_MAP: Record<TransactionType, { icon: React.ElementType, sign: string, colorClass: string }> = {
   DEPOSIT: { icon: ArrowDownRight, sign: '+', colorClass: 'text-green-600' },
@@ -36,7 +37,10 @@ export function WalletScreen() {
 
   return (
     <div className="max-w-5xl mx-auto py-8 px-4 space-y-6 animate-in fade-in duration-500">
-      
+      <Suspense fallback={null}>
+        <PayOsReturnHandler />
+      </Suspense>
+
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card border border-border p-6 rounded-2xl shadow-sm">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-primary/10 rounded-xl text-primary">

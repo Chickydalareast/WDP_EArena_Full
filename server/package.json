@@ -33,6 +33,7 @@
     "@nestjs/mongoose": "^11.0.4",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
+    "@payos/node": "^2.0.5",
     "bcrypt": "^6.0.0",
     "blurhash": "^2.0.5",
     "bullmq": "^5.70.1",
