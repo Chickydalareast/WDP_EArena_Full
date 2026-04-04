@@ -1,0 +1,23 @@
+export declare const courseQueryKeys: {
+    all: readonly ["courses"];
+    publicLists: () => readonly ["courses", "public", "list"];
+    publicList: (filters: Record<string, unknown>) => readonly ["courses", "public", "list", Record<string, unknown>];
+    publicDetails: () => readonly ["courses", "public", "detail"];
+    publicDetail: (slug: string) => readonly ["courses", "public", "detail", string];
+    featuredCarousel: () => readonly ["courses", "public", "featured-carousel"];
+    studyTrees: () => readonly ["courses", "study-tree"];
+    studyTree: (courseId: string) => readonly ["courses", "study-tree", string];
+    reviews: () => readonly ["courses", "reviews"];
+    reviewLists: (courseId: string) => readonly ["courses", "reviews", string, "list"];
+    wallets: () => readonly ["wallets"];
+    walletBalance: () => readonly ["wallets", "me"];
+    teacherLists: () => readonly ["courses", "teacher", "list"];
+    teacherDetails: () => readonly ["courses", "teacher", "detail"];
+    teacherDetail: (courseId: string) => readonly ["courses", "teacher", "detail", string];
+    teacherCourses: () => readonly ["courses", "teacher", "me"];
+    teacherDashboardStats: (courseId: string) => readonly ["courses", "teacher", "detail", string, "stats"];
+    teacherCurriculumView: (courseId: string) => readonly ["courses", "teacher", "detail", string, "curriculum-view"];
+    lessonQuizDetails: () => readonly ["courses", "lesson-quiz", "detail"];
+    lessonQuizDetail: (courseId: string, lessonId: string) => readonly ["courses", "lesson-quiz", "detail", string, string];
+    quizMatrices: (courseId: string, params?: Record<string, unknown>) => readonly ["courses", "quiz-matrices", string, Record<string, unknown>];
+};

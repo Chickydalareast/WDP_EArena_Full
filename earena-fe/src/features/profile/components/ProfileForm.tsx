@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { ProfileSchema, ProfileFormValues } from '../types/profile.schema';
 import { useUpdateProfile } from '../hooks/useUpdateProfile';
 import { useAuthStore } from '@/features/auth/stores/auth.store';

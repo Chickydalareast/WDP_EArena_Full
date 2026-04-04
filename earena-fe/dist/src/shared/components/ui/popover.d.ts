@@ -1,0 +1,10 @@
+import * as React from "react";
+import { Popover as PopoverPrimitive } from "radix-ui";
+declare function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>): any;
+declare function PopoverTrigger({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Trigger>): any;
+declare function PopoverContent({ className, align, sideOffset, ...props }: React.ComponentProps<typeof PopoverPrimitive.Content>): any;
+declare function PopoverAnchor({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Anchor>): any;
+declare function PopoverHeader({ className, ...props }: React.ComponentProps<"div">): any;
+declare function PopoverTitle({ className, ...props }: React.ComponentProps<"h2">): any;
+declare function PopoverDescription({ className, ...props }: React.ComponentProps<"p">): any;
+export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor, PopoverHeader, PopoverTitle, PopoverDescription, };

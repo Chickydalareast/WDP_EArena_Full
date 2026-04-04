@@ -1,7 +1,7 @@
 'use client';
 
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { Sparkles, FileText, Loader2, X, UploadCloud } from 'lucide-react';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/shared/components/ui/dialog';

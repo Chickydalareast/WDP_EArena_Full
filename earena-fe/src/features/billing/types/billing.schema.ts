@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const depositSchema = z.object({
   amount: z.coerce
-    .number({ invalid_type_error: 'Vui lòng nhập số hợp lệ' })
+    .number({ message: 'Vui lòng nhập số hợp lệ' })
     .min(10000, 'Số tiền nạp tối thiểu là 10.000đ')
     .max(50000000, 'Giao dịch vượt quá hạn mức 50.000.000đ'),
 });
@@ -29,7 +29,7 @@ export interface WalletTransaction {
 // Bổ sung Schema Rút tiền chuẩn nghiệp vụ (Maker)
 export const withdrawSchema = z.object({
   amount: z.coerce
-    .number({ invalid_type_error: 'Vui lòng nhập số tiền hợp lệ' })
+    .number({ message: 'Vui lòng nhập số tiền hợp lệ' })
     .int('Số tiền rút phải là số nguyên')
     .min(100000, 'Số tiền rút tối thiểu là 100.000đ'),
   bankName: z.string().trim().min(2, 'Vui lòng nhập tên ngân hàng'),

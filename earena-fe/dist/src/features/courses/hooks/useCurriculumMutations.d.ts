@@ -1,0 +1,11 @@
+export declare const useCreateSection: (courseId: string) => any;
+export declare const useCreateLesson: (courseId: string, sectionId: string) => any;
+export declare const useUpdateSection: (courseId: string, sectionId: string) => any;
+export declare const useUpdateLesson: (courseId: string, lessonId: string) => any;
+export declare const useDeleteSection: (courseId: string) => any;
+export declare const useDeleteLesson: (courseId: string) => any;
+export declare const useGenerateAiCurriculum: (courseId: string) => any;
+export declare const usePublishCourse: (courseId: string) => any;
+export declare const useSubmitForReview: (courseId: string) => any;
+export declare const useCreateQuizLesson: (courseId: string, sectionId: string) => any;
+export declare const useUpdateQuizLesson: (courseId: string) => any;

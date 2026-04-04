@@ -1,0 +1,261 @@
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Types } from 'mongoose';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CoursesRepository } from '../../courses/courses.repository';
+import { CoursesService } from '../../courses/courses.service';
+import { MailService } from '../../mail/mail.service';
+import { CourseStatus } from '../../courses/schemas/course.schema';
+import {
+    CourseEventPattern,
+    CourseApprovedEventPayload,
+    CourseRejectedEventPayload
+} from '../../courses/constants/course-event.constant';
+import {
+    ApproveCoursePayload,
+    ForceTakedownCoursePayload,
+    GetAdminCoursesPayload,
+    GetPendingCoursesPayload,
+    RejectCoursePayload
+} from '../interfaces/admin-courses.interface';
+
+@Injectable()
+export class AdminCoursesService {
+    private readonly logger = new Logger(AdminCoursesService.name);
+
+    constructor(
+        private readonly coursesRepo: CoursesRepository,
+        private readonly coursesService: CoursesService,
+        private readonly mailService: MailService,
+        private readonly eventEmitter: EventEmitter2,
+    ) { }
+
+    async getPendingCourses(payload: GetPendingCoursesPayload) {
+        const { page, limit } = payload;
+        const skip = (page - 1) * limit;
+
+        const filter = { status: CourseStatus.PENDING_REVIEW };
+
+        // [CTO Standard]: Không query N+1, dùng lean(), gọi trực tiếp Model Instance từ Repo
+        const [items, totalItems] = await Promise.all([
+            this.coursesRepo.modelInstance.find(filter)
+                .select('title slug price teacherId submittedAt')
+                .populate('teacherId', 'fullName email avatar')
+                .sort({ submittedAt: 1 }) // FIFO: Gửi trước duyệt trước
+                .skip(skip)
+                .limit(limit)
+                .lean()
+                .exec(),
+            this.coursesRepo.modelInstance.countDocuments(filter)
+        ]);
+
+        const mappedItems = items.map(item => ({
+            id: item._id.toString(),
+            title: item.title,
+            slug: item.slug,
+            price: item.price,
+            teacher: item.teacherId ? {
+                id: (item.teacherId as any)._id.toString(),
+                fullName: (item.teacherId as any).fullName,
+                email: (item.teacherId as any).email,
+                avatar: (item.teacherId as any).avatar,
+            } : null,
+            submittedAt: item.submittedAt
+        }));
+
+        return {
+            items: mappedItems,
+            meta: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) || 1 }
+        };
+    }
+
+    async getCourseDetailForReview(courseId: string) {
+        if (!Types.ObjectId.isValid(courseId)) throw new BadRequestException('ID không hợp lệ.');
+
+        const curriculum = await this.coursesRepo.getFullCourseCurriculum(courseId, { maskMediaUrls: false });
+        if (!curriculum) throw new NotFoundException('Khóa học không tồn tại.');
+
+        return curriculum;
+    }
+
+    async approveCourse(payload: ApproveCoursePayload) {
+        const { courseId } = payload;
+
+        const course = await this.coursesRepo.modelInstance
+            .findById(courseId)
+            .select('status title slug teacherId')
+            .populate('teacherId', 'email fullName')
+            .lean()
+            .exec();
+
+        if (!course) throw new NotFoundException('Khóa học không tồn tại.');
+        if (course.status !== CourseStatus.PENDING_REVIEW) {
+            throw new BadRequestException(`Không thể duyệt. Khóa học đang ở trạng thái: ${course.status}`);
+        }
+
+        await this.coursesRepo.updateByIdSafe(courseId, {
+            $set: { status: CourseStatus.PUBLISHED }
+        });
+
+        await this.coursesService.clearCourseCache(course.slug);
+
+        const teacher = course.teacherId as any;
+        if (teacher && teacher.email) {
+            this.mailService.sendCourseApproval(teacher.email, teacher.fullName, course.title);
+        }
+
+        // [RẢI MÌN]: Bắn Event In-App Notification
+        this.eventEmitter.emit(CourseEventPattern.COURSE_APPROVED, {
+            courseId: courseId,
+            teacherId: teacher._id.toString(),
+            courseTitle: course.title,
+        } as CourseApprovedEventPayload);
+
+        return { message: 'Đã duyệt khóa học thành công. Khóa học đã được Public.' };
+    }
+
+    async rejectCourse(payload: RejectCoursePayload) {
+        const { courseId, reason } = payload;
+
+        const course = await this.coursesRepo.modelInstance
+            .findById(courseId)
+            .select('status title teacherId')
+            .populate('teacherId', 'email fullName')
+            .lean()
+            .exec();
+
+        if (!course) throw new NotFoundException('Khóa học không tồn tại.');
+        if (course.status !== CourseStatus.PENDING_REVIEW) {
+            throw new BadRequestException(`Không thể từ chối. Khóa học đang ở trạng thái: ${course.status}`);
+        }
+
+        await this.coursesRepo.updateByIdSafe(courseId, {
+            $set: {
+                status: CourseStatus.REJECTED,
+                rejectionReason: reason
+            }
+        });
+
+        const teacher = course.teacherId as any;
+        if (teacher && teacher.email) {
+            this.mailService.sendCourseRejection(teacher.email, teacher.fullName, course.title, reason);
+        }
+
+        // [RẢI MÌN]: Bắn Event In-App Notification
+        this.eventEmitter.emit(CourseEventPattern.COURSE_REJECTED, {
+            courseId: courseId,
+            teacherId: teacher._id.toString(),
+            courseTitle: course.title,
+            reason: reason,
+        } as CourseRejectedEventPayload);
+
+        return { message: 'Đã từ chối khóa học và lưu lại lý do.' };
+    }
+
+    async getAllCourses(payload: GetAdminCoursesPayload) {
+        const { page, limit, search, status, teacherId } = payload;
+
+        if (status === CourseStatus.DRAFT) {
+            return {
+                items: [],
+                meta: { page, limit, totalItems: 0, totalPages: 1 }
+            };
+        }
+
+        const skip = (page - 1) * limit;
+
+        const filter: any = {
+            status: { $ne: CourseStatus.DRAFT }
+        };
+
+        if (status) filter.status = status;
+
+        if (teacherId && Types.ObjectId.isValid(teacherId)) {
+            filter.teacherId = new Types.ObjectId(teacherId);
+        }
+
+        if (search) {
+            const escapedKeyword = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            filter.$or = [
+                { title: { $regex: escapedKeyword, $options: 'i' } },
+                { slug: { $regex: escapedKeyword, $options: 'i' } }
+            ];
+        }
+
+        const [items, totalItems] = await Promise.all([
+            this.coursesRepo.modelInstance.find(filter)
+                .select('title slug price status teacherId createdAt submittedAt')
+                .populate('teacherId', 'fullName email avatar')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean()
+                .exec(),
+            this.coursesRepo.modelInstance.countDocuments(filter)
+        ]);
+
+        const mappedItems = items.map((item: any) => ({
+            id: item._id.toString(),
+            title: item.title,
+            slug: item.slug,
+            price: item.price,
+            status: item.status,
+            teacher: item.teacherId ? {
+                id: item.teacherId._id.toString(),
+                fullName: item.teacherId.fullName,
+                email: item.teacherId.email,
+                avatar: item.teacherId.avatar,
+            } : null,
+            createdAt: item.createdAt,
+            submittedAt: item.submittedAt || null
+        }));
+
+        return {
+            items: mappedItems,
+            meta: { page, limit, totalItems, totalPages: Math.ceil(totalItems / limit) || 1 }
+        };
+    }
+
+    async forceTakedownCourse(payload: ForceTakedownCoursePayload) {
+        const { courseId, reason, adminId } = payload;
+
+        const course = await this.coursesRepo.modelInstance
+            .findById(courseId)
+            .select('status title slug teacherId')
+            .populate('teacherId', 'email fullName')
+            .lean()
+            .exec();
+
+        if (!course) throw new NotFoundException('Khóa học không tồn tại.');
+
+        if (course.status !== CourseStatus.PUBLISHED) {
+            throw new BadRequestException(`Không thể thực thi. Khóa học này đang ở trạng thái: ${course.status}`);
+        }
+
+        const severeReason = `[GỠ KHẨN CẤP BỞI BQT]: ${reason}`;
+
+        await this.coursesRepo.updateByIdSafe(courseId, {
+            $set: {
+                status: CourseStatus.REJECTED,
+                rejectionReason: severeReason
+            }
+        });
+
+        await this.coursesService.clearCourseCache(course.slug);
+
+        this.logger.warn(`[AUDIT - TAKEDOWN] Admin_ID: ${adminId} đã gỡ khóa học Course_ID: ${courseId} ("${course.title}") với lý do: ${reason}`);
+
+        const teacher = course.teacherId as any;
+        if (teacher && teacher.email) {
+            this.mailService.sendCourseRejection(teacher.email, teacher.fullName, course.title, severeReason);
+        }
+
+        this.eventEmitter.emit(CourseEventPattern.COURSE_REJECTED, {
+            courseId: courseId,
+            teacherId: teacher._id.toString(),
+            courseTitle: course.title,
+            reason: severeReason,
+        } as CourseRejectedEventPayload);
+
+        return { message: 'Đã gỡ khóa học khỏi hệ thống thành công. Cache đã được xóa.' };
+    }
+}

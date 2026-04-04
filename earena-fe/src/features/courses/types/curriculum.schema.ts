@@ -54,17 +54,6 @@ export const updateSectionSchema = z.object({
 });
 export type UpdateSectionDTO = z.infer<typeof updateSectionSchema>;
 
-export const updateLessonSchema = z.object({
-  title: z.string().min(1, 'Tên bài học không được để trống').optional(),
-  isFreePreview: z.boolean().optional(),
-  content: z.string().optional(),
-  primaryVideoId: z.string().optional(),
-  examId: z.string().optional(),
-  examRules: ExamRuleSchema.optional(),
-  attachments: z.array(z.string()).optional(),
-});
-export type UpdateLessonDTO = z.infer<typeof updateLessonSchema>;
-
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
 const ACCEPTED_FILE_TYPES = [
   'application/pdf',
@@ -117,6 +106,18 @@ export const DynamicConfigSchema = z.object({
   path: ['adHocSections']
 });
 export type DynamicConfigDTO = z.infer<typeof DynamicConfigSchema>;
+
+export const updateLessonSchema = z.object({
+  title: z.string().min(1, 'Tên bài học không được để trống').optional(),
+  isFreePreview: z.boolean().optional(),
+  content: z.string().optional(),
+  primaryVideoId: z.string().optional(),
+  examId: z.string().optional(),
+  examRules: ExamRuleSchema.optional(),
+  attachments: z.array(z.string()).optional(),
+  dynamicConfig: DynamicConfigSchema.optional(),
+});
+export type UpdateLessonDTO = z.infer<typeof updateLessonSchema>;
 
 export const CreateQuizLessonSchema = z.object({
   courseId: z.string().min(1, 'Thiếu ID Khóa học'),

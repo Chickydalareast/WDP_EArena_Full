@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useForm, Controller, FormProvider } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/shared/components/ui/dialog';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';

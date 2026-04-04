@@ -34,6 +34,22 @@ export const courseService = {
             API_ENDPOINTS.COURSES.PUBLIC_DETAIL(slug)
         );
     },
+
+    getFeaturedCarousel: async (): Promise<{
+        items: CourseBasic[];
+        promoPricePerDay: number;
+    }> => {
+        return axiosClient.get(API_ENDPOINTS.COURSES.PUBLIC_FEATURED_CAROUSEL);
+    },
+
+    promoteCourse: async (
+        courseId: string,
+        durationDays: 7 | 14 | 30,
+    ): Promise<{ promotionId: string; expiresAt: string; amountPaid: number }> => {
+        return axiosClient.post(API_ENDPOINTS.COURSES.PROMOTE(courseId), {
+            durationDays,
+        });
+    },
     getStudyTree: async (courseId: string): Promise<StudyTreeResponse> => {
         return axiosClient.get<unknown, StudyTreeResponse>(
             API_ENDPOINTS.COURSES.STUDY_TREE(courseId)

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { Loader2, UploadCloud, CheckCircle2, Video, FileText, X, Eye, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
 

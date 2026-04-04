@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const NOTIFICATION_TYPES = ['SYSTEM', 'COURSE', 'EXAM', 'FINANCE'] as const;
+export const NOTIFICATION_TYPES = ['SYSTEM', 'COURSE', 'EXAM', 'FINANCE', 'COMMUNITY'] as const;
 
 export const NotificationTypeEnum = z.enum(NOTIFICATION_TYPES);
 
@@ -14,7 +14,10 @@ export const NotificationPayloadSchema = z.object({
     submissionId: z.string().optional(),
     transactionId: z.string().optional(),
     requestId: z.string().optional(),
-    metadata: z.record(z.unknown()).optional(),
+    postId: z.string().optional(),
+    commentId: z.string().optional(),
+    action: z.string().optional(),
+    metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const NotificationSchema = z.object({

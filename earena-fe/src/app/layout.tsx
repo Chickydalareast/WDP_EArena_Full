@@ -6,6 +6,7 @@ import AuthProvider from "@/shared/providers/AuthProvider";
 import { Toaster } from "@/shared/components/ui/sonner";
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { TransactionConfirmModal } from '@/features/billing/components/TransactionConfirmModal';
+import { CommunityFloatingChatShell } from '@/features/community/components/CommunityFloatingChatShell';
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -33,7 +34,7 @@ export default function RootLayout({
         <GoogleOAuthProvider clientId={googleClientId}>
           <QueryProvider>
             <AuthProvider>
-              {children}
+              <CommunityFloatingChatShell>{children}</CommunityFloatingChatShell>
             </AuthProvider>
             <Toaster 
               position="top-right" 

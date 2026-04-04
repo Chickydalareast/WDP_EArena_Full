@@ -186,7 +186,6 @@ export function AdminTeacherVerificationScreen() {
         <PaginationBar
           page={data.meta.page}
           totalPages={data.meta.totalPages}
-          totalItems={data.meta.totalItems}
           onPageChange={setPage}
         />
       )}

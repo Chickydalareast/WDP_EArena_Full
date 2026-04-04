@@ -2,7 +2,7 @@
 
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { useChangePassword } from '@/features/auth/hooks/useChangePassword';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';

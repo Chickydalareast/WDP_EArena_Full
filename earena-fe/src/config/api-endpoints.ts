@@ -20,6 +20,7 @@ export const API_ENDPOINTS = {
   },
 
   MEDIA: {
+    /** @deprecated BE trả 400; ảnh dùng SIGNATURE + upload trực tiếp Cloudinary. */
     UPLOAD_SINGLE: '/media/upload/single',
     SIGNATURE: '/media/signature',
     VIDEO_TICKET: '/media/upload/video/ticket',
@@ -30,6 +31,7 @@ export const API_ENDPOINTS = {
 
   COURSES: {
     PUBLIC: '/courses/public',
+    PUBLIC_FEATURED_CAROUSEL: '/courses/public/featured-carousel',
     PUBLIC_DETAIL: (slug: string) => `/courses/public/${slug}` as const,
 
     STUDY_TREE: (courseId: string) => `/courses/${courseId}/study-tree` as const,
@@ -66,6 +68,17 @@ export const API_ENDPOINTS = {
     REVIEWS: (courseId: string) => `/courses/${courseId}/reviews` as const,
     REVIEW_REPLY: (courseId: string, reviewId: string) => `/courses/${courseId}/reviews/${reviewId}/reply` as const,
 
+    PROMOTE: (courseId: string) => `/courses/${courseId}/promote` as const,
+  },
+
+  MESSAGING: {
+    THREADS: '/messaging/threads',
+    UNREAD_COUNT: '/messaging/threads/unread-count',
+    SHAREABLE_COURSES: '/messaging/shareable-courses',
+    OPEN_THREAD: '/messaging/threads/open',
+    MESSAGES: (threadId: string) => `/messaging/threads/${threadId}/messages` as const,
+    SEND: (threadId: string) => `/messaging/threads/${threadId}/messages` as const,
+    MARK_READ: (threadId: string) => `/messaging/threads/${threadId}/read` as const,
   },
 
   WALLETS: {
@@ -206,5 +219,40 @@ export const API_ENDPOINTS = {
 
   LEARNING: {
     HEARTBEAT: '/learning/heartbeat',
+  },
+
+  COMMUNITY: {
+    UPLOAD_IMAGE: '/community/upload/image',
+    FEED: '/community/feed',
+    SIDEBAR: '/community/sidebar',
+    RECOMMENDED: '/community/recommended',
+    POSTS_BY_COURSE: (courseId: string) => `/community/posts/course/${courseId}` as const,
+    POST: (postId: string) => `/community/posts/${postId}` as const,
+    POST_COMMENTS: (postId: string) => `/community/posts/${postId}/comments` as const,
+    POSTS: '/community/posts',
+    POST_SAVE: (postId: string) => `/community/posts/${postId}/save` as const,
+    POST_REACT: (postId: string) => `/community/posts/${postId}/react` as const,
+    COMMENT_REACT: (commentId: string) => `/community/comments/${commentId}/react` as const,
+    POST_BEST_ANSWER: (postId: string) => `/community/posts/${postId}/best-answer` as const,
+    POST_PIN: (postId: string) => `/community/posts/${postId}/pin-comment` as const,
+    REPORTS: '/community/reports',
+    FOLLOWS: '/community/follows',
+    FOLLOW: (targetType: string, targetId: string) =>
+      `/community/follows/${targetType}/${targetId}` as const,
+    ME_SAVED: '/community/me/saved',
+    ME_FOLLOWING: '/community/me/following',
+    BLOCK: (userId: string) => `/community/blocks/${userId}` as const,
+    PROFILE: (userId: string) => `/community/profile/${userId}` as const,
+  },
+
+  COMMUNITY_ADMIN: {
+    REPORTS: '/community/admin/reports',
+    REPORT_RESOLVE: (id: string) => `/community/admin/reports/${id}` as const,
+    POST_HIDE: (id: string) => `/community/admin/posts/${id}/hide` as const,
+    POST_SHOW: (id: string) => `/community/admin/posts/${id}/show` as const,
+    POST_FEATURE: (id: string) => `/community/admin/posts/${id}/feature` as const,
+    POST_LOCK_COMMENTS: (id: string) => `/community/admin/posts/${id}/lock-comments` as const,
+    USER_STATUS: (userId: string) => `/community/admin/users/${userId}/community-status` as const,
+    AUDIT: '/community/admin/audit',
   },
 } as const;

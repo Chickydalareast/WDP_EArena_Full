@@ -4,6 +4,10 @@ export const ROUTES = {
     COURSES: '/courses',
     COURSE_DETAIL: (slug: string) => `/courses/${slug}` as const,
     PRICING: '/pricing',
+    COMMUNITY: '/community',
+    COMMUNITY_SUBJECT: (subjectId: string) => `/community/subject/${subjectId}` as const,
+    COMMUNITY_POST: (postId: string) => `/community/post/${postId}` as const,
+    COMMUNITY_PROFILE: (userId: string) => `/community/profile/${userId}` as const,
   },
   
   AUTH: {
@@ -27,6 +31,7 @@ export const ROUTES = {
     EXAM_RESULT: (submissionId: string) => `/student/exams/${submissionId}/result` as const,
 
     HISTORY: '/student/history',
+    MESSAGES: '/student/messages',
   },
   
   TEACHER: {
@@ -46,6 +51,7 @@ export const ROUTES = {
     QUESTIONS: '/teacher/questions',
     WALLET: '/teacher/wallet',
     SUBSCRIPTION: '/teacher/subscription',
+    MESSAGES: '/teacher/messages',
   },
   
   ADMIN: {

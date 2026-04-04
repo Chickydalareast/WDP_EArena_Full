@@ -2,7 +2,7 @@
 
 import React, { useCallback } from 'react';
 import { useForm, useFieldArray, FormProvider, useFormContext, useWatch } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import * as z from 'zod';
 
 import { QuestionItemSchema, QuestionItemDTO, AnswerOptionDTO } from '../types/exam.schema';
@@ -17,6 +17,7 @@ import { CheckCircle2, Circle, Loader2, Plus, Trash2, Layers, FileText, Send, Sa
 import { cn } from '@/shared/lib/utils';
 import { QuestionMediaUploader } from './QuestionMediaUploader';
 import { TopicSelector } from './TopicSelector'; // Đã thêm import TopicSelector
+import type { FlatTopic } from '../hooks/useTopics';
 
 // ==========================================
 // 1. LOCAL SCHEMA & HELPER FUNCTIONS
@@ -262,7 +263,7 @@ const QuestionBlock = React.memo(({ qIndex, qType, isBusy, mode, topics, isTopic
                     <TopicSelector 
                         value={field.value} 
                         onChange={field.onChange} 
-                        topics={topics} 
+                        topics={topics as FlatTopic[]}
                         isLoading={isTopicsLoading}
                         disabled={isBusy}
                     />

@@ -1,0 +1,9 @@
+export declare const useCloneQuestion: () => any;
+export declare const useBulkCloneQuestions: () => any;
+export declare const useBulkDeleteQuestions: () => any;
+export declare const useCreateBankQuestions: () => any;
+export declare const useGenerateAiQuestions: () => any;
+export declare const usePreviewOrganize: () => any;
+export declare const useExecuteOrganize: () => any;
+export declare const useBulkAutoTag: () => any;
+export declare const useBulkPublishQuestions: () => any;
