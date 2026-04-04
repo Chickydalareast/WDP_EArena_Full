@@ -1,3 +1,4 @@
+import { RuleQuestionType } from 'src/modules/exams/interfaces/exam-matrix.interface';
 import { DifficultyLevel } from '../schemas/question.schema';
 import { QuestionType } from '../schemas/question.schema';
 
@@ -121,6 +122,7 @@ export interface GetActiveFiltersPayload {
   difficulties?: DifficultyLevel[];
   tags?: string[];
   isDraft?: boolean;
+  questionType?: RuleQuestionType;
 }
 
 export interface PrunedTreeNode {

@@ -37,6 +37,7 @@ import { RequireTeacherVerified } from '../../../common/decorators/teacher-verif
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { CourseQuizBuilderService } from '../services/course-quiz-builder.service';
+import { RuleQuestionType } from 'src/modules/exams/interfaces/exam-matrix.interface';
 
 @Controller('courses/builder/quiz')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -62,7 +63,19 @@ export class CourseQuizBuilderController {
         matrixId: new Types.ObjectId(dtoConfig.matrixId),
       }),
       ...(dtoConfig.adHocSections && {
-        adHocSections: dtoConfig.adHocSections,
+        adHocSections: dtoConfig.adHocSections.map((sec: any) => ({
+          name: sec.name,
+          orderIndex: sec.orderIndex ?? 0,
+          rules: sec.rules.map((rule: any) => ({
+            questionType: rule.questionType,
+            subQuestionLimit: rule.questionType === RuleQuestionType.PASSAGE ? rule.subQuestionLimit : undefined,
+            folderIds: rule.folderIds,
+            topicIds: rule.topicIds,
+            difficulties: rule.difficulties,
+            tags: rule.tags,
+            limit: rule.limit,
+          })),
+        })),
       }),
     };
   }
@@ -181,6 +194,8 @@ export class CourseQuizBuilderController {
   ) {
     const params: RulePreviewParams = {
       teacherId,
+      questionType: dto.questionType,
+      subQuestionLimit: dto.questionType === RuleQuestionType.PASSAGE ? dto.subQuestionLimit : undefined,
       folderIds: dto.folderIds,
       topicIds: dto.topicIds,
       difficulties: dto.difficulties,
@@ -188,8 +203,7 @@ export class CourseQuizBuilderController {
       limit: dto.limit,
     };
 
-    const result =
-      await this.courseQuizBuilderService.getAvailableCountForRule(params);
+    const result = await this.courseQuizBuilderService.getAvailableCountForRule(params);
     return {
       message: 'Kiểm tra số lượng câu hỏi khả dụng thành công.',
       data: result,
@@ -209,6 +223,8 @@ export class CourseQuizBuilderController {
         name: sec.name,
         orderIndex: sec.orderIndex ?? 0,
         rules: sec.rules.map((rule) => ({
+          questionType: rule.questionType,
+          subQuestionLimit: rule.questionType === RuleQuestionType.PASSAGE ? rule.subQuestionLimit : undefined,
           folderIds: rule.folderIds,
           topicIds: rule.topicIds,
           difficulties: rule.difficulties,
@@ -255,61 +271,60 @@ export class CourseQuizBuilderController {
   }
 
   @Get(':lessonId/stats')
-    @Roles(UserRole.TEACHER, UserRole.ADMIN)
-    async getQuizAnalytics(
-        @CurrentUser('userId') teacherId: string,
-        @Query('courseId') courseId: string,
-        @Param('lessonId') lessonId: string,
-    ) {
-        if (!courseId) throw new BadRequestException('courseId là bắt buộc.');
-        const result = await this.courseQuizBuilderService.getQuizAnalyticsData(teacherId, courseId, lessonId);
-        return {
-            message: 'Lấy thống kê phân tích bài thi thành công.',
-            data: result,
-        };
-    }
+  @Roles(UserRole.TEACHER, UserRole.ADMIN)
+  async getQuizAnalytics(
+      @CurrentUser('userId') teacherId: string,
+      @Query('courseId') courseId: string,
+      @Param('lessonId') lessonId: string,
+  ) {
+      if (!courseId) throw new BadRequestException('courseId là bắt buộc.');
+      const result = await this.courseQuizBuilderService.getQuizAnalyticsData(teacherId, courseId, lessonId);
+      return {
+          message: 'Lấy thống kê phân tích bài thi thành công.',
+          data: result,
+      };
+  }
 
-    @Get(':lessonId/attempts')
-    @Roles(UserRole.TEACHER, UserRole.ADMIN)
-    async getTeacherAttemptHistory(
-        @CurrentUser('userId') teacherId: string,
-        @Query('courseId') courseId: string,
-        @Param('lessonId') lessonId: string,
-        @Query('page') page?: number,
-        @Query('limit') limit?: number,
-        @Query('search') search?: string,
-    ) {
-        if (!courseId) throw new BadRequestException('courseId là bắt buộc.');
-        const result = await this.courseQuizBuilderService.getTeacherAttemptHistory(
-            teacherId, courseId, lessonId, page || 1, limit || 10, search
-        );
-        return {
-            message: 'Lấy lịch sử làm bài của học viên thành công.',
-            data: result.data,
-            meta: result.meta,
-        };
-    }
+  @Get(':lessonId/attempts')
+  @Roles(UserRole.TEACHER, UserRole.ADMIN)
+  async getTeacherAttemptHistory(
+      @CurrentUser('userId') teacherId: string,
+      @Query('courseId') courseId: string,
+      @Param('lessonId') lessonId: string,
+      @Query('page') page?: number,
+      @Query('limit') limit?: number,
+      @Query('search') search?: string,
+  ) {
+      if (!courseId) throw new BadRequestException('courseId là bắt buộc.');
+      const result = await this.courseQuizBuilderService.getTeacherAttemptHistory(
+          teacherId, courseId, lessonId, page || 1, limit || 10, search
+      );
+      return {
+          message: 'Lấy lịch sử làm bài của học viên thành công.',
+          data: result.data,
+          meta: result.meta,
+      };
+  }
 
+  @Post(':lessonId/static-questions')
+  @Roles(UserRole.TEACHER, UserRole.ADMIN)
+  async assignStaticQuestions(
+      @CurrentUser('userId') teacherId: string,
+      @Query('courseId') courseId: string,
+      @Param('lessonId') lessonId: string,
+      @Body('questionIds') questionIds: string[],
+  ) {
+      if (!courseId) throw new BadRequestException('courseId là bắt buộc.');
+      if (!Array.isArray(questionIds) || questionIds.length === 0) {
+          throw new BadRequestException('Danh sách questionIds không được để trống.');
+      }
 
-    @Post(':lessonId/static-questions')
-    @Roles(UserRole.TEACHER, UserRole.ADMIN)
-    async assignStaticQuestions(
-        @CurrentUser('userId') teacherId: string,
-        @Query('courseId') courseId: string,
-        @Param('lessonId') lessonId: string,
-        @Body('questionIds') questionIds: string[],
-    ) {
-        if (!courseId) throw new BadRequestException('courseId là bắt buộc.');
-        if (!Array.isArray(questionIds) || questionIds.length === 0) {
-            throw new BadRequestException('Danh sách questionIds không được để trống.');
-        }
-
-        const result = await this.courseQuizBuilderService.assignStaticQuestions(
-            teacherId, courseId, lessonId, questionIds
-        );
-        return {
-            message: 'Gán danh sách câu hỏi cố định vào đề thi thành công.',
-            data: result,
-        };
-    }
+      const result = await this.courseQuizBuilderService.assignStaticQuestions(
+          teacherId, courseId, lessonId, questionIds
+      );
+      return {
+          message: 'Gán danh sách câu hỏi cố định vào đề thi thành công.',
+          data: result,
+      };
+  }
 }

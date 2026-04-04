@@ -17,7 +17,6 @@ import { ExamGeneratorService } from './exam-generator.service';
 import {
   InitManualExamDto,
   UpdatePaperQuestionsDto,
-  GenerateMatrixDto,
   GetExamsDto,
   UpdateExamDto,
   GetLeaderboardDto,
@@ -27,6 +26,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { UserRole } from '../../common/enums/user-role.enum';
 import { RequireTeacherVerified } from '../../common/decorators/teacher-verified.decorator';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { GenerateDynamicExamDto } from './dto/generate-exam.dto';
@@ -41,6 +41,7 @@ import { UpdatePaperPointsDto } from './dto/update-paper-points.dto';
 import { UpdatePaperPointsPayload } from './interfaces/exams.interface';
 import { MatrixRuleDto } from './dto/exam-matrix.dto';
 import { PreviewDynamicExamDto } from './dto/preview-dynamic-exam.dto';
+import { RuleQuestionType } from './interfaces/exam-matrix.interface';
 
 @Controller('exams')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -50,6 +51,26 @@ export class ExamsController {
     private readonly examsService: ExamsService,
     private readonly examGeneratorService: ExamGeneratorService,
   ) {}
+
+  private mapAdHocSections(sectionsDto?: any[]) {
+    if (!sectionsDto) return undefined;
+    return sectionsDto.map((sec) => ({
+      name: sec.name,
+      orderIndex: sec.orderIndex,
+      rules: sec.rules.map((r: any) => ({
+        questionType: r.questionType ?? RuleQuestionType.MIXED,
+        subQuestionLimit:
+          r.questionType === RuleQuestionType.PASSAGE
+            ? r.subQuestionLimit
+            : undefined,
+        folderIds: r.folderIds,
+        topicIds: r.topicIds,
+        difficulties: r.difficulties,
+        tags: r.tags,
+        limit: r.limit,
+      })),
+    }));
+  }
 
   @Post('manual/init')
   @Roles(UserRole.TEACHER)
@@ -75,7 +96,6 @@ export class ExamsController {
     @Body() dto: UpdatePaperQuestionsDto,
     @CurrentUser('userId') userId: string,
   ) {
-    // [MAX PING]: Chặn DTO, Đóng gói Payload
     const payload = {
       action: dto.action,
       questionId: dto.questionId,
@@ -96,8 +116,7 @@ export class ExamsController {
       title: dto.title,
       totalScore: dto.totalScore,
       matrixId: dto.matrixId,
-      adHocSections:
-        dto.adHocSections as GenerateDynamicExamPayload['adHocSections'],
+      adHocSections: this.mapAdHocSections(dto.adHocSections),
     };
 
     return this.examGeneratorService.generateDynamicExam(payload);
@@ -114,17 +133,7 @@ export class ExamsController {
     const payload: PreviewDynamicExamPayload = {
       teacherId: userId,
       matrixId: dto.matrixId,
-      adHocSections: dto.adHocSections?.map((sec) => ({
-        name: sec.name,
-        orderIndex: sec.orderIndex,
-        rules: sec.rules.map((r) => ({
-          folderIds: r.folderIds,
-          topicIds: r.topicIds,
-          difficulties: r.difficulties,
-          tags: r.tags,
-          limit: r.limit,
-        })),
-      })),
+      adHocSections: this.mapAdHocSections(dto.adHocSections),
     };
 
     return this.examGeneratorService.previewDynamicExam(payload);
@@ -224,8 +233,7 @@ export class ExamsController {
       teacherId: userId,
       paperId: paperId,
       matrixId: dto.matrixId,
-      adHocSections:
-        dto.adHocSections as FillExistingPaperPayload['adHocSections'],
+      adHocSections: this.mapAdHocSections(dto.adHocSections),
     };
 
     return this.examGeneratorService.fillExistingPaperFromMatrix(payload);
@@ -258,6 +266,11 @@ export class ExamsController {
       teacherId: userId,
       paperId: paperId,
       rule: {
+        questionType: dto.questionType ?? RuleQuestionType.MIXED,
+        subQuestionLimit:
+          dto.questionType === RuleQuestionType.PASSAGE
+            ? dto.subQuestionLimit
+            : undefined,
         folderIds: dto.folderIds,
         topicIds: dto.topicIds,
         difficulties: dto.difficulties,

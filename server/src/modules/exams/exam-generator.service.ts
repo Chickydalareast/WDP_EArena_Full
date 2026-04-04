@@ -7,7 +7,10 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { QuestionsRepository } from '../questions/questions.repository';
+import {
+  QuestionsRepository,
+  RepositoryRuleFilter,
+} from '../questions/questions.repository';
 import { ExamsRepository } from './exams.repository';
 import { ExamPapersRepository } from './exam-papers.repository';
 import { ExamMatricesService } from './exam-matrices.service';
@@ -19,12 +22,15 @@ import {
   GenerateDynamicExamPayload,
   PreviewRulePayload,
   PreviewDynamicExamPayload,
+  GenerateRawPaperPayload,
 } from './interfaces/exam-generator.interface';
 import { ExamMode, ExamType } from './schemas/exam.schema';
 import {
   DifficultyLevel,
   QuestionType,
 } from '../questions/schemas/question.schema';
+import { CandidatePool } from './interfaces/exam-generator.interface';
+import { RuleQuestionType, MatrixSectionPayload } from './interfaces/exam-matrix.interface';
 
 @Injectable()
 export class ExamGeneratorService {
@@ -38,11 +44,33 @@ export class ExamGeneratorService {
     private readonly foldersRepo: QuestionFoldersRepository,
     private readonly topicsRepo: KnowledgeTopicsRepository,
     private readonly redisService: RedisService,
-  ) {}
+  ) { }
 
-  // [PERF & UX FIX]: Cache hierarchy expansion trong Redis.
-  // Giảm TTL từ 3600s (1 giờ) xuống 60s (1 phút) để đảm bảo giáo viên 
-  // có trải nghiệm realtime khi vừa thêm câu hỏi/thư mục mới.
+  async generateRawPaperContent(payload: GenerateRawPaperPayload) {
+    const { sectionsToProcess } = await this.resolveSectionsToProcess(
+      payload.teacherId,
+      payload.matrixId,
+      payload.adHocSections,
+    );
+
+    const teacherObjId = new Types.ObjectId(payload.teacherId);
+    const pickedQuestionIds = new Set<string>();
+
+    const { finalPaperQuestions, finalAnswerKeys } = await this.buildQuestionsFromSections(
+      teacherObjId,
+      sectionsToProcess,
+      pickedQuestionIds,
+      1,
+    );
+
+    this.applyScoring(payload.totalScore, finalPaperQuestions, finalAnswerKeys);
+
+    return {
+      questions: finalPaperQuestions,
+      answerKeys: finalAnswerKeys,
+    };
+  }
+
   private async expandHierarchyIds(
     repo: any,
     collectionPrefix: 'folder' | 'topic',
@@ -52,7 +80,7 @@ export class ExamGeneratorService {
 
     const sortedIds = [...inputIds].sort();
     const cacheKey = `hierarchy:${collectionPrefix}:${sortedIds.join(',')}`;
-    const HIERARCHY_CACHE_TTL_SECONDS = 60; // 60 giây (Soft Real-time)
+    const HIERARCHY_CACHE_TTL_SECONDS = 60;
 
     const cached = await this.redisService.get(cacheKey);
     if (cached) {
@@ -60,8 +88,7 @@ export class ExamGeneratorService {
     }
 
     const objIds = sortedIds.map((id) => new Types.ObjectId(id));
-    
-    // [FIX]: Sử dụng modelInstance thay vì model protected
+
     const childNodes = await repo.modelInstance
       .find({ ancestors: { $in: objIds } })
       .select('_id')
@@ -134,111 +161,137 @@ export class ExamGeneratorService {
     });
   }
 
+
   private async buildQuestionsFromSections(
-    teacherObjId: Types.ObjectId,
-    sectionsToProcess: any[],
-    initialExcludeIds: Set<string>,
+    teacherId: Types.ObjectId,
+    sections: MatrixSectionPayload[],
+    excludeQuestionIds: Set<string>,
     startOrderIndex: number,
-  ) {
-    const pickedQuestionIds = new Set<string>(initialExcludeIds);
+  ): Promise<{ finalPaperQuestions: any[]; finalAnswerKeys: any[] }> {
     const finalPaperQuestions: any[] = [];
     const finalAnswerKeys: any[] = [];
-    let globalOrderIndex = startOrderIndex;
+    let orderIndex = startOrderIndex;
+    const excludeObjIds = Array.from(excludeQuestionIds).map((id) => new Types.ObjectId(id));
 
-    for (const section of sectionsToProcess) {
-      const excludeObjIdsSnapshot = Array.from(pickedQuestionIds).map(
-        (id) => new Types.ObjectId(id),
-      );
+    const poolPromises: Promise<{ ruleKey: string; pool: CandidatePool }>[] = [];
+    for (let sIdx = 0; sIdx < sections.length; sIdx++) {
+      const section = sections[sIdx];
+      for (let rIdx = 0; rIdx < section.rules.length; rIdx++) {
+        const rule = section.rules[rIdx];
+        poolPromises.push(
+          (async () => {
+            const [expandedFolderIds, expandedTopicIds] = await Promise.all([
+              this.expandHierarchyIds(this.foldersRepo, 'folder', rule.folderIds),
+              this.expandHierarchyIds(this.topicsRepo, 'topic', rule.topicIds),
+            ]);
 
-      const ruleCandidates = await Promise.all(
-        section.rules.map(async (rule: any) => {
-          const [expandedFolderIds, expandedTopicIds] = await Promise.all([
-            this.expandHierarchyIds(this.foldersRepo, 'folder', rule.folderIds),
-            this.expandHierarchyIds(this.topicsRepo, 'topic', rule.topicIds),
-          ]);
+            const mappedRule: RepositoryRuleFilter = {
+              questionType: rule.questionType ?? RuleQuestionType.MIXED,
+              subQuestionLimit: rule.subQuestionLimit,
+              folderIds: expandedFolderIds.map((id) => new Types.ObjectId(id)),
+              topicIds: expandedTopicIds.map((id) => new Types.ObjectId(id)),
+              difficulties: rule.difficulties || [],
+              tags: rule.tags || [],
+              limit: rule.limit,
+            };
+            const pool = await this.questionsRepo.getCandidatePoolForRule(teacherId, mappedRule, excludeObjIds);
+            return { ruleKey: `${sIdx}_${rIdx}`, pool };
+          })(),
+        );
+      }
+    }
 
-          const mappedRule = {
-            folderIds: expandedFolderIds.map((id) => new Types.ObjectId(id)),
-            topicIds: expandedTopicIds.map((id) => new Types.ObjectId(id)),
-            difficulties: rule.difficulties || [],
-            tags: rule.tags || [],
-            limit: rule.limit,
-          };
+    const resolvedPools = await Promise.all(poolPromises);
+    const poolsMap = new Map<string, CandidatePool>();
+    resolvedPools.forEach(p => poolsMap.set(p.ruleKey, p.pool));
 
-          const candidates = await this.questionsRepo.getCandidatePoolForRule(
-            teacherObjId,
-            mappedRule,
-            excludeObjIdsSnapshot,
-            3,
-          );
+    for (let sIdx = 0; sIdx < sections.length; sIdx++) {
+      const section = sections[sIdx];
+      for (let rIdx = 0; rIdx < section.rules.length; rIdx++) {
+        const rule = section.rules[rIdx];
+        const pool = poolsMap.get(`${sIdx}_${rIdx}`);
+        if (!pool) continue;
 
-          return { rule, candidates };
-        }),
-      );
-
-      for (const { rule, candidates } of ruleCandidates) {
-        let currentSlotFilled = 0;
+        let itemsPickedInRule = 0;
         const targetLimit = rule.limit;
 
-        // 1. FILL PASSAGE (Soft Limit Strategy)
-        for (const passage of candidates.passages) {
-          const childCount = passage.children.length;
-          
-          if (currentSlotFilled < targetLimit) {
-            this.mapQuestionToPaper(
-              passage,
-              null,
-              finalPaperQuestions,
-              finalAnswerKeys,
-              globalOrderIndex++,
-            );
-            pickedQuestionIds.add(passage._id.toString());
-
-            for (const child of passage.children) {
-              this.mapQuestionToPaper(
-                child,
-                passage._id,
-                finalPaperQuestions,
-                finalAnswerKeys,
-                globalOrderIndex++,
-              );
-              pickedQuestionIds.add(child._id.toString());
-            }
-            currentSlotFilled += childCount; 
+        if (rule.questionType === RuleQuestionType.FLAT) {
+          const availableFlats = this.shuffleArray([...(pool.flats || [])]);
+          while (availableFlats.length > 0 && itemsPickedInRule < targetLimit) {
+            const flatQ = availableFlats.pop()!;
+            this.mapQuestionToPaper(flatQ, null, finalPaperQuestions, finalAnswerKeys, orderIndex++);
+            itemsPickedInRule++;
           }
-
-          if (currentSlotFilled >= targetLimit) break;
         }
 
-        // 2. FILL FLAT QUESTIONS (Nếu Passage chưa lấp đầy giỏ)
-        if (currentSlotFilled < targetLimit) {
-          for (const flat of candidates.flats) {
-            if (currentSlotFilled < targetLimit) {
-              this.mapQuestionToPaper(
-                flat,
-                null,
-                finalPaperQuestions,
-                finalAnswerKeys,
-                globalOrderIndex++,
-              );
-              pickedQuestionIds.add(flat._id.toString());
-              currentSlotFilled++;
+        else if (rule.questionType === RuleQuestionType.PASSAGE) {
+          const availablePassages = this.shuffleArray([...(pool.passages || [])]);
+          while (availablePassages.length > 0 && itemsPickedInRule < targetLimit) {
+            const passage = availablePassages.pop()!;
+
+            this.mapQuestionToPaper(passage, null, finalPaperQuestions, finalAnswerKeys, orderIndex++);
+
+            for (const child of passage.childQuestions) {
+              this.mapQuestionToPaper(child, passage._id, finalPaperQuestions, finalAnswerKeys, orderIndex++);
+            }
+
+            itemsPickedInRule++;
+          }
+        }
+
+        else {
+          const availableFlats = this.shuffleArray([...(pool.flats || [])]);
+          const availablePassages = this.shuffleArray([...(pool.passages || [])]);
+
+          while (itemsPickedInRule < targetLimit) {
+            if (availableFlats.length > 0) {
+              const flatQ = availableFlats.pop()!;
+              this.mapQuestionToPaper(flatQ, null, finalPaperQuestions, finalAnswerKeys, orderIndex++);
+              itemsPickedInRule++;
+            } else if (availablePassages.length > 0) {
+              const passage = availablePassages.pop()!;
+              const slotsNeeded = targetLimit - itemsPickedInRule;
+              const childCount = passage.childQuestions?.length || 0;
+
+              if (childCount > 0 && childCount <= slotsNeeded) {
+                this.mapQuestionToPaper(passage, null, finalPaperQuestions, finalAnswerKeys, orderIndex++);
+                for (const child of passage.childQuestions) {
+                  this.mapQuestionToPaper(child, passage._id, finalPaperQuestions, finalAnswerKeys, orderIndex++);
+                }
+                itemsPickedInRule += childCount;
+              } else {
+                continue;
+              }
             } else {
               break;
             }
           }
         }
 
-        // 3. SAFEGUARD VALIDATION
-        if (currentSlotFilled < targetLimit) {
+        if (itemsPickedInRule < targetLimit) {
+          const unit = rule.questionType === RuleQuestionType.PASSAGE ? 'Bài đọc' : 'Câu hỏi đơn (hoặc slot trống)';
           throw new BadRequestException(
-            `Ngân hàng không đủ dữ liệu. Yêu cầu tối thiểu ${targetLimit} câu nhưng chỉ tìm được ${currentSlotFilled} câu khả dụng (chưa trùng lặp) cho Section "${section.name}".`,
+            `Lỗi sinh đề: Phần "${section.name}" yêu cầu ${targetLimit} ${unit}, nhưng kho chỉ đáp ứng được ${itemsPickedInRule}. ` +
+            `Vui lòng kiểm tra lại bộ lọc hoặc bổ sung câu hỏi vào ngân hàng.`
           );
         }
       }
     }
 
     return { finalPaperQuestions, finalAnswerKeys };
+  }
+
+  private applyScoring(totalScore: number, finalPaperQuestions: any[], finalAnswerKeys: any[]) {
+    if (totalScore <= 0 || finalAnswerKeys.length === 0) return;
+
+    const scorePerQuestion = parseFloat((totalScore / finalAnswerKeys.length).toFixed(2));
+    finalPaperQuestions.forEach((q) => {
+      if (q.type !== QuestionType.PASSAGE) {
+        q.points = scorePerQuestion;
+      } else {
+        q.points = null;
+      }
+    });
   }
 
   private async resolveSectionsToProcess(
@@ -248,42 +301,51 @@ export class ExamGeneratorService {
   ) {
     const hasMatrix = !!matrixId;
     const hasAdHoc = Array.isArray(adHocSections) && adHocSections.length > 0;
-    
-    if (hasMatrix && hasAdHoc) {
-      throw new BadRequestException(
-        'Cấu hình nguồn đề không hợp lệ: không được cung cấp cả "matrixId" lẫn "adHocSections" cùng lúc.',
-      );
-    }
 
-    let sectionsToProcess = (adHocSections || []).map((sec) => ({
-      ...sec,
-      orderIndex: sec.orderIndex ?? 0,
-    }));
+    let sectionsToProcess: any[] = [];
     let subjectId: Types.ObjectId | null = null;
 
-    if (matrixId) {
-      const template = await this.matricesService.getMatrixDetail(
-        matrixId,
-        teacherId,
-      );
+    if (hasAdHoc) {
+      sectionsToProcess = adHocSections.map((sec) => ({
+        name: sec.name,
+        orderIndex: sec.orderIndex ?? 0,
+        rules: sec.rules.map((rule: any) => ({
+          questionType: rule.questionType ?? RuleQuestionType.MIXED,
+          subQuestionLimit: rule.questionType === RuleQuestionType.PASSAGE ? rule.subQuestionLimit : undefined,
+          folderIds: rule.folderIds || [],
+          topicIds: rule.topicIds || [],
+          difficulties: rule.difficulties || [],
+          tags: rule.tags || [],
+          limit: rule.limit,
+        })),
+      }));
+
+      if (hasMatrix) {
+        try {
+          const template = await this.matricesService.getMatrixDetail(matrixId, teacherId);
+          subjectId = template.subjectId;
+        } catch {
+          // Bỏ qua nếu Matrix gốc đã bị giáo viên xóa mất
+        }
+      }
+    } else if (hasMatrix) {
+      const template = await this.matricesService.getMatrixDetail(matrixId, teacherId);
       sectionsToProcess = template.sections.map((sec: any) => ({
         name: sec.name,
         orderIndex: sec.orderIndex,
         rules: sec.rules.map((rule: any) => ({
-          folderIds:
-            rule.folderIds?.map((id: Types.ObjectId) => id.toString()) || [],
-          topicIds:
-            rule.topicIds?.map((id: Types.ObjectId) => id.toString()) || [],
+          questionType: rule.questionType ?? RuleQuestionType.MIXED,
+          subQuestionLimit: rule.questionType === RuleQuestionType.PASSAGE ? rule.subQuestionLimit : undefined,
+          folderIds: rule.folderIds?.map((id: Types.ObjectId) => id.toString()) || [],
+          topicIds: rule.topicIds?.map((id: Types.ObjectId) => id.toString()) || [],
           difficulties: rule.difficulties || [],
           tags: rule.tags || [],
           limit: rule.limit,
         })),
       }));
       subjectId = template.subjectId;
-    }
-
-    if (!sectionsToProcess.length) {
-      throw new BadRequestException('Không có dữ liệu Ma trận để xử lý.');
+    } else {
+      throw new BadRequestException('Đề thi không có cấu trúc Ma trận lưu trữ (Thiếu cả Snapshot và Library Link).');
     }
 
     return { sectionsToProcess, subjectId };
@@ -337,14 +399,7 @@ export class ExamGeneratorService {
         1,
       );
 
-    if (totalScore > 0 && finalAnswerKeys.length > 0) {
-      const scorePerQuestion = Number(
-        (totalScore / finalAnswerKeys.length).toFixed(2),
-      );
-      finalPaperQuestions.forEach((q) => {
-        if (q.type !== QuestionType.PASSAGE) q.points = scorePerQuestion;
-      });
-    }
+    this.applyScoring(totalScore, finalPaperQuestions, finalAnswerKeys);
 
     return this.examsRepo.executeInTransaction(async () => {
       const exam = await this.examsRepo.createDocument({
@@ -379,7 +434,6 @@ export class ExamGeneratorService {
     const paperObjId = new Types.ObjectId(paperId);
     const teacherObjId = new Types.ObjectId(teacherId);
 
-    // [FIX]: Sử dụng modelInstance thay vì model protected
     const paper = (await this.examPapersRepo.modelInstance
       .findById(paperObjId)
       .populate('examId', 'teacherId isPublished')
@@ -442,7 +496,6 @@ export class ExamGeneratorService {
     const paperObjId = new Types.ObjectId(paperId);
     const teacherObjId = new Types.ObjectId(teacherId);
 
-    // [FIX]: Sử dụng modelInstance thay vì model protected
     const paper = (await this.examPapersRepo.modelInstance
       .findById(paperObjId)
       .populate('examId', 'teacherId isPublished')
@@ -469,11 +522,14 @@ export class ExamGeneratorService {
       this.expandHierarchyIds(this.topicsRepo, 'topic', rule.topicIds),
     ]);
 
-    const mappedRule = {
+    const mappedRule: RepositoryRuleFilter = {
+      questionType: rule.questionType ?? RuleQuestionType.MIXED,
+      subQuestionLimit: rule.questionType === RuleQuestionType.PASSAGE ? rule.subQuestionLimit : undefined,
       folderIds: expandedFolderIds.map((id) => new Types.ObjectId(id)),
       topicIds: expandedTopicIds.map((id) => new Types.ObjectId(id)),
       difficulties: rule.difficulties || [],
       tags: rule.tags || [],
+      limit: rule.limit || 1,
     };
 
     const availableCount =
@@ -509,14 +565,7 @@ export class ExamGeneratorService {
         1,
       );
 
-    if (totalScore > 0 && finalAnswerKeys.length > 0) {
-      const scorePerQuestion = Number(
-        (totalScore / finalAnswerKeys.length).toFixed(2),
-      );
-      finalPaperQuestions.forEach((q) => {
-        if (q.type !== QuestionType.PASSAGE) q.points = scorePerQuestion;
-      });
-    }
+    this.applyScoring(totalScore, finalPaperQuestions, finalAnswerKeys);
 
     return {
       questions: finalPaperQuestions,
@@ -527,6 +576,8 @@ export class ExamGeneratorService {
   async countAvailableForRule(
     teacherId: string,
     rule: {
+      questionType?: RuleQuestionType;
+      subQuestionLimit?: number;
       folderIds?: string[];
       topicIds?: string[];
       difficulties?: DifficultyLevel[];
@@ -541,7 +592,9 @@ export class ExamGeneratorService {
       this.expandHierarchyIds(this.topicsRepo, 'topic', rule.topicIds),
     ]);
 
-    const mappedRule = {
+    const mappedRule: RepositoryRuleFilter = {
+      questionType: rule.questionType ?? RuleQuestionType.MIXED,
+      subQuestionLimit: rule.questionType === RuleQuestionType.PASSAGE ? rule.subQuestionLimit : undefined,
       folderIds: expandedFolderIds.map((id) => new Types.ObjectId(id)),
       topicIds: expandedTopicIds.map((id) => new Types.ObjectId(id)),
       difficulties: rule.difficulties || [],

@@ -4,35 +4,75 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
-  ConflictException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { ExamMatricesRepository } from './exam-matrices.repository';
-import { ExamsRepository } from './exams.repository';
 import {
   CreateMatrixPayload,
   GetMatricesFilter,
   UpdateMatrixPayload,
   CloneMatrixResult,
+  RuleQuestionType,
 } from './interfaces/exam-matrix.interface';
+
+interface SectionIntegrityPayload {
+  name: string;
+  rules: { limit?: number; questionType?: string; subQuestionLimit?: number }[];
+}
 
 @Injectable()
 export class ExamMatricesService {
   private readonly logger = new Logger(ExamMatricesService.name);
 
-  constructor(
-    private readonly matricesRepo: ExamMatricesRepository,
-    private readonly examsRepo: ExamsRepository,
-  ) {}
+  constructor(private readonly matricesRepo: ExamMatricesRepository) {}
+
+
+  private validateMatrixIntegrity(sections: SectionIntegrityPayload[], context: string) {
+    if (!sections || sections.length === 0) {
+      throw new BadRequestException(`[${context}] Khuôn mẫu phải có ít nhất 1 Section.`);
+    }
+
+    let totalLimit = 0;
+
+    for (const sec of sections) {
+      if (!sec.rules || sec.rules.length === 0) {
+        throw new BadRequestException(`[${context}] Section "${sec.name}" không có rule nào. Vui lòng thêm rule hoặc xóa section.`);
+      }
+      
+      for (let i = 0; i < sec.rules.length; i++) {
+        const rule = sec.rules[i];
+        
+        if (!rule.limit || rule.limit <= 0) {
+          throw new BadRequestException(`[${context}] Section "${sec.name}" - Rule ${i + 1} có số lượng câu (limit) không hợp lệ. Phải > 0.`);
+        }
+        
+        if (rule.questionType === RuleQuestionType.PASSAGE) {
+          if (!rule.subQuestionLimit || rule.subQuestionLimit <= 0) {
+            throw new BadRequestException(`[${context}] Section "${sec.name}" - Rule ${i + 1} (Đoạn văn) yêu cầu phải thiết lập giới hạn số câu hỏi con (subQuestionLimit > 0).`);
+          }
+        }
+        totalLimit += rule.limit;
+      }
+    }
+
+    if (totalLimit === 0) {
+      throw new BadRequestException(`[${context}] Tổng số câu hỏi của toàn bộ Ma trận không được bằng 0.`);
+    }
+  }
 
   async createMatrixTemplate(teacherId: string, payload: CreateMatrixPayload) {
+    this.validateMatrixIntegrity(payload.sections, 'Tạo mới Ma trận');
+
     const matrix = await this.matricesRepo.createDocument({
-      ...payload,
+      title: payload.title,
+      description: payload.description,
       teacherId: new Types.ObjectId(teacherId),
       subjectId: new Types.ObjectId(payload.subjectId),
       sections: payload.sections.map((sec) => ({
         ...sec,
         rules: sec.rules.map((rule) => ({
+          questionType: rule.questionType,
+          subQuestionLimit: rule.subQuestionLimit,
           folderIds: rule.folderIds?.map((id) => new Types.ObjectId(id)) || [],
           topicIds: rule.topicIds?.map((id) => new Types.ObjectId(id)) || [],
           difficulties: rule.difficulties || [],
@@ -42,84 +82,29 @@ export class ExamMatricesService {
       })),
     });
 
-    this.logger.log(
-      `[Matrix Template] Teacher ${teacherId} created Matrix ${matrix._id}`,
-    );
-    return {
-      message: 'Lưu Khuôn mẫu Ma trận thành công',
-      matrixId: matrix._id,
-    };
+    this.logger.log(`[Matrix Template] Teacher ${teacherId} created Matrix ${matrix._id}`);
+    return { message: 'Tạo Khuôn mẫu Ma trận thành công', matrixId: matrix._id };
   }
 
-  async getMatrices(teacherId: string, filter: GetMatricesFilter) {
-    const { page, limit, subjectId, search } = filter;
+  async updateMatrix(matrixId: string, teacherId: string, payload: UpdateMatrixPayload) {
+    if (!Types.ObjectId.isValid(matrixId)) throw new BadRequestException('ID không hợp lệ');
 
-    const query: any = { teacherId: new Types.ObjectId(teacherId) };
-    if (subjectId) query.subjectId = new Types.ObjectId(subjectId);
-    if (search) query.title = { $regex: search, $options: 'i' };
-
-    const skip = (page - 1) * limit;
-    const [items, total] = await Promise.all([
-      this.matricesRepo.modelInstance
-        .find(query)
-        .select('-sections -__v')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean()
-        .exec(),
-      this.matricesRepo.modelInstance.countDocuments(query).exec(),
-    ]);
-
-    return {
-      items,
-      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
-    };
-  }
-
-  async getMatrixDetail(matrixId: string, teacherId: string) {
-    if (!Types.ObjectId.isValid(matrixId))
-      throw new BadRequestException('ID Ma trận không hợp lệ');
-
-    const matrix = await this.matricesRepo.findByIdSafe(matrixId);
-
-    if (!matrix)
-      throw new NotFoundException('Không tìm thấy Khuôn mẫu Ma trận');
-    if (matrix.teacherId.toString() !== teacherId) {
-      throw new ForbiddenException('Bạn không có quyền truy cập Ma trận này');
+    if (payload.sections) {
+      this.validateMatrixIntegrity(payload.sections, 'Cập nhật Ma trận');
     }
 
-    return matrix;
-  }
+    const matrix = await this.matricesRepo.findByIdSafe(matrixId, { select: 'teacherId' });
+    if (!matrix) throw new NotFoundException('Khuôn mẫu không tồn tại');
+    if (matrix.teacherId.toString() !== teacherId) throw new ForbiddenException('Không có quyền sửa');
 
-  async updateMatrix(
-    matrixId: string,
-    teacherId: string,
-    payload: UpdateMatrixPayload,
-  ) {
-    if (!Types.ObjectId.isValid(matrixId))
-      throw new BadRequestException('ID Ma trận không hợp lệ');
-
-    const matrix = await this.matricesRepo.findByIdSafe(matrixId, {
-      select: 'teacherId',
-    });
-    if (!matrix)
-      throw new NotFoundException('Không tìm thấy Khuôn mẫu Ma trận');
-    if (matrix.teacherId.toString() !== teacherId) {
-      throw new ForbiddenException('Bạn không có quyền chỉnh sửa Ma trận này');
-    }
-
-    const updateData: Record<string, any> = {};
-    if (payload.title !== undefined) updateData.title = payload.title;
-    if (payload.description !== undefined)
-      updateData.description = payload.description;
-    if (payload.subjectId !== undefined)
-      updateData.subjectId = new Types.ObjectId(payload.subjectId);
-
-    if (payload.sections !== undefined) {
+    const updateData: any = { ...payload };
+    if (payload.subjectId) updateData.subjectId = new Types.ObjectId(payload.subjectId);
+    if (payload.sections) {
       updateData.sections = payload.sections.map((sec) => ({
         ...sec,
         rules: sec.rules.map((rule) => ({
+          questionType: rule.questionType,
+          subQuestionLimit: rule.subQuestionLimit,
           folderIds: rule.folderIds?.map((id) => new Types.ObjectId(id)) || [],
           topicIds: rule.topicIds?.map((id) => new Types.ObjectId(id)) || [],
           difficulties: rule.difficulties || [],
@@ -129,83 +114,64 @@ export class ExamMatricesService {
       }));
     }
 
-    if (Object.keys(updateData).length === 0) {
-      throw new BadRequestException('Không có dữ liệu nào để cập nhật.');
-    }
-
-    const updated = await this.matricesRepo.updateByIdSafe(matrixId, {
-      $set: updateData,
-    });
-    this.logger.log(
-      `[Matrix Template] Teacher ${teacherId} updated Matrix ${matrixId}`,
-    );
-    return {
-      message: 'Cập nhật Khuôn mẫu Ma trận thành công',
-      matrixId: updated?._id,
-    };
+    await this.matricesRepo.updateByIdSafe(matrixId, updateData);
+    return { message: 'Cập nhật thành công' };
   }
 
-  async cloneMatrix(
-    matrixId: string,
-    teacherId: string,
-  ): Promise<CloneMatrixResult> {
-    if (!Types.ObjectId.isValid(matrixId))
-      throw new BadRequestException('ID Ma trận không hợp lệ');
-
-    const source = await this.matricesRepo.findByIdSafe(matrixId);
-    if (!source)
-      throw new NotFoundException('Không tìm thấy Khuôn mẫu Ma trận nguồn');
-    if (source.teacherId.toString() !== teacherId) {
-      throw new ForbiddenException('Bạn không có quyền nhân bản Ma trận này');
+  async getMatrixDetail(matrixId: string, teacherId: string) {
+    const matrix = await this.matricesRepo.findByIdSafe(matrixId);
+    if (!matrix) throw new NotFoundException('Khuôn mẫu không tồn tại');
+    if (matrix.teacherId.toString() !== teacherId) {
+      throw new ForbiddenException('Bạn không có quyền xem Ma trận này');
     }
+
+    this.validateMatrixIntegrity(matrix.sections, 'Load Ma trận');
+    return matrix;
+  }
+
+  async cloneMatrix(matrixId: string, teacherId: string): Promise<CloneMatrixResult> {
+    const source = await this.getMatrixDetail(matrixId, teacherId);
 
     const cloned = await this.matricesRepo.createDocument({
       title: `${source.title} (Copy)`,
       description: source.description,
-      teacherId: new Types.ObjectId(teacherId), // Luôn assign cho người thực hiện clone
+      teacherId: new Types.ObjectId(teacherId),
       subjectId: source.subjectId,
       sections: source.sections,
     });
 
-    this.logger.log(
-      `[Matrix Template] Teacher ${teacherId} cloned Matrix ${matrixId} → ${cloned._id}`,
-    );
-    return {
-      message: 'Nhân bản Khuôn mẫu Ma trận thành công',
-      matrixId: cloned._id,
-    };
+    this.logger.log(`[Matrix Template] Teacher ${teacherId} cloned Matrix ${matrixId} → ${cloned._id}`);
+    return { message: 'Nhân bản Khuôn mẫu Ma trận thành công', matrixId: cloned._id };
   }
 
   async deleteMatrix(matrixId: string, teacherId: string) {
-    if (!Types.ObjectId.isValid(matrixId))
-      throw new BadRequestException('ID không hợp lệ');
+    if (!Types.ObjectId.isValid(matrixId)) throw new BadRequestException('ID không hợp lệ');
 
-    const matrix = await this.matricesRepo.findByIdSafe(matrixId, {
-      select: 'teacherId',
-    });
+    const matrix = await this.matricesRepo.findByIdSafe(matrixId, { select: 'teacherId' });
     if (!matrix) throw new NotFoundException('Khuôn mẫu không tồn tại');
-    if (matrix.teacherId.toString() !== teacherId)
-      throw new ForbiddenException('Không có quyền xóa');
+    if (matrix.teacherId.toString() !== teacherId) throw new ForbiddenException('Không có quyền xóa');
 
-    const referencingExam = await this.examsRepo.findOneSafe(
-      { 'dynamicConfig.matrixId': new Types.ObjectId(matrixId) },
-      { select: '_id' },
-    );
+    await this.matricesRepo.deleteOneSafe({ _id: new Types.ObjectId(matrixId) });
+    return { message: 'Đã xóa Khuôn mẫu Ma trận' };
+  }
 
-    if (referencingExam) {
-      throw new ConflictException(
-        'Không thể xóa Ma trận này vì đang được sử dụng bởi ít nhất một Quiz Lesson. ' +
-          'Vui lòng gỡ liên kết khỏi tất cả Quiz trước khi xóa.',
-      );
-    }
-
-    await this.matricesRepo.deleteOneSafe({
-      _id: new Types.ObjectId(matrixId),
+  async getMatrices(teacherId: string, filter: GetMatricesFilter) {
+    const { matrices, total } = await this.matricesRepo.getPaginatedMatrices(teacherId, {
+      subjectId: filter.subjectId,
+      search: filter.search,
+      page: filter.page,
+      limit: filter.limit,
     });
-    this.logger.log(
-      `[Matrix Template] Teacher ${teacherId} deleted Matrix ${matrixId}`,
-    );
 
-    return { message: 'Xóa Khuôn mẫu Ma trận thành công' };
+    return {
+      data: matrices,
+      meta: {
+        totalItems: total,
+        itemCount: matrices.length,
+        itemsPerPage: filter.limit,
+        totalPages: Math.ceil(total / filter.limit),
+        currentPage: filter.page,
+      },
+    };
   }
 }

@@ -27,3 +27,8 @@ export interface ForceTakedownCoursePayload {
     reason: string;
     adminId: string;
 }
+
+export interface PreviewCourseQuizPayload {
+    courseId: string;
+    lessonId: string;
+}

@@ -32,6 +32,8 @@ import {
   UpdateLessonPayload,
   ReorderPayload,
   EmbeddedExamConfigPayload,
+  LessonDetailResponse,
+  LessonComputedType,
 } from '../interfaces/course.interface';
 import { ExamMode, ExamType } from 'src/modules/exams/schemas/exam.schema';
 
@@ -558,5 +560,51 @@ export class CurriculumService {
     await this.clearCourseCache(course.slug);
 
     return { message: 'Cập nhật cấu trúc bài giảng thành công.' };
+  }
+
+async getLessonDetail(
+    courseId: string,
+    lessonId: string,
+    teacherId: string,
+  ): Promise<LessonDetailResponse> {
+    await this.validateCourseOwnership(courseId, teacherId);
+
+    const lesson = await this.lessonsRepo.findOneSafe({
+      _id: new Types.ObjectId(lessonId),
+      courseId: new Types.ObjectId(courseId),
+    });
+
+    if (!lesson) {
+      throw new NotFoundException('Bài học không tồn tại hoặc không thuộc khóa học này.');
+    }
+
+    let computedType: LessonComputedType = 'READING';
+    if (lesson.examId) {
+      computedType = 'QUIZ';
+    } else if (lesson.primaryVideoId) {
+      computedType = 'VIDEO';
+    }
+
+    const response: LessonDetailResponse = {
+      id: lesson._id.toString(),
+      title: lesson.title,
+      content: lesson.content,
+      type: computedType,
+      isFreePreview: lesson.isFreePreview,
+      orderIndex: lesson.order, 
+      examId: lesson.examId?.toString(),
+      primaryVideoId: lesson.primaryVideoId?.toString(),
+      attachments: lesson.attachments?.map(id => id.toString()),
+    };
+
+    if (lesson.examId) {
+      const exam = await this.examsRepo.findByIdSafe(lesson.examId);
+      if (exam) {
+        response.dynamicConfig = exam.dynamicConfig;
+        response.examRules = lesson.examRules;
+      }
+    }
+
+    return response;
   }
 }

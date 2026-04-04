@@ -20,6 +20,8 @@ import type {
   CourseApprovalStatus,
   ForceTakedownPayload,
   MasterListCourseStatus,
+  AdminCourseDetail,
+  AdminDryRunQuizResponse,
   AdminTeacherVerification,
   TeacherVerificationStatus,
 } from '../types/admin.types';
@@ -71,7 +73,7 @@ export const adminService = {
   }): Promise<PageResult<AdminExam>> => {
     return axiosClient.get(API_ENDPOINTS.ADMIN.EXAMS, { params });
   },
-  
+
   getExamPaperDetailByExamId: async (examId: string): Promise<unknown> => {
     return axiosClient.get(API_ENDPOINTS.ADMIN.EXAM_PAPER_DETAIL_BY_EXAM(examId));
   },
@@ -150,8 +152,8 @@ export const adminService = {
     return axiosClient.get(API_ENDPOINTS.ADMIN.BUSINESS_METRICS, { params });
   },
 
- listCourses: async (params: { 
-    page?: number; 
+  listCourses: async (params: {
+    page?: number;
     limit?: number;
     search?: string;
     teacherId?: string;
@@ -164,8 +166,12 @@ export const adminService = {
     return axiosClient.get(API_ENDPOINTS.ADMIN.COURSES_PENDING, { params });
   },
 
-  getCourseDetailForReview: async (id: string): Promise<any> => {
+  getCourseDetailForReview: async (id: string): Promise<AdminCourseDetail> => {
     return axiosClient.get(API_ENDPOINTS.ADMIN.COURSE_DETAIL(id));
+  },
+
+  previewDynamicQuiz: async (courseId: string, lessonId: string): Promise<AdminDryRunQuizResponse> => {
+    return axiosClient.get(API_ENDPOINTS.ADMIN.COURSE_LESSON_QUIZ_PREVIEW(courseId, lessonId));
   },
 
   approveCourse: async (id: string): Promise<void> => {
@@ -197,4 +203,3 @@ export const adminService = {
     return axiosClient.patch(API_ENDPOINTS.ADMIN.TEACHER_VERIFICATION_UPDATE(id), payload);
   },
 };
-

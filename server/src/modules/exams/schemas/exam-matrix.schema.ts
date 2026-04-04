@@ -1,11 +1,18 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 import { DifficultyLevel } from '../../questions/schemas/question.schema';
+import { RuleQuestionType } from '../interfaces/exam-matrix.interface';
 
 export type ExamMatrixDocument = ExamMatrix & Document;
 
 @Schema({ _id: false })
 export class MatrixRule {
+  @Prop({ type: String, enum: RuleQuestionType, default: RuleQuestionType.MIXED })
+  questionType: RuleQuestionType;
+
+  @Prop({ type: Number, min: 1, default: null })
+  subQuestionLimit?: number;
+
   @Prop({
     type: [{ type: MongooseSchema.Types.ObjectId, ref: 'QuestionFolder' }],
     default: [],
@@ -25,7 +32,7 @@ export class MatrixRule {
   tags: string[];
 
   @Prop({ required: true, min: 1 })
-  limit: number;
+  limit: number; 
 }
 export const MatrixRuleSchema = SchemaFactory.createForClass(MatrixRule);
 

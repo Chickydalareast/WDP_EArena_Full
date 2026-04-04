@@ -17,7 +17,6 @@ export class ExamSubmissionsRepository extends AbstractRepository<ExamSubmission
     super(submissionModel, connection);
   }
 
-  // --- Các hàm cũ giữ nguyên (initSubmission, saveDraftToRedis, v.v...) ---
   async initSubmission(examId: string, examPaperId: string, studentId: string, questionIds: Types.ObjectId[]): Promise<ExamSubmissionDocument> {
     const initialAnswers = questionIds.map(qId => ({ questionId: qId, selectedAnswerId: null }));
     return this.create({

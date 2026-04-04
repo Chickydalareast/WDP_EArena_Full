@@ -25,6 +25,7 @@ import {
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import {
+  GetExamPaperPayload,
   GetLessonAttemptsPayload,
   GetStudentHistoryOverviewPayload,
   GetStudentHistoryPayload,
@@ -136,5 +137,26 @@ export class ExamTakeController {
     };
 
     return this.examTakeService.getLessonAttempts(payload);
+  }
+
+
+  @Get(':submissionId/paper')
+  @Roles(UserRole.STUDENT)
+  @HttpCode(HttpStatus.OK)
+  async getStudentExamPaper(
+    @Param('submissionId') submissionId: string,
+    @CurrentUser('userId') studentId: string,
+  ) {
+    const payload: GetExamPaperPayload = {
+      submissionId,
+      studentId,
+    };
+
+    const data = await this.examTakeService.getStudentExamPaper(payload);
+
+    return {
+      message: 'Lấy dữ liệu đề thi thành công',
+      data,
+    };
   }
 }

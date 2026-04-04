@@ -14,19 +14,21 @@ import {
   ValidationArguments,
   ValidatorConstraint,
   ValidatorConstraintInterface,
+  IsInt,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PartialType, OmitType } from '@nestjs/mapped-types';
 import { DifficultyLevel } from '../../questions/schemas/question.schema';
 import { ShowResultMode } from '../schemas/lesson.schema';
+import { RuleQuestionType } from 'src/modules/exams/interfaces/exam-matrix.interface';
 
 @ValidatorConstraint({ name: 'MutuallyExclusiveMatrixSource', async: false })
 class MutuallyExclusiveMatrixSourceConstraint implements ValidatorConstraintInterface {
   validate(_value: unknown, args: ValidationArguments): boolean {
     const obj = args.object as DynamicExamConfigDto;
     const hasMatrix = !!obj.matrixId;
-    const hasAdHoc =
-      Array.isArray(obj.adHocSections) && obj.adHocSections.length > 0;
+    const hasAdHoc = Array.isArray(obj.adHocSections) && obj.adHocSections.length > 0;
     return !(hasMatrix && hasAdHoc);
   }
 
@@ -45,6 +47,16 @@ class DynamicFilterDto {
 }
 
 class MatrixRuleDto {
+  @IsEnum(RuleQuestionType)
+  @IsNotEmpty({ message: 'Vui lòng xác định rõ loại câu hỏi (questionType: FLAT hoặc PASSAGE).' })
+  questionType: RuleQuestionType;
+
+  @ValidateIf((o) => o.questionType === RuleQuestionType.PASSAGE)
+  @IsInt()
+  @Min(1)
+  @IsNotEmpty({ message: 'Bắt buộc nhập số lượng câu hỏi con (subQuestionLimit) khi Rule bốc Đoạn văn (PASSAGE).' })
+  subQuestionLimit?: number;
+  
   @IsOptional()
   @IsArray()
   @IsMongoId({ each: true })
@@ -85,8 +97,6 @@ class MatrixSectionDto {
   rules: MatrixRuleDto[];
 }
 
-// [FIX #1.3]: Validator enforce chỉ được dùng MỘT trong hai: matrixId hoặc adHocSections.
-// Dùng registerDecorator để tạo property decorator hợp lệ thay vì @Validate trên class.
 function IsMatrixSourceMutuallyExclusive() {
   return function (object: object, propertyName: string) {
     registerDecorator({
@@ -97,8 +107,7 @@ function IsMatrixSourceMutuallyExclusive() {
         validate(_value: unknown, args: ValidationArguments): boolean {
           const obj = args.object as DynamicExamConfigDto;
           const hasMatrix = !!obj.matrixId;
-          const hasAdHoc =
-            Array.isArray(obj.adHocSections) && obj.adHocSections.length > 0;
+          const hasAdHoc = Array.isArray(obj.adHocSections) && obj.adHocSections.length > 0;
           return !(hasMatrix && hasAdHoc);
         },
         defaultMessage(): string {
@@ -123,7 +132,6 @@ class DynamicExamConfigDto {
 
   @IsOptional()
   @IsMongoId()
-  // Gắn validator vào matrixId — khi matrixId được set thì check conflict với adHocSections
   @IsMatrixSourceMutuallyExclusive()
   matrixId?: string;
 
@@ -140,7 +148,7 @@ class ExamRuleConfigDto {
   timeLimit: number;
 
   @IsNumber()
-  @Min(1)
+  @Min(0)
   maxAttempts: number;
 
   @IsNumber()
@@ -231,6 +239,16 @@ export class GetQuizMatricesDto {
 }
 
 export class RulePreviewDto {
+  @IsEnum(RuleQuestionType)
+  @IsNotEmpty({ message: 'Vui lòng xác định rõ loại câu hỏi (questionType: FLAT hoặc PASSAGE).' })
+  questionType: RuleQuestionType;
+
+  @ValidateIf((o) => o.questionType === RuleQuestionType.PASSAGE)
+  @IsInt()
+  @Min(1)
+  @IsNotEmpty({ message: 'Bắt buộc nhập số lượng câu hỏi con (subQuestionLimit) khi Rule bốc Đoạn văn (PASSAGE).' })
+  subQuestionLimit?: number;
+
   @IsOptional()
   @IsArray()
   @IsMongoId({ each: true })
