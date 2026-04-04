@@ -1,7 +1,7 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm, type Resolver } from 'react-hook-form';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/shared/components/ui/dialog';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
@@ -19,7 +19,7 @@ export function CreateCourseModal({ isOpen, onClose }: CreateCourseModalProps) {
   const { mutate: createCourse, isPending } = useCreateCourse();
 
   const { register, handleSubmit, formState: { errors }, reset } = useForm<CreateCourseDTO>({
-    resolver: zodResolver(createCourseSchema),
+    resolver: zodResolver(createCourseSchema) as Resolver<CreateCourseDTO>,
     defaultValues: { title: '', price: 0, description: '' },
   });
 

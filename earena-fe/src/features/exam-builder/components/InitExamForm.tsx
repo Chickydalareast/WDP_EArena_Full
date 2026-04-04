@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { InitExamSchema, InitExamDTO } from '../types/exam.schema';
 import { useInitExam } from '../hooks/useInitExam';
 import { useSession } from '@/features/auth/hooks/useSession';

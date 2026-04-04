@@ -22,12 +22,17 @@ import {
   CreateCoursePayload,
   UpdateCoursePayload,
 } from './interfaces/course.interface';
+import { PromoteCourseDto } from './dto/promote-course.dto';
+import { CoursePromotionService } from './services/course-promotion.service';
 
 @Controller('courses')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @RequireTeacherVerified()
 export class CoursesController {
-  constructor(private readonly coursesService: CoursesService) {}
+  constructor(
+    private readonly coursesService: CoursesService,
+    private readonly coursePromotionService: CoursePromotionService,
+  ) {}
 
   @Post()
   @Roles(UserRole.TEACHER, UserRole.ADMIN)
@@ -144,5 +149,19 @@ export class CoursesController {
     @CurrentUser('userId') userId: string,
   ) {
     return this.coursesService.submitCourseForReview(id, userId);
+  }
+
+  @Post(':id/promote')
+  @Roles(UserRole.TEACHER, UserRole.ADMIN)
+  async promoteCourse(
+    @Param('id') id: string,
+    @Body() dto: PromoteCourseDto,
+    @CurrentUser('userId') userId: string,
+  ) {
+    return this.coursePromotionService.purchasePromotion(
+      userId,
+      id,
+      dto.durationDays,
+    );
   }
 }

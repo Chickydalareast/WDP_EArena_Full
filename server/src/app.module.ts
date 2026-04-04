@@ -25,6 +25,8 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 import { TeachersModule } from './modules/teachers/teachers.module';
 
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { CommunityModule } from './modules/community/community.module';
+import { MessagingModule } from './modules/messaging/messaging.module';
 
 import { EventEmitterModule } from '@nestjs/event-emitter';
 
@@ -64,6 +66,8 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     SubscriptionsModule,
     TeachersModule,
     NotificationsModule,
+    CommunityModule,
+    MessagingModule,
 
     EventEmitterModule.forRoot(),
   ],

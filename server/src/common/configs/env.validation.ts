@@ -38,4 +38,10 @@ export const validationSchema = Joi.object({
   
   // Ràng buộc cấu hình Model cho luồng Auto-Tag (Sẽ mặc định dùng llama-3.1 nếu không set)
   GROQ_TAGGING_MODEL: Joi.string().default('llama-3.1-8b-instant').description('Model LLM dùng cho Auto-Tagging'),
+
+  COMMUNITY_BANNED_WORDS: Joi.string().allow('', null).optional().description('CSV từ cấm trong Community'),
+
+  COURSE_PROMOTION_COINS_PER_DAY: Joi.number()
+    .optional()
+    .description('Coin ví / ngày để quảng cáo khóa học trên slider'),
 }).unknown(true);

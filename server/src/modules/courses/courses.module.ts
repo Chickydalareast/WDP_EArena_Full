@@ -3,6 +3,10 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { BullModule } from '@nestjs/bullmq';
 
 import { Course, CourseSchema } from './schemas/course.schema';
+import {
+  CoursePromotion,
+  CoursePromotionSchema,
+} from './schemas/course-promotion.schema';
 import { Section, SectionSchema } from './schemas/section.schema';
 import { Lesson, LessonSchema } from './schemas/lesson.schema';
 import { Enrollment, EnrollmentSchema } from './schemas/enrollment.schema';
@@ -53,6 +57,9 @@ import { ExamsModule } from '../exams/exams.module';
 import { AiModule } from '../ai/ai.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { QuestionsModule } from '../questions/questions.module';
+import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
+import { User, UserSchema } from '../users/schemas/user.schema';
+import { CoursePromotionService } from './services/course-promotion.service';
 
 @Module({
   imports: [
@@ -63,7 +70,10 @@ import { QuestionsModule } from '../questions/questions.module';
       { name: Enrollment.name, schema: EnrollmentSchema },
       { name: CourseReview.name, schema: CourseReviewSchema },
       { name: LessonProgress.name, schema: LessonProgressSchema },
+      { name: CoursePromotion.name, schema: CoursePromotionSchema },
+      { name: User.name, schema: UserSchema },
     ]),
+    SubscriptionsModule,
     BullModule.registerQueue({
       name: 'learning-tracking',
     }),
@@ -96,6 +106,7 @@ import { QuestionsModule } from '../questions/questions.module';
     CoursesService,
     CurriculumService,
     CourseReaderService,
+    CoursePromotionService,
     EnrollmentsService,
     CourseCheckoutService,
     CourseReviewsService,

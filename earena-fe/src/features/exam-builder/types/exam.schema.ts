@@ -187,7 +187,7 @@ export type EditQuestionFormDTO = z.infer<typeof EditQuestionFormSchema>;
 export const MatrixCriterionSchema = z.object({
   folderIds: z.array(z.string()).min(1, 'Vui lòng chọn ít nhất 1 thư mục'),
   topicId: z.string().min(1, 'Vui lòng chọn chuyên đề'),
-  difficulty: z.enum(['NB', 'TH', 'VD', 'VDC'], { required_error: 'Chọn độ khó' }),
+  difficulty: z.enum(['NB', 'TH', 'VD', 'VDC']),
   limit: z.number().min(1, 'Số lượng tối thiểu là 1'),
 });
 
@@ -300,6 +300,8 @@ export interface ActiveFiltersResponse {
   topics: ActiveFilterTopic[];
   difficulties: string[];
   tags: string[];
+  /** Cây thư mục (nếu API trả về) */
+  folders?: unknown[];
 }
 
 export interface PreviewMatrixRuleResponse {

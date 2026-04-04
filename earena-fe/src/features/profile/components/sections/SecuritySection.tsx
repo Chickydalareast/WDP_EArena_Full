@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { useChangePassword } from '@/features/auth/hooks/useChangePassword';
 import { toast } from 'sonner';
 import { ShieldCheck, Key, History } from 'lucide-react';

@@ -41,7 +41,8 @@ async function bootstrap() {
   const httpAdapterHost = app.get(HttpAdapterHost);
   app.useGlobalFilters(new AllExceptionsFilter(httpAdapterHost));
 
-  const port = process.env.PORT || 3000;
+  // Mặc định 4000 để tránh trùng cổng với Next.js (thường 3000). Production/Docker nên set PORT.
+  const port = process.env.PORT || 4000;
   await app.listen(port);
   console.log(`🚀 Enterprise Backend is running on: http://localhost:${port}/api/v1`);
 }

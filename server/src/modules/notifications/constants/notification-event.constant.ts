@@ -12,4 +12,5 @@ export enum NotificationType {
   COURSE = 'COURSE',
   EXAM = 'EXAM',
   FINANCE = 'FINANCE',
+  COMMUNITY = 'COMMUNITY',
 }

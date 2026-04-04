@@ -2,7 +2,7 @@
 
 import React, { useMemo, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { Loader2, AlertCircle, Map, Target } from 'lucide-react';
 
 import { useQuestionBankStore } from '../stores/question-bank.store';

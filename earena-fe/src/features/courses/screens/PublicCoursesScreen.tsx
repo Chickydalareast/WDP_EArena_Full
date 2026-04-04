@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { usePublicCourses } from '../hooks/useCourses';
 import { CourseCard, CourseCardSkeleton } from '../components/CourseCard';
+import { CourseFeaturedCarousel } from '../components/CourseFeaturedCarousel';
 import { CourseFilters } from '../components/CourseFilters';
 import { Sheet, SheetContent, SheetTrigger } from '@/shared/components/ui/sheet';
 import { Search, AlertCircle, BookOpen, GraduationCap, ChevronLeft, ChevronRight, Loader2, SlidersHorizontal, ArrowDownAZ } from 'lucide-react';
@@ -154,6 +155,8 @@ function PublicCoursesContent() {
             </div>
           </div>
         </div>
+
+        <CourseFeaturedCarousel />
 
         <div className="flex gap-8 items-start">
           

@@ -11,13 +11,16 @@ import { ROUTES } from '@/config/routes';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { Button } from '@/shared/components/ui/button';
 import { Dialog, DialogContent } from '@/shared/components/ui/dialog';
+import Link from 'next/link';
 import {
   CheckCircle2, PlayCircle, FileText, HelpCircle, Lock,
-  ShoppingCart, Loader2, Star, Calendar, ChevronRight, MonitorPlay, Paperclip
+  ShoppingCart, Loader2, Star, Calendar, ChevronRight, MonitorPlay, Paperclip, MessageCircle,
 } from 'lucide-react';
 import { SectionPreview, LessonPreview } from '../types/course.schema';
 import { FreePreviewModal } from '../components/FreePreviewModal';
 import { CourseReviewsSection } from '../components/CourseReviewsSection';
+import { ShareCourseToCommunityButton } from '@/features/community/components/ShareCourseToCommunityButton';
+import { CourseCommunitySection } from '@/features/community/components/CourseCommunitySection';
 import { toast } from 'sonner';
 
 // --- UTILITY HELPERS ---
@@ -49,6 +52,7 @@ export function CourseLandingScreen({ slug }: { slug: string }) {
   const { data: course, isLoading, isError } = usePublicCourseDetail(slug);
 
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const user = useAuthStore((state) => state.user);
   const { handleCheckout, isProcessing } = useCheckoutFlow();
 
   const [previewLesson, setPreviewLesson] = useState<LessonPreview | null>(null);
@@ -244,12 +248,33 @@ export function CourseLandingScreen({ slug }: { slug: string }) {
                 ) : (
                   <p className="text-muted-foreground italic text-sm">Giảng viên chưa cập nhật tiểu sử.</p>
                 )}
-                <Button variant="outline" size="sm" className="font-semibold" onClick={() => toast.info('Tính năng đang phát triển.')}>
-                  Xem hồ sơ giảng viên
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  {isAuthenticated &&
+                    user?.role === 'STUDENT' &&
+                    course.teacher?.id && (
+                      <Button variant="default" size="sm" className="font-semibold" asChild>
+                        <Link
+                          href={`${ROUTES.STUDENT.MESSAGES}?peer=${encodeURIComponent(course.teacher.id)}`}
+                        >
+                          <MessageCircle className="mr-2 w-4 h-4" />
+                          Nhắn giáo viên
+                        </Link>
+                      </Button>
+                    )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="font-semibold"
+                    onClick={() => toast.info('Tính năng đang phát triển.')}
+                  >
+                    Xem hồ sơ giảng viên
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
+
+          <CourseCommunitySection courseId={course.id} />
 
           {/* --- BỔ SUNG SECTION REVIEW VÀO ĐÂY (NẰM DƯỚI TEACHER BIO) --- */}
           {/* Gắn thêm id="reviews" để làm điểm neo (anchor) cho Teacher nhảy tới */}
@@ -298,6 +323,11 @@ export function CourseLandingScreen({ slug }: { slug: string }) {
                 {isProcessing ? 'Đang giao dịch...' : isFree ? 'Ghi danh miễn phí' : 'Mua khóa học ngay'}
               </Button>
             )}
+
+            <ShareCourseToCommunityButton
+              courseId={course.id}
+              subjectId={course.subject?.id}
+            />
 
             <div className="space-y-4 mt-2">
               <div className="text-sm font-bold text-foreground">Khóa học bao gồm:</div>

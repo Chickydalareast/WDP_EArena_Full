@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const createReviewSchema = z.object({
     rating: z
-        .number({ required_error: 'Vui lòng chọn số sao đánh giá.' })
+        .number({ message: 'Vui lòng chọn số sao đánh giá.' })
         .int('Số sao phải là số nguyên.')
         .min(1, 'Đánh giá tối thiểu 1 sao.')
         .max(5, 'Đánh giá tối đa 5 sao.'),

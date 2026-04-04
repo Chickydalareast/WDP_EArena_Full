@@ -24,10 +24,22 @@ import { OptionalAuth } from '../../../common/decorators/optional-auth.decorator
 import { PaginationDto } from '../../../common/dto/pagination.dto'; // Import DTO phân trang chung của dự án
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { CoursePromotionService } from '../services/course-promotion.service';
 
 @Controller('courses')
 export class CourseReaderController {
-  constructor(private readonly courseReaderService: CourseReaderService) {}
+  constructor(
+    private readonly courseReaderService: CourseReaderService,
+    private readonly coursePromotionService: CoursePromotionService,
+  ) {}
+
+  /** Đặt trước `public/:slug` để không bị nuốt nhầm slug. */
+  @OptionalAuth()
+  @Get('public/featured-carousel')
+  async getFeaturedCarousel() {
+    const data = await this.coursePromotionService.getFeaturedCarouselCourses();
+    return { message: 'OK', data };
+  }
 
   @OptionalAuth()
   @Get('public')

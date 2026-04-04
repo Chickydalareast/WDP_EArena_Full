@@ -572,4 +572,59 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
       })
       .exec();
   }
+
+  /** Cùng shape với phần tử `data` của searchPublicCourses, giữ đúng thứ tự `ids`. */
+  async findPublishedPublicCardsByOrderedIds(
+    ids: Types.ObjectId[],
+  ): Promise<Record<string, unknown>[]> {
+    if (!ids.length) return [];
+    const data = await this.courseModel
+      .find({
+        _id: { $in: ids },
+        status: CourseStatus.PUBLISHED,
+      })
+      .select(
+        'title slug price discountPrice coverImageId teacherId subjectId status createdAt averageRating totalReviews',
+      )
+      .populate('teacherId', 'fullName avatar')
+      .populate('subjectId', 'name')
+      .populate('coverImageId', 'url blurHash')
+      .lean()
+      .exec();
+    const byId = new Map(
+      (data as any[]).map((item: any) => [item._id.toString(), item]),
+    );
+    const ordered: Record<string, unknown>[] = [];
+    for (const oid of ids) {
+      const item = byId.get(oid.toString()) as any;
+      if (!item) continue;
+      ordered.push(this.mapLeanToPublicCourseCard(item));
+    }
+    return ordered;
+  }
+
+  private mapLeanToPublicCourseCard(item: any): Record<string, unknown> {
+    const { _id, teacherId, coverImageId, subjectId, ...rest } = item;
+    return {
+      id: _id.toString(),
+      subject: subjectId
+        ? { id: subjectId._id.toString(), name: subjectId.name }
+        : null,
+      teacher: teacherId
+        ? {
+            id: teacherId._id.toString(),
+            fullName: teacherId.fullName,
+            avatar: teacherId.avatar,
+          }
+        : null,
+      coverImage: coverImageId
+        ? {
+            id: coverImageId._id.toString(),
+            url: coverImageId.url,
+            blurHash: coverImageId.blurHash,
+          }
+        : null,
+      ...rest,
+    };
+  }
 }

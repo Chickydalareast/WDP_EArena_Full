@@ -6,17 +6,19 @@ import { CourseBasic, CourseStatus } from '../types/course.schema';
 import { formatCurrency, cn } from '@/shared/lib/utils';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { ROUTES } from '@/config/routes';
-import { 
-  Settings, 
-  BookOpen, 
-  AlertCircle, 
-  Star, 
-  MessageSquare, 
-  MoreVertical, 
-  Users, 
-  ExternalLink, 
-  GraduationCap, 
-  ArrowRight 
+import { useState } from 'react';
+import {
+  Settings,
+  BookOpen,
+  AlertCircle,
+  Star,
+  MessageSquare,
+  MoreVertical,
+  Users,
+  ExternalLink,
+  GraduationCap,
+  ArrowRight,
+  Megaphone,
 } from 'lucide-react';
 
 import {
@@ -27,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from '@/shared/components/ui/dropdown-menu';
 import { Button } from '@/shared/components/ui/button';
+import { PromoteCourseModal } from './PromoteCourseModal';
 
 interface TeacherCourseCardProps {
   course: CourseBasic;
@@ -41,6 +44,7 @@ const STATUS_CONFIG: Record<CourseStatus, { label: string; className: string }> 
 };
 
 export function TeacherCourseCard({ course }: TeacherCourseCardProps) {
+  const [promoteOpen, setPromoteOpen] = useState(false);
   // Đồng bộ key PENDING_REVIEW theo đúng schema thay vì PENDING
   const statusKey = Object.keys(STATUS_CONFIG).includes(course.status) 
     ? course.status 
@@ -113,6 +117,18 @@ export function TeacherCourseCard({ course }: TeacherCourseCardProps) {
               </DropdownMenuItem>
               
               <DropdownMenuSeparator />
+
+              {course.status === 'PUBLISHED' && (
+                <DropdownMenuItem
+                  className="cursor-pointer flex items-center py-2 text-primary"
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setPromoteOpen(true);
+                  }}
+                >
+                  <Megaphone className="mr-2 w-4 h-4" /> Quảng cáo (slider)
+                </DropdownMenuItem>
+              )}
               
               <DropdownMenuItem asChild>
                 <Link href={`${ROUTES.PUBLIC.COURSE_DETAIL(course.slug)}#reviews`} target="_blank" className="cursor-pointer flex items-center py-2">
@@ -161,7 +177,13 @@ export function TeacherCourseCard({ course }: TeacherCourseCardProps) {
             </Button>
           </Link>
         </div>
-        
+
+        <PromoteCourseModal
+          open={promoteOpen}
+          onOpenChange={setPromoteOpen}
+          courseId={course.id}
+          courseTitle={course.title}
+        />
       </div>
     </div>
   );

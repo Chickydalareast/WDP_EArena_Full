@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/shared/components/ui/dialog';
 import { useAdminCourseDetail } from '../hooks/useAdminCourses';
 import { Loader2, Play, FileText, BrainCircuit, X, AlertCircle, Eye } from 'lucide-react';
-import { VideoPlayer } from '@/shared/components/ui/video-player';
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/utils';
 import dynamic from 'next/dynamic';
@@ -307,7 +306,11 @@ export function AdminCoursePreviewModal({ courseId, isOpen, onClose }: { courseI
                                         {activeLesson.primaryVideo?.url && (
                                             <div className="w-full bg-slate-950 dark:bg-black p-8 flex justify-center border-b border-border/50">
                                                 <div className="w-full max-w-5xl mx-auto aspect-video rounded-xl overflow-hidden shadow-2xl border border-white/5">
-                                                    <VideoPlayer src={activeLesson.primaryVideo.url} />
+                                                    <video
+                                                        src={activeLesson.primaryVideo.url}
+                                                        controls
+                                                        className="w-full h-full object-contain bg-black"
+                                                    />
                                                 </div>
                                             </div>
                                         )}

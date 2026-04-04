@@ -16,6 +16,7 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 import { ROUTES } from '@/config/routes';
+import { MessagesNavIcon } from '@/features/messaging/components/MessagesNavIcon';
 
 // --- BỘ NÃO SEARCH CHUẨN NEXT.JS ---
 function HeaderSearch() {
@@ -92,6 +93,7 @@ export function StudentNavbar() {
           </Suspense>
 
           <div className="flex items-center space-x-2 sm:space-x-4">
+            <MessagesNavIcon href={ROUTES.STUDENT.MESSAGES} role="STUDENT" />
             <button className="p-2 text-muted-foreground hover:text-primary transition rounded-full hover:bg-muted relative outline-none">
               <Bell size={20} />
               <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-background"></span>

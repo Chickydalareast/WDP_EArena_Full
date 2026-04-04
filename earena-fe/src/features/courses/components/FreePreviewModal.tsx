@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/shared/components/ui/dialog';
@@ -34,6 +34,7 @@ interface FreePreviewModalProps {
 export function FreePreviewModal({ courseId, lesson, isOpen, onClose }: FreePreviewModalProps) {
     const router = useRouter();
     const { refreshToken } = useRefreshLessonToken();
+    const previewAccumulatedTimeRef = useRef<number>(0);
 
     const [activeAttachmentId, setActiveAttachmentId] = useState<string | null>(null);
 
@@ -52,8 +53,8 @@ export function FreePreviewModal({ courseId, lesson, isOpen, onClose }: FreePrev
     }, [activeAttachmentId, lessonContent?.attachments]);
 
     const handleStartQuiz = () => {
-        if (lessonContent?.examId) {
-            router.push(ROUTES.STUDENT.TAKE_EXAM(lessonContent.examId));
+        if (lessonContent?.examId && lesson?.id) {
+            router.push(ROUTES.STUDENT.STUDY_ROOM(courseId, lesson.id));
             onClose();
         }
     };
@@ -107,6 +108,10 @@ export function FreePreviewModal({ courseId, lesson, isOpen, onClose }: FreePrev
                                         <div className="w-full max-w-5xl mx-auto shadow-2xl rounded-xl overflow-hidden ring-1 ring-white/10">
                                             <VideoPlayer
                                                 src={lessonContent.primaryVideo.url}
+                                                accumulatedTimeRef={previewAccumulatedTimeRef}
+                                                onFlush={() => {}}
+                                                onTrackTimeUpdate={() => {}}
+                                                onOptimisticComplete={() => {}}
                                                 isRefetching={isFetching}
                                                 onTokenExpired={() => {
                                                     if (lesson?.id) refreshToken(courseId, lesson.id);

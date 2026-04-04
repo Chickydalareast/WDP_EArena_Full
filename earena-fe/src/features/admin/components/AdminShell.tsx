@@ -14,6 +14,7 @@ import {
   LogOut,
   Banknote,
   ClipboardCheck,
+  MessagesSquare,
 } from 'lucide-react';
 import { useAuthStore } from '@/features/auth/stores/auth.store';
 import { useLogout } from '@/features/auth/hooks/useLogout';
@@ -31,6 +32,7 @@ const nav = [
   { href: '/admin/pricing', label: 'Gói dịch vụ', icon: CreditCard },
   { href: ROUTES.ADMIN.WITHDRAWALS, label: 'Duyệt rút tiền', icon: Banknote }, // Đã thêm
   { href: '/admin/business', label: 'Business', icon: LineChart },
+  { href: '/admin/community', label: 'Community', icon: MessagesSquare },
   { href: '/admin/taxonomy', label: 'Danh mục kiến thức', icon: Shield },
 ];
 

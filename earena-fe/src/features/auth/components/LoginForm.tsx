@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { z } from 'zod';
 import { loginSchema, LoginDTO } from '../types/auth.schema';
 import { useLogin } from '../hooks/useLogin';

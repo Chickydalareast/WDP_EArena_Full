@@ -183,6 +183,13 @@ export class AuthService {
     const isQueued = await this.mailService.sendUserOtp(email, name, otp);
 
     if (!isQueued) throw new InternalServerErrorException('Hệ thống mail đang bận. Vui lòng thử lại sau.');
+
+    if (this.configService.get<string>('NODE_ENV') === 'development') {
+      this.logger.warn(
+        `[DEV] OTP cho ${email} (type=${type}): ${otp} — Nếu không thấy email: kiểm tra Redis/Bull, log MailProcessor và cấu hình SMTP (MAIL_*).`,
+      );
+    }
+
     return { message: 'Mã OTP đã được gửi đến email của bạn.' };
   }
 

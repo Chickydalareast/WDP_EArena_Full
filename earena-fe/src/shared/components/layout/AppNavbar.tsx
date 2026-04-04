@@ -119,7 +119,7 @@ export function AppNavbar() {
     const { data: walletData, isLoading } = useSyncWallet();
     const balance = walletData?.balance ?? 0;
 
-    if (!isInitialized || !user || role === 'ADMIN') return null;
+    if (!isInitialized || !user || user.role === 'ADMIN') return null;
 
     if (role === 'STUDENT') {
       return (
@@ -214,7 +214,7 @@ export function AppNavbar() {
           
           <DropdownMenuSeparator />
           
-          {role !== 'ADMIN' && (
+          {user?.role !== 'ADMIN' && (
             <div className="p-3 mb-1 mx-1 rounded-xl bg-muted/40 border border-border">
               <div className="flex justify-between items-center mb-2">
                 <span className={`text-xs font-semibold flex items-center gap-1.5 ${role === 'TEACHER' ? 'text-indigo-600' : 'text-muted-foreground'}`}>

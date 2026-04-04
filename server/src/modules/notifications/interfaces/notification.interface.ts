@@ -8,6 +8,8 @@ export interface NotificationPayload {
   submissionId?: string;
   transactionId?: string;
   requestId?: string;
+  postId?: string;
+  commentId?: string;
   metadata?: Record<string, unknown>;
 }
 

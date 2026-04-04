@@ -15,6 +15,7 @@ export enum ReferenceType {
   COURSE = 'COURSE',
   EXAM = 'EXAM',
   ORDER = 'ORDER', // Trỏ tới bảng thanh toán VNPay/Stripe (làm sau)
+  COURSE_PROMOTION = 'COURSE_PROMOTION',
 }
 
 @Schema({

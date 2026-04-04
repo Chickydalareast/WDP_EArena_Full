@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { Loader2, Settings, AlertTriangle, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -52,7 +52,7 @@ export function EditDynamicQuizModal({ courseId, lessonId, isOpen, onClose }: Ed
 
     const defaultValues = useMemo<UpdateQuizLessonDTO | undefined>(() => {
         if (!lessonDetail) return undefined;
-        
+
         return {
             lessonId: lessonDetail._id,
             title: lessonDetail.title,
@@ -64,8 +64,8 @@ export function EditDynamicQuizModal({ courseId, lessonId, isOpen, onClose }: Ed
             },
             dynamicConfig: lessonDetail.examId?.dynamicConfig || {
                 adHocSections: []
-            }
-        };
+            },
+        } as UpdateQuizLessonDTO;
     }, [lessonDetail]);
 
     const form = useForm<UpdateQuizLessonDTO>({

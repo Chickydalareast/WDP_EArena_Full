@@ -8,6 +8,7 @@ import { cn } from '@/shared/lib/utils';
 import { INotification } from '../types/notification.schema';
 import { useNotificationStore } from '../stores/notification.store';
 import { notificationService } from '../api/notification.service';
+import { resolveNotificationPath } from '../lib/notification-navigation';
 
 interface Props {
     data: INotification;
@@ -19,7 +20,7 @@ export const NotificationItem = ({ data, closeDropdown }: Props) => {
     const markAsReadLocally = useNotificationStore((state) => state.markAsReadLocally);
 
     const handleClick = () => {
-        const targetUrl = data.payload?.url;
+        const targetPath = resolveNotificationPath(data);
 
         // 1. Optimistic Update: Cập nhật UI thành "Đã đọc" ngay lập tức
         if (!data.isRead) {
@@ -34,9 +35,9 @@ export const NotificationItem = ({ data, closeDropdown }: Props) => {
         // 3. Đóng popup
         closeDropdown();
 
-        // 4. Navigate mượt mà bằng App Router
-        if (targetUrl) {
-            router.push(targetUrl);
+        // 4. Navigate mượt mà bằng App Router (COMMUNITY: post + hash comment)
+        if (targetPath) {
+            router.push(targetPath);
         }
     };
 

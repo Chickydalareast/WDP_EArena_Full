@@ -1,7 +1,7 @@
 'use client';
 
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { Loader2 } from 'lucide-react';
 
 import { createReviewSchema, CreateReviewDTO } from '../types/review.schema';

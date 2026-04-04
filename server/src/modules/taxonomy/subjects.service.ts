@@ -35,4 +35,17 @@ export class SubjectsService {
       .lean()
       .exec();
   }
+
+  async findSubjectsByIds(ids: string[]) {
+    const uniq = [...new Set(ids.filter(Boolean))];
+    if (!uniq.length) return [];
+    return (this.subjectsRepo as any).model
+      .find({
+        _id: { $in: uniq.map((id) => new Types.ObjectId(id)) },
+        isActive: true,
+      })
+      .select('name code')
+      .lean()
+      .exec();
+  }
 }

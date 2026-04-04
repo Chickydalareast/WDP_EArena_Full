@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
 
 import { Button } from '@/shared/components/ui/button';
@@ -27,6 +27,7 @@ export function GenerateExamModal({ onClose }: { onClose: () => void }) {
     const { user } = useSession();
     const { data: folders = [] } = useFoldersList();
     const { mutate: generateExam, isPending } = useGenerateExam();
+    const subjectIds = user?.subjects?.map((s) => s.id) ?? [];
 
     const form = useForm<GenerateExamFormValues>({
         resolver: zodResolver(GenerateExamFormSchema),
@@ -34,7 +35,7 @@ export function GenerateExamModal({ onClose }: { onClose: () => void }) {
             title: '',
             duration: 90,
             totalScore: 10,
-            subjectId: user?.subjectIds?.[0] || '',
+            subjectId: subjectIds[0] || '',
             criteria: [
                 { folderIds: [], topicId: '', difficulty: 'NB', limit: 1 },
             ],
@@ -56,7 +57,7 @@ export function GenerateExamModal({ onClose }: { onClose: () => void }) {
         });
     };
 
-    if (!user?.subjectIds?.length) {
+    if (!subjectIds.length) {
         return (
             <div className="p-6 text-center text-red-500">
                 Bạn chưa được gán bộ môn nào. Vui lòng liên hệ Admin.
@@ -115,8 +116,10 @@ export function GenerateExamModal({ onClose }: { onClose: () => void }) {
                                     <SelectTrigger><SelectValue placeholder="Chọn môn học" /></SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                    {user.subjectIds?.map(id => (
-                                        <SelectItem key={id} value={id}>Môn học {id}</SelectItem> // Tạm thời hiển thị ID nếu DB chưa lưu tên Subject trong mảng này
+                                    {user?.subjects?.map((s) => (
+                                        <SelectItem key={s.id} value={s.id}>
+                                            {s.name || s.id}
+                                        </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
