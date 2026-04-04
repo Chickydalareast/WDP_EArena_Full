@@ -22,6 +22,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { CoursesModule } from './modules/courses/courses.module';
 import { WalletsModule } from './modules/wallets/wallets.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { PaymentModule } from './modules/payment/payment.module';
 import { TeachersModule } from './modules/teachers/teachers.module';
 
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -63,6 +64,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     AiModule,
     CoursesModule,
     WalletsModule,
+    PaymentModule,
     SubscriptionsModule,
     TeachersModule,
     NotificationsModule,

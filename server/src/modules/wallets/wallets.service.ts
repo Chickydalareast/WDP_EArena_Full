@@ -16,6 +16,7 @@ import {
 } from './schemas/wallet-transaction.schema';
 import {
   MockDepositPayload,
+  ProcessDepositPayload,
   ProcessPaymentPayload,
   GetTransactionsPayload,
   ProcessSplitPaymentPayload,
@@ -55,6 +56,53 @@ export class WalletsService {
   async getMyWallet(userId: string) {
     const wallet = await this.walletsRepo.getOrCreateWallet(userId);
     return { balance: wallet.balance, status: wallet.status };
+  }
+
+  async processDeposit(payload: ProcessDepositPayload) {
+    if (payload.amount <= 0)
+      throw new BadRequestException('Số tiền nạp phải lớn hơn 0.');
+
+    if (payload.referenceId) {
+      const refOid = new Types.ObjectId(payload.referenceId);
+      const exists =
+        await this.walletTransactionsRepo.hasDepositForOrderReference(refOid);
+      if (exists) {
+        const wallet = await this.walletsRepo.getOrCreateWallet(payload.userId);
+        return {
+          message: 'Giao dịch đã được ghi nhận trước đó',
+          balance: wallet.balance,
+        };
+      }
+    }
+
+    return this.walletsRepo.executeInTransaction(async () => {
+      const wallet = await this.walletsRepo.getOrCreateWallet(payload.userId);
+      const updatedWallet = await this.walletsRepo.atomicAdd(
+        wallet._id,
+        payload.amount,
+      );
+
+      if (!updatedWallet)
+        throw new InternalServerErrorException('Lỗi hệ thống khi nạp tiền.');
+
+      await this.walletTransactionsRepo.createDocument({
+        walletId: updatedWallet._id,
+        type: TransactionType.DEPOSIT,
+        amount: payload.amount,
+        postBalance: updatedWallet.balance,
+        referenceId: payload.referenceId ? new Types.ObjectId(payload.referenceId) : undefined,
+        referenceType: ReferenceType.ORDER,
+        description: payload.description || 'Nạp tiền qua PayOS',
+      });
+
+      this.eventEmitter.emit(WalletEventPattern.DEPOSIT_SUCCESS, {
+        userId: payload.userId,
+        amount: payload.amount,
+        newBalance: updatedWallet.balance,
+      } as DepositSuccessEventPayload);
+
+      return { message: 'Nạp tiền thành công', balance: updatedWallet.balance };
+    });
   }
 
   async getMyTransactions(payload: GetTransactionsPayload) {
