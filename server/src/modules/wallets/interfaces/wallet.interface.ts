@@ -6,6 +6,13 @@ export interface MockDepositPayload {
   amount: number;
 }
 
+export interface ProcessDepositPayload {
+  userId: string;
+  amount: number;
+  referenceId?: string;
+  description: string;
+}
+
 export interface ProcessPaymentPayload {
   userId: string;
   amount: number;

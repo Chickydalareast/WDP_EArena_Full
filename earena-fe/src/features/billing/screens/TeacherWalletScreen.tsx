@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { useAuthStore } from '@/features/auth/stores/auth.store';
 import { useSyncWallet, useMyTransactions } from '../hooks/useBillingFlows';
 import { useBillingUIStore } from '../stores/billing-ui.store';
@@ -9,6 +9,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Skeleton } from '@/shared/components/ui/skeleton';
 import { Wallet, ArrowUpRight, ArrowDownRight, History, PlusCircle, ShieldCheck } from 'lucide-react';
 import { TransactionType } from '../types/billing.schema';
+import { PayOsReturnHandler } from '../components/PayOsReturnHandler';
 
 const TRANSACTION_UI_MAP: Record<TransactionType, { icon: React.ElementType, sign: string, colorClass: string, bgClass: string }> = {
     DEPOSIT: { icon: ArrowDownRight, sign: '+', colorClass: 'text-green-600 dark:text-green-500', bgClass: 'bg-green-100 dark:bg-green-900/30' },
@@ -39,6 +40,9 @@ export function TeacherWalletScreen() {
 
     return (
         <div className="max-w-[1600px] w-full mx-auto p-4 md:p-6 lg:p-8 space-y-6 animate-in fade-in duration-500">
+            <Suspense fallback={null}>
+                <PayOsReturnHandler />
+            </Suspense>
             {/* TOP BENTO GRID */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 

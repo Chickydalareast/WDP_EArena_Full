@@ -45,6 +45,15 @@ export class WalletTransactionsRepository extends AbstractRepository<WalletTrans
     };
   }
 
+  async hasDepositForOrderReference(referenceId: Types.ObjectId): Promise<boolean> {
+    const n = await this.transactionModel.countDocuments({
+      referenceId,
+      type: TransactionType.DEPOSIT,
+      referenceType: ReferenceType.ORDER,
+    });
+    return n > 0;
+  }
+
   async calculateTotalRevenueByCourse(
     courseId: string | Types.ObjectId,
   ): Promise<number> {

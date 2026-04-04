@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, type Resolver } from 'react-hook-form';
 import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import {
@@ -13,19 +13,26 @@ import {
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { useBillingUIStore } from '../stores/billing-ui.store';
-import { useTransactionConfirmStore } from '../stores/transaction-confirm.store';
-import { useMockDeposit } from '../hooks/useBillingFlows';
+import { useBillingFlows, useSyncWallet } from '../hooks/useBillingFlows';
 import { useAuthStore } from '@/features/auth/stores/auth.store';
+import { ROUTES } from '@/config/routes';
 import { depositSchema, DepositFormDTO } from '../types/billing.schema';
-import { Loader2, Wallet, ShieldCheck } from 'lucide-react';
+import { Loader2, Wallet, ShieldCheck, AlertCircle } from 'lucide-react';
 
 export function DepositModal() {
   const { isDepositModalOpen, requiredAmount, closeDepositModal } = useBillingUIStore();
-  const openConfirm = useTransactionConfirmStore((state) => state.openConfirm);
-  const balance = useAuthStore((state) => state.user?.balance ?? 0);
-  
-  const { mutateAsync: processDepositAsync, isPending } = useMockDeposit();
+  const authBalance = useAuthStore((state) => state.user?.balance ?? 0);
+  const role = useAuthStore((state) => state.user?.role);
+  const { createPaymentLink, isPending, error, setError } = useBillingFlows();
+  const { data: walletData, refetch: refetchWallet, isFetching: isWalletFetching } =
+    useSyncWallet();
 
+  const walletReturnPath =
+    role === 'TEACHER' ? ROUTES.TEACHER.WALLET : ROUTES.STUDENT.WALLET;
+
+  const balance =
+    typeof walletData?.balance === 'number' ? walletData.balance : authBalance;
+  
   const {
     register,
     handleSubmit,
@@ -44,23 +51,30 @@ export function DepositModal() {
     }
   }, [isDepositModalOpen, requiredAmount, setValue]);
 
-  const onSubmit = (data: DepositFormDTO) => {
-    openConfirm({
-      title: 'Xác nhận nạp tiền',
-      description: 'Bạn đang yêu cầu nạp thêm tiền vào ví hệ thống.',
-      actionType: 'DEPOSIT',
-      amount: data.amount,
-      currentBalance: balance,
-      onConfirm: async () => {
-        await processDepositAsync(data.amount)
-          .then(() => reset())
-          .catch(() => {});
+  useEffect(() => {
+    if (isDepositModalOpen) {
+      void refetchWallet();
+    }
+  }, [isDepositModalOpen, refetchWallet]);
+
+  const onSubmit = async (data: DepositFormDTO) => {
+    try {
+      const response = await createPaymentLink(data.amount, walletReturnPath);
+      if (response.checkoutUrl) {
+        window.location.href = response.checkoutUrl;
       }
-    });
+    } catch (err) {
+      // Error is handled by the hook
+    }
+  };
+
+  const handleClose = () => {
+    setError(null);
+    closeDepositModal();
   };
 
   return (
-    <Dialog open={isDepositModalOpen} onOpenChange={(isOpen) => !isOpen && closeDepositModal()}>
+    <Dialog open={isDepositModalOpen} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogContent className="sm:max-w-md" onInteractOutside={(e) => { if (isPending) e.preventDefault(); }}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl font-bold">
@@ -68,7 +82,10 @@ export function DepositModal() {
             Nạp tiền vào hệ thống
           </DialogTitle>
           <DialogDescription className="pt-2">
-            Số dư hiện tại: <strong className="text-primary text-base">{balance.toLocaleString()}đ</strong>
+            Số dư hiện tại:{' '}
+            <strong className="text-primary text-base">
+              {isWalletFetching && isDepositModalOpen ? '…' : `${balance.toLocaleString()}đ`}
+            </strong>
             {requiredAmount > 0 && (
               <span className="block mt-3 text-amber-700 dark:text-amber-500 bg-amber-50 dark:bg-amber-900/20 p-3 rounded-xl border border-amber-200 dark:border-amber-800/50">
                 Bạn cần nạp thêm ít nhất <strong>{requiredAmount.toLocaleString()}đ</strong> để thực hiện giao dịch này.
@@ -109,8 +126,15 @@ export function DepositModal() {
             ))}
           </div>
 
+          {error && (
+            <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive text-sm">
+              <AlertCircle className="w-4 h-4 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
           <div className="flex justify-end gap-3 w-full pt-6 border-t border-border">
-            <Button type="button" variant="outline" className="rounded-xl font-bold" onClick={closeDepositModal} disabled={isPending}>
+            <Button type="button" variant="outline" className="rounded-xl font-bold" onClick={handleClose} disabled={isPending}>
               Hủy bỏ
             </Button>
             <Button type="submit" disabled={isPending} className="min-w-[140px] rounded-xl font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 transition-transform active:scale-95">

@@ -87,6 +87,11 @@ export const API_ENDPOINTS = {
     MOCK_DEPOSIT: '/wallets/mock-deposit',
     WITHDRAW: '/wallets/withdraw',
   },
+
+  PAYMENT: {
+    CREATE_EMBEDDED_LINK: '/payment/create-embedded-link',
+    CONFIRM_RETURN: '/payment/confirm-return',
+  },
   
   ADMIN_WALLETS: {
     WITHDRAWALS: '/admin/wallets/withdrawals',
