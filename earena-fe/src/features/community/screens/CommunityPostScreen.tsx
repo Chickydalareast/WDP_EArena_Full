@@ -23,8 +23,6 @@ import {
 } from '../api/community-api';
 import { PostBodyDisplay } from '../components/PostBodyDisplay';
 import { PostAttachmentsDisplay } from '../components/PostAttachmentsDisplay';
-import type { CommunityAttachment } from '../components/PostAttachmentsDisplay';
-import { CommunityAttachmentPicker } from '../components/CommunityAttachmentPicker';
 import { toast } from 'sonner';
 import { Loader2, ArrowLeft, Reply } from 'lucide-react';
 import { formatCurrency } from '@/shared/lib/utils';
@@ -82,7 +80,6 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
   const user = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [body, setBody] = useState('');
-  const [commentAttachments, setCommentAttachments] = useState<CommunityAttachment[]>([]);
   const [parentCommentId, setParentCommentId] = useState<string | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState('');
@@ -170,18 +167,16 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
       );
       return;
     }
-    if (!body.trim() && commentAttachments.length === 0) {
-      toast.error('Nhập nội dung hoặc thêm ít nhất một ảnh.');
+    if (!body.trim()) {
+      toast.error('Vui lòng nhập nội dung bình luận.');
       return;
     }
     try {
       await createCommunityComment(postId, {
         ...(body.trim() ? { body: body.trim() } : {}),
-        ...(commentAttachments.length ? { attachments: commentAttachments } : {}),
         ...(parentCommentId ? { parentCommentId } : {}),
       });
       setBody('');
-      setCommentAttachments([]);
       setParentCommentId(null);
       refetchAll();
     } catch {
@@ -338,7 +333,6 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
                 }
                 setParentCommentId(cid);
                 setBody('');
-                setCommentAttachments([]);
               }}
             >
               <Reply className="w-3 h-3 mr-1" />
@@ -492,7 +486,6 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
                   size="sm"
                   onClick={() => {
                     setParentCommentId(null);
-                    setCommentAttachments([]);
                   }}
                 >
                   Hủy
@@ -504,10 +497,6 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
               onChange={(e) => setBody(e.target.value)}
               placeholder={parentCommentId ? 'Viết phản hồi...' : 'Viết bình luận...'}
               rows={3}
-            />
-            <CommunityAttachmentPicker
-              attachments={commentAttachments}
-              onChange={setCommentAttachments}
             />
             <Button onClick={sendComment}>Gửi</Button>
           </>

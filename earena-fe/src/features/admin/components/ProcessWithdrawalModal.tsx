@@ -39,6 +39,9 @@ export function ProcessWithdrawalModal({ request, onClose }: ProcessWithdrawalMo
 
     if (!request) return null;
 
+    const teacherName = request.teacherId?.fullName?.trim() || 'Không có thông tin GV';
+    const bank = request.bankInfo;
+
     const onSubmit = (data: ProcessWithdrawalDTO) => {
         mutate({ id: request._id, payload: data });
     };
@@ -60,7 +63,7 @@ export function ProcessWithdrawalModal({ request, onClose }: ProcessWithdrawalMo
                 <div className="bg-slate-50 border border-border rounded-xl p-4 my-2 text-sm space-y-3">
                     <div className="flex justify-between border-b border-border pb-2">
                         <span className="text-muted-foreground">Giáo viên:</span>
-                        <span className="font-bold text-slate-800">{request.teacherId.fullName}</span>
+                        <span className="font-bold text-slate-800">{teacherName}</span>
                     </div>
                     <div className="flex justify-between border-b border-border pb-2">
                         <span className="text-muted-foreground">Số tiền rút:</span>
@@ -68,11 +71,11 @@ export function ProcessWithdrawalModal({ request, onClose }: ProcessWithdrawalMo
                     </div>
                     <div className="grid grid-cols-3 gap-2 pt-1">
                         <div className="col-span-1 text-muted-foreground">Ngân hàng:</div>
-                        <div className="col-span-2 font-semibold text-right">{request.bankInfo.bankName}</div>
+                        <div className="col-span-2 font-semibold text-right">{bank?.bankName ?? '—'}</div>
                         <div className="col-span-1 text-muted-foreground">Số TK:</div>
-                        <div className="col-span-2 font-mono font-bold text-right tracking-wider">{request.bankInfo.accountNumber}</div>
+                        <div className="col-span-2 font-mono font-bold text-right tracking-wider">{bank?.accountNumber ?? '—'}</div>
                         <div className="col-span-1 text-muted-foreground">Chủ TK:</div>
-                        <div className="col-span-2 font-semibold text-right">{request.bankInfo.accountName}</div>
+                        <div className="col-span-2 font-semibold text-right">{bank?.accountName ?? '—'}</div>
                     </div>
                 </div>
 

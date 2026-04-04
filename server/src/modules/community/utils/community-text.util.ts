@@ -10,6 +10,8 @@ export function derivePlainFromCommunityBody(raw: string): string {
   }
   return t
     .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\u00A0/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 20000);
@@ -27,11 +29,11 @@ export function resolvePostBodyPlainForSave(
       typeof a.url === 'string' &&
       a.url.trim().length > 0,
   );
-  if ((!bodyPlain || bodyPlain.length < 3) && !hasImage) {
+  // Khớp FE (hasMeaningfulRichText): chỉ cần có ký tự thật sau khi strip HTML, không ép tối thiểu 3 ký tự
+  // (ví dụ "ok" = 2 ký tự vẫn hợp lệ).
+  if (!bodyPlain) {
+    if (hasImage) return '[Đính kèm ảnh]';
     return null;
-  }
-  if ((!bodyPlain || bodyPlain.length < 3) && hasImage) {
-    return '[Đính kèm ảnh]';
   }
   return bodyPlain;
 }
@@ -47,7 +49,13 @@ export function extractPlainFromTiptapJson(jsonStr: string): string {
       if (Array.isArray(o.content)) o.content.forEach(walk);
     };
     walk(node);
-    return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, 20000);
+    return parts
+      .join(' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\u00A0/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 20000);
   } catch {
     return '';
   }

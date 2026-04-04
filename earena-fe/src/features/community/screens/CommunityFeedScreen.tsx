@@ -36,8 +36,6 @@ import {
 } from '../api/community-api';
 import { PostBodyDisplay } from '../components/PostBodyDisplay';
 import { PostAttachmentsDisplay } from '../components/PostAttachmentsDisplay';
-import type { CommunityAttachment } from '../components/PostAttachmentsDisplay';
-import { CommunityAttachmentPicker } from '../components/CommunityAttachmentPicker';
 import { toast } from 'sonner';
 import { Loader2, Bookmark, MessageCircle, Sparkles, Bell, BellOff } from 'lucide-react';
 import { cn, formatCurrency } from '@/shared/lib/utils';
@@ -82,7 +80,6 @@ export function CommunityFeedScreen(props?: { lockedSubjectId?: string }) {
   const [cursor, setCursor] = useState<string | undefined>();
   const [composerOpen, setComposerOpen] = useState(false);
   const [body, setBody] = useState('');
-  const [composerAttachments, setComposerAttachments] = useState<CommunityAttachment[]>([]);
   const [postType, setPostType] = useState<CommunityPostType>('HOMEWORK_QUESTION');
 
   const feedSubjectId =
@@ -176,8 +173,8 @@ export function CommunityFeedScreen(props?: { lockedSubjectId?: string }) {
       return;
     }
     const hasText = hasMeaningfulRichText(body);
-    if (!hasText && composerAttachments.length === 0) {
-      toast.error('Nhập nội dung hoặc thêm ít nhất một ảnh.');
+    if (!hasText) {
+      toast.error('Vui lòng nhập nội dung bài viết.');
       return;
     }
     const sid = lockedSubjectId || composerSubjectId || undefined;
@@ -185,14 +182,10 @@ export function CommunityFeedScreen(props?: { lockedSubjectId?: string }) {
       await createCommunityPost({
         type: postType,
         bodyJson: hasText ? body : '<p></p>',
-        ...(composerAttachments.length
-          ? { attachments: composerAttachments }
-          : {}),
         ...(sid ? { subjectId: sid } : {}),
       });
       toast.success('Đã đăng bài');
       setBody('');
-      setComposerAttachments([]);
       setComposerOpen(false);
       setCursor(undefined);
       await Promise.all([feedQuery.refetch(), sidebarQuery.refetch()]);
@@ -311,7 +304,7 @@ export function CommunityFeedScreen(props?: { lockedSubjectId?: string }) {
         </Card>
       </aside>
 
-      <section className="lg:col-span-6 space-y-4 order-1 lg:order-2">
+      <section className="lg:col-span-9 space-y-4 order-1 lg:order-2">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             {lockedSubjectId ? (
@@ -411,10 +404,6 @@ export function CommunityFeedScreen(props?: { lockedSubjectId?: string }) {
               </p>
             )}
             <RichTextEditor value={body} onChange={setBody} placeholder="Viết nội dung..." />
-            <CommunityAttachmentPicker
-              attachments={composerAttachments}
-              onChange={setComposerAttachments}
-            />
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setComposerOpen(false)}>
                 Hủy
@@ -452,27 +441,6 @@ export function CommunityFeedScreen(props?: { lockedSubjectId?: string }) {
           </div>
         )}
       </section>
-
-      <aside className="lg:col-span-3 space-y-4 order-3">
-        <Card className="p-4">
-          <p className="text-xs font-bold uppercase text-muted-foreground mb-3">
-            Top đóng góp
-          </p>
-          <div className="space-y-3 text-sm">
-            {(sidebarQuery.data as { topContributors?: { userId: string; reputation: number; user?: { fullName?: string } }[] })?.topContributors?.map((c) => (
-              <div key={c.userId} className="flex justify-between gap-2">
-                <Link
-                  href={ROUTES.PUBLIC.COMMUNITY_PROFILE(c.userId)}
-                  className="font-medium text-primary hover:underline truncate"
-                >
-                  {c.user?.fullName || 'Thành viên'}
-                </Link>
-                <span className="text-muted-foreground shrink-0">{c.reputation} điểm</span>
-              </div>
-            )) || null}
-          </div>
-        </Card>
-      </aside>
     </div>
   );
 }

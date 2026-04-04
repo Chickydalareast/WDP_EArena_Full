@@ -59,8 +59,11 @@ export function AdminWithdrawalsScreen() {
         if (!data?.data) return [];
 
         return data.data.map((req) => {
-            const statusUi = STATUS_MAP[req.status];
+            const statusUi = STATUS_MAP[req.status] ?? STATUS_MAP.PENDING;
             const StatusIcon = statusUi.icon;
+            const teacher = req.teacherId;
+            const teacherName = teacher?.fullName?.trim() || 'Không có thông tin GV';
+            const teacherEmail = teacher?.email?.trim() || '—';
 
             return {
                 id: (
@@ -71,15 +74,15 @@ export function AdminWithdrawalsScreen() {
                 ),
                 teacher: (
                     <div>
-                        <div className="font-semibold text-slate-800">{req.teacherId.fullName}</div>
-                        <div className="text-slate-500 text-xs">{req.teacherId.email}</div>
+                        <div className="font-semibold text-slate-800">{teacherName}</div>
+                        <div className="text-slate-500 text-xs">{teacherEmail}</div>
                     </div>
                 ),
                 amount: <div className="font-bold text-red-600">{formatCurrency(req.amount)}</div>,
                 bank: (
                     <div>
-                        <div className="font-semibold text-sm">{req.bankInfo.bankName}</div>
-                        <div className="text-slate-500 text-xs font-mono">{req.bankInfo.accountNumber}</div>
+                        <div className="font-semibold text-sm">{req.bankInfo?.bankName ?? '—'}</div>
+                        <div className="text-slate-500 text-xs font-mono">{req.bankInfo?.accountNumber ?? '—'}</div>
                     </div>
                 ),
                 status: (

@@ -18,9 +18,10 @@ export interface BankInfo {
 export interface WithdrawalRequest {
     _id: string;
     amount: number;
-    bankInfo: BankInfo;
+    bankInfo: BankInfo | null;
     status: WithdrawalStatus;
-    teacherId: TeacherInfo;
+    /** Populate có thể null nếu tài khoản GV đã xóa */
+    teacherId: TeacherInfo | null;
     createdAt: string;
 }
 
