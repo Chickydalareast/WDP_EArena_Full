@@ -555,34 +555,41 @@ function PostCard({
   return (
     <Card className="p-5 space-y-3">
       <div className="flex items-start justify-between gap-3">
-        <Link
-          href={author?.id ? ROUTES.PUBLIC.COMMUNITY_PROFILE(String(author.id)) : '#'}
-          className="flex min-w-0 items-center gap-3 rounded-xl pr-3 transition hover:bg-muted/40"
-        >
-          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
-            {(author?.fullName as string)?.charAt(0) || '?'}
-          </div>
-          <div className="min-w-0">
-            <div className="font-semibold truncate">
-              {(author?.fullName as string) || 'Ẩn danh'}
-              <span className="ml-2 text-xs font-normal text-muted-foreground">
-                {author?.role as string}
-              </span>
+        <div className="flex min-w-0 flex-1 items-center gap-3 rounded-xl pr-3">
+          <Link
+            href={author?.id ? ROUTES.PUBLIC.COMMUNITY_PROFILE(String(author.id)) : '#'}
+            className="flex shrink-0 rounded-xl transition hover:bg-muted/40"
+            aria-label="Xem hồ sơ"
+          >
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold">
+              {(author?.fullName as string)?.charAt(0) || '?'}
             </div>
+          </Link>
+          <div className="min-w-0 flex-1">
+            <Link
+              href={author?.id ? ROUTES.PUBLIC.COMMUNITY_PROFILE(String(author.id)) : '#'}
+              className="inline-flex max-w-full rounded-lg transition hover:bg-muted/40"
+            >
+              <span className="font-semibold truncate">
+                {(author?.fullName as string) || 'Ẩn danh'}
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  {author?.role as string}
+                </span>
+              </span>
+            </Link>
             <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1">
               <span>{TYPE_LABELS[String(post.type)] || String(post.type)}</span>
               {subject && (
                 <Link
                   href={ROUTES.PUBLIC.COMMUNITY_SUBJECT(subject.id)}
                   className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-primary hover:bg-primary/15"
-                  onClick={(e) => e.stopPropagation()}
                 >
                   {subject.name}
                 </Link>
               )}
             </div>
           </div>
-        </Link>
+        </div>
         <div className="flex items-center gap-1 shrink-0">
           {canManagePost && (
             <>
