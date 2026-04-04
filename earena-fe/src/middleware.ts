@@ -14,7 +14,8 @@ export function middleware(request: NextRequest) {
   const accessToken = request.cookies.get('accessToken')?.value;
   const refreshToken = request.cookies.get('refreshToken')?.value;
 
-  const authRoutes = Object.values(ROUTES.AUTH);
+  /** Chỉ các trang đăng nhập/đăng ký — không gồm /waiting-approval (tránh redirect vòng) */
+  const authRoutes = [ROUTES.AUTH.LOGIN, ROUTES.AUTH.REGISTER, ROUTES.AUTH.FORGOT_PASSWORD];
   const isAuthRoute = authRoutes.some((route) => pathname.startsWith(route));
   
   const isStudentRoute = pathname.startsWith(ROUTES.STUDENT.DASHBOARD);
@@ -25,6 +26,7 @@ export function middleware(request: NextRequest) {
 
   let isTokenValid = false;
   let userRole: string | null = null;
+  let teacherVerificationStatus: string | undefined;
 
   if (accessToken) {
     try {
@@ -32,11 +34,16 @@ export function middleware(request: NextRequest) {
       if (!isTokenExpired(tokenPayload)) {
         isTokenValid = true;
         userRole = tokenPayload.role as string;
+        teacherVerificationStatus = tokenPayload.tvs as string | undefined;
       }
     } catch (error) {
       isTokenValid = false;
     }
   }
+
+  const isTeacherVerified =
+    userRole !== 'TEACHER' || teacherVerificationStatus === 'VERIFIED';
+  const isWaitingApprovalRoute = pathname.startsWith(ROUTES.AUTH.WAITING_APPROVAL);
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-is-auth', isTokenValid ? 'true' : 'false');
@@ -51,19 +58,32 @@ export function middleware(request: NextRequest) {
     },
   };
 
+  if (isWaitingApprovalRoute && isTokenValid && userRole === 'TEACHER' && isTeacherVerified) {
+    return NextResponse.redirect(new URL(ROLE_ROOT_PATHS.TEACHER, request.url));
+  }
+
   if (isAuthRoute) {
     if (isTokenValid && userRole) {
-      const targetRoute = userRole === 'ADMIN'
-        ? (ROLE_ROOT_PATHS.ADMIN || '/admin')
-        : userRole === 'STUDENT'
-          ? ROLE_ROOT_PATHS.STUDENT
-          : ROLE_ROOT_PATHS.TEACHER;
-          
+      let targetRoute: string =
+        userRole === 'ADMIN'
+          ? ROLE_ROOT_PATHS.ADMIN || '/admin'
+          : userRole === 'STUDENT'
+            ? ROLE_ROOT_PATHS.STUDENT
+            : ROLE_ROOT_PATHS.TEACHER;
+
+      if (userRole === 'TEACHER' && !isTeacherVerified) {
+        targetRoute = ROUTES.AUTH.WAITING_APPROVAL;
+      }
+
       return NextResponse.redirect(new URL(targetRoute, request.url));
     }
-    
+
+    if (!isTokenValid && !refreshToken) {
+      return NextResponse.next();
+    }
+
     if (!isTokenValid && refreshToken) {
-      return NextResponse.redirect(new URL(ROLE_ROOT_PATHS.STUDENT, request.url));
+      return NextResponse.next();
     }
   }
 
@@ -73,13 +93,21 @@ export function middleware(request: NextRequest) {
       loginUrl.searchParams.set('callbackUrl', pathname);
       
       const response = NextResponse.redirect(loginUrl);
-      if (accessToken) response.cookies.delete('accessToken'); 
       return response;
     }
 
     if (isTokenValid && userRole) {
+      if (userRole === 'TEACHER' && !isTeacherVerified && isTeacherRoute) {
+        return NextResponse.redirect(new URL(ROUTES.AUTH.WAITING_APPROVAL, request.url));
+      }
+
       if (isStudentRoute && userRole !== 'STUDENT') {
-        const fallback = userRole === 'ADMIN' ? (ROLE_ROOT_PATHS.ADMIN || '/admin') : ROLE_ROOT_PATHS.TEACHER;
+        const fallback =
+          userRole === 'ADMIN'
+            ? ROLE_ROOT_PATHS.ADMIN || '/admin'
+            : userRole === 'TEACHER' && !isTeacherVerified
+              ? ROUTES.AUTH.WAITING_APPROVAL
+              : ROLE_ROOT_PATHS.TEACHER;
         return NextResponse.redirect(new URL(fallback, request.url));
       }
 
@@ -89,7 +117,12 @@ export function middleware(request: NextRequest) {
       }
 
       if (isAdminRoute && userRole !== 'ADMIN') {
-        const fallback = userRole === 'TEACHER' ? ROLE_ROOT_PATHS.TEACHER : ROLE_ROOT_PATHS.STUDENT;
+        const fallback =
+          userRole === 'TEACHER'
+            ? isTeacherVerified
+              ? ROLE_ROOT_PATHS.TEACHER
+              : ROUTES.AUTH.WAITING_APPROVAL
+            : ROLE_ROOT_PATHS.STUDENT;
         return NextResponse.redirect(new URL(fallback, request.url));
       }
     }

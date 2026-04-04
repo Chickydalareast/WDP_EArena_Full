@@ -60,6 +60,19 @@ axiosClient.interceptors.response.use(
       return Promise.reject(parseApiError(error));
     }
 
+    // Handle teacher verification block (403)
+    if (error.response.status === 403 && !isServer) {
+      const data = error.response.data as any;
+      const message = data?.message || '';
+      if (
+        typeof message === 'string' &&
+        (message.includes('chưa được xác minh') || message.includes('chưa được phê duyệt'))
+      ) {
+        window.location.href = '/waiting-approval';
+        return Promise.reject(parseApiError(error));
+      }
+    }
+
     const isNoRefreshEndpoint = originalRequest.url
       ? NO_REFRESH_ENDPOINTS.some(url => originalRequest.url?.includes(url))
       : false;

@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useForm, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm, Controller, type Resolver } from 'react-hook-form';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { z } from 'zod';
 import { baseUpdateCourseSchema, UpdateCourseDTO, CourseStatus } from '../types/course.schema';
 import { useCourseSettings, useUpdateCourse, useCourseDashboardStats, useDeleteCourse } from '../hooks/useCourseSettings';
@@ -55,7 +55,7 @@ export function CourseSettingsForm({ courseId }: { courseId: string }) {
   const [uploadedVideoName, setUploadedVideoName] = useState<string | null>(null);
 
   const { register, control, handleSubmit, setValue, watch, formState: { errors, isDirty }, reset } = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema) as Resolver<FormValues>,
   });
 
   useEffect(() => {
@@ -293,7 +293,7 @@ export function CourseSettingsForm({ courseId }: { courseId: string }) {
                 {isUploadingVideo && (
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs font-medium"><span className="text-muted-foreground">Đang tải lên...</span><span className="text-blue-600">{videoProgress}%</span></div>
-                    <Progress value={videoProgress} className="h-2" indicatorColor="bg-blue-500" />
+                    <Progress value={videoProgress} className="h-2" />
                   </div>
                 )}
                 {!isUploadingVideo && currentVideoId && (

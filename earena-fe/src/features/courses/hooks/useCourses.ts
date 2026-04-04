@@ -63,7 +63,7 @@ export const usePublicCourseDetail = (slug: string) => {
     select: (response): PublicCourseDetail | undefined => {
         if (!response || typeof response !== 'object') return undefined;
 
-        const raw = response as Record<string, unknown>;
+        const raw = response as unknown as Record<string, unknown>;
 
         if ('course' in raw && 'curriculum' in raw) {
             const courseData = raw.course as Record<string, unknown>;

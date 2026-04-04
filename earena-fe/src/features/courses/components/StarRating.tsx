@@ -38,7 +38,6 @@ export const StarRating = ({
                         onMouseEnter={() => !readonly && setHoverValue(star)}
                         onMouseLeave={() => !readonly && setHoverValue(null)}
                         onClick={() => !readonly && onChange?.(star)}
-                        draggable={false}
                     />
                 );
             })}

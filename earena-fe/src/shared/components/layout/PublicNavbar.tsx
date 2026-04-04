@@ -1,7 +1,8 @@
 // src/shared/components/layout/PublicNavbar.tsx
 import Link from "next/link";
 import { Button } from "@/shared/components/ui/button";
-import { School, Menu } from "lucide-react"; // Đã đồng bộ sang lucide-react thay vì material-icons
+import { School, Menu, MessagesSquare } from "lucide-react";
+import { ROUTES } from "@/config/routes";
 
 export default function PublicNavbar() {
   return (
@@ -21,6 +22,13 @@ export default function PublicNavbar() {
 
           {/* Actions */}
           <div className="flex items-center space-x-4 ml-auto">
+            <Link
+              href={ROUTES.PUBLIC.COMMUNITY}
+              className="hidden md:flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary transition"
+            >
+              <MessagesSquare size={18} />
+              Cộng đồng
+            </Link>
             <Link
               href="/roles/teacher"
               className="hidden md:block text-sm font-medium text-muted-foreground hover:text-primary transition"

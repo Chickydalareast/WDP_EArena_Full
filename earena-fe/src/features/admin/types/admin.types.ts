@@ -92,7 +92,6 @@ export interface KnowledgeTopic {
   ancestors?: string[];
 }
 
-
 export type PricingPlanCode = 'FREE' | 'PRO' | 'ENTERPRISE';
 
 export interface PricingPlan {
@@ -107,13 +106,11 @@ export interface PricingPlan {
   updatedAt?: string;
 }
 
-
 export interface BusinessMetrics {
   users: { total: number; teachers: number; students: number };
   revenue: { total: number; currency: string; paidOrders: number };
   note?: string;
 }
-
 
 export type CourseApprovalStatus = 'DRAFT' | 'PENDING_REVIEW' | 'PUBLISHED' | 'REJECTED' | 'ARCHIVED';
 
@@ -243,4 +240,27 @@ export interface AdminDynamicConfig {
       tags: string[];
     }>;
   }>;
+}
+
+// Teacher Verification Types
+export type TeacherVerificationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED';
+
+export interface Qualification {
+  url: string;
+  name: string;
+  uploadedAt: string;
+}
+
+export interface AdminTeacherVerification {
+  _id: string;
+  email: string;
+  fullName: string;
+  avatar?: string;
+  phone?: string;
+  teacherVerificationStatus: TeacherVerificationStatus;
+  teacherVerificationNote?: string;
+  teacherVerifiedAt?: string;
+  hasUploadedQualifications: boolean;
+  qualifications?: Qualification[];
+  createdAt?: string;
 }

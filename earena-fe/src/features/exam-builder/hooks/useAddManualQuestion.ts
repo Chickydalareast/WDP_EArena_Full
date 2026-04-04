@@ -25,7 +25,7 @@ const findFolderByName = (data: unknown, targetName: string): string | null => {
   if (folders.length === 0) return null;
 
   for (const folder of folders) {
-    if (folder.name === targetName) return folder._id;
+    if (folder.name === targetName) return folder._id ?? null;
     if (Array.isArray(folder.children) && folder.children.length > 0) {
       const foundId = findFolderByName(folder.children, targetName);
       if (foundId) return foundId;

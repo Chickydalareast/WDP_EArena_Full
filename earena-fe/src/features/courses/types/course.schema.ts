@@ -97,6 +97,8 @@ export interface CourseBasic {
 export interface CourseTeacherDetail extends CourseBasic {
     createdAt: string;
     updatedAt: string;
+    progressionMode?: 'FREE' | 'STRICT_LINEAR';
+    isStrictExam?: boolean;
     curriculum?: {
         sections: SectionPreview[];
     };

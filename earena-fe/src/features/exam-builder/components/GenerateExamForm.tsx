@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useForm, useFieldArray, useWatch } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { Loader2, Plus, Trash2, Zap } from 'lucide-react';
 
 import { Button } from '@/shared/components/ui/button';

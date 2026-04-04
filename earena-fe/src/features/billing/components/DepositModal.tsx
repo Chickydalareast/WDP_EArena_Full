@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm, type Resolver } from 'react-hook-form';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import {
   Dialog,
   DialogContent,
@@ -33,7 +33,7 @@ export function DepositModal() {
     reset,
     setValue,
   } = useForm<DepositFormDTO>({
-    resolver: zodResolver(depositSchema),
+    resolver: zodResolver(depositSchema) as Resolver<DepositFormDTO>,
     defaultValues: { amount: 50000 },
   });
 

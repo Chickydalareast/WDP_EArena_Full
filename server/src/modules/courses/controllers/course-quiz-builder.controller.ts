@@ -33,6 +33,7 @@ import {
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../../common/guards/roles.guard';
 import { Roles } from '../../../common/decorators/roles.decorator';
+import { RequireTeacherVerified } from '../../../common/decorators/teacher-verified.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { UserRole } from '../../../common/enums/user-role.enum';
 import { CourseQuizBuilderService } from '../services/course-quiz-builder.service';
@@ -40,6 +41,7 @@ import { RuleQuestionType } from 'src/modules/exams/interfaces/exam-matrix.inter
 
 @Controller('courses/builder/quiz')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@RequireTeacherVerified()
 export class CourseQuizBuilderController {
   constructor(
     private readonly courseQuizBuilderService: CourseQuizBuilderService,

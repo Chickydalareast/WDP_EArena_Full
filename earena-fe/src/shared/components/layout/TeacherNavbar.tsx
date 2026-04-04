@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useAuthStore } from '@/features/auth/stores/auth.store';
 import { useLogout } from '@/features/auth/hooks/useLogout';
+import { ROUTES } from '@/config/routes';
+import { MessagesNavIcon } from '@/features/messaging/components/MessagesNavIcon';
 import { UserCircle, Settings, LogOut, Bell, Search, School } from 'lucide-react';
 import {
   DropdownMenu,
@@ -47,6 +49,7 @@ export function TeacherNavbar() {
 
           {/* User Actions */}
           <div className="flex items-center space-x-2 sm:space-x-4">
+            <MessagesNavIcon href={ROUTES.TEACHER.MESSAGES} role="TEACHER" />
             <button className="p-2 text-muted-foreground hover:text-primary transition rounded-full hover:bg-muted relative">
               <Bell size={20} />
               <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-background"></span>

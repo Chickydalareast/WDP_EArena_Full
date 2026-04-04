@@ -7,6 +7,7 @@ import { API_ENDPOINTS } from '@/config/api-endpoints';
 import { useNotificationStore } from '../stores/notification.store';
 import { notificationService } from '../api/notification.service';
 import { INotification, NOTIFICATION_TYPES } from '../types/notification.schema';
+import { normalizeNotificationRecord } from '../lib/normalize-notification';
 
 import { useQuestionBankStore } from '@/features/question-bank/stores/question-bank.store';
 import { IAiBatchCompletedEvent } from '@/features/question-bank/types/question-bank.schema';
@@ -19,11 +20,10 @@ export const useNotificationStream = (isAuthenticated: boolean) => {
         try {
             const response = await notificationService.getHistory(1, 15);
             const rawItems = response.items || [];
-            const safeData = rawItems.map((item: { id?: string; _id?: string; [key: string]: unknown }) => ({
-                ...item,
-                id: item.id || item._id,
-            }));
-            
+            const safeData = rawItems
+                .map((item) => normalizeNotificationRecord(item))
+                .filter((n): n is INotification => n != null);
+
             setInitialData(safeData, response.meta?.unreadCount || 0);
         } catch (error) {
             console.error('[SSE] Lỗi khi đồng bộ lịch sử thông báo:', error);
@@ -45,15 +45,33 @@ export const useNotificationStream = (isAuthenticated: boolean) => {
             }
         };
 
+        const handleChatMessage = (event: MessageEvent) => {
+            if (!event.data) return;
+            try {
+                const rawData = JSON.parse(event.data) as {
+                    threadId?: string;
+                    message?: { id?: string };
+                };
+                if (rawData?.threadId && rawData?.message?.id) {
+                    window.dispatchEvent(
+                        new CustomEvent('messaging:chat_message', { detail: rawData }),
+                    );
+                }
+            } catch {
+                /* ignore */
+            }
+        };
+
         const handleStreamData = (event: MessageEvent) => {
             if (!event.data) return;
 
             try {
                 const rawData = JSON.parse(event.data); 
 
-                if (!rawData || typeof rawData !== 'object' || !rawData.id || !rawData.type) return;
+                if (!rawData || typeof rawData !== 'object' || !rawData.type) return;
 
-                const newNotif = rawData as INotification;
+                const newNotif = normalizeNotificationRecord(rawData);
+                if (!newNotif) return;
                 addRealtimeNotification(newNotif);
 
                 if (newNotif.type === 'SYSTEM' && newNotif.payload?.metadata?.event === 'AUTO_TAG_BATCH_COMPLETED') {
@@ -100,6 +118,8 @@ export const useNotificationStream = (isAuthenticated: boolean) => {
             });
         }
 
+        eventSource.addEventListener('CHAT_MESSAGE', handleChatMessage);
+
         eventSource.onmessage = handleStreamData;
 
         eventSource.onerror = () => {
@@ -115,6 +135,7 @@ export const useNotificationStream = (isAuthenticated: boolean) => {
                     eventSource.removeEventListener(type, handleStreamData);
                 });
             }
+            eventSource.removeEventListener('CHAT_MESSAGE', handleChatMessage);
             eventSource.close();
         };
     }, [isAuthenticated, setInitialData, addRealtimeNotification]);

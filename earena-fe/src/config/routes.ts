@@ -4,12 +4,17 @@ export const ROUTES = {
     COURSES: '/courses',
     COURSE_DETAIL: (slug: string) => `/courses/${slug}` as const,
     PRICING: '/pricing',
+    COMMUNITY: '/community',
+    COMMUNITY_SUBJECT: (subjectId: string) => `/community/subject/${subjectId}` as const,
+    COMMUNITY_POST: (postId: string) => `/community/post/${postId}` as const,
+    COMMUNITY_PROFILE: (userId: string) => `/community/profile/${userId}` as const,
   },
 
   AUTH: {
     LOGIN: '/login',
     REGISTER: '/register',
     FORGOT_PASSWORD: '/forgot-password',
+    WAITING_APPROVAL: '/waiting-approval',
   },
 
   STUDENT: {
@@ -18,14 +23,15 @@ export const ROUTES = {
     MY_COURSES: '/student/courses',
     WALLET: '/student/wallet',
 
-    STUDY_ROOM: (courseId: string, lessonId?: string) => {
-      const basePath = `/student/courses/${courseId}/study`;
-      return lessonId ? `${basePath}?lessonId=${lessonId}` as const : basePath as const;
-    },
+    STUDY_ROOM: (courseId: string, lessonId?: string) =>
+      lessonId
+        ? (`/student/courses/${courseId}/study?lessonId=${lessonId}` as const)
+        : (`/student/courses/${courseId}/study` as const),
 
     EXAM_RESULT: (submissionId: string) => `/student/exams/${submissionId}/result` as const,
 
     HISTORY: '/student/history',
+    MESSAGES: '/student/messages',
   },
 
   TEACHER: {
@@ -46,6 +52,7 @@ export const ROUTES = {
     QUESTIONS: '/teacher/questions',
     WALLET: '/teacher/wallet',
     SUBSCRIPTION: '/teacher/subscription',
+    MESSAGES: '/teacher/messages',
   },
 
   ADMIN: {
@@ -67,7 +74,7 @@ export const PUBLIC_PATHS = [
   ROUTES.PUBLIC.HOME,
   ROUTES.PUBLIC.PRICING,
   ...Object.values(ROUTES.AUTH),
-];
+] as string[];
 
 export const ROLE_ROOT_PATHS = {
   STUDENT: ROUTES.STUDENT.DASHBOARD,

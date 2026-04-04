@@ -9,6 +9,7 @@ import { examQueryKeys } from '../api/query-keys';
 
 interface ImportDocxPayload {
   fileName: string;
+  questions: unknown[];
 }
 
 export const useImportDocxToPaper = (paperId: string) => {
@@ -18,16 +19,16 @@ export const useImportDocxToPaper = (paperId: string) => {
     mutationFn: async ({ fileName, questions }: ImportDocxPayload) => {
       if (questions.length === 0) throw new Error('File Word không chứa câu hỏi nào hợp lệ.');
 
-      const folderResponse = await axiosClient.post<any, any>(API_ENDPOINTS.FOLDERS.BASE, {
+      const folderResponse = (await axiosClient.post(API_ENDPOINTS.QUESTION_FOLDERS.BASE, {
         name: `[Tài nguyên Import] ${fileName}`,
         parentId: null
-      });
+      })) as { id?: string; _id?: string };
       const folderId = folderResponse.id || folderResponse._id;
 
-      const bulkResponse = await axiosClient.post<any, any>(API_ENDPOINTS.QUESTIONS.BULK_IMPORT, {
+      const bulkResponse = (await axiosClient.post(API_ENDPOINTS.QUESTIONS.BULK_CREATE, {
         folderId: folderId,
         questions: questions
-      });
+      })) as { id?: string; _id?: string }[];
 
       const createdIds: string[] = bulkResponse.map((q: any) => q.id || q._id);
 

@@ -1,0 +1,1 @@
+{"version":3,"file":"taxonomy.service.js","sourceRoot":"","sources":["../../../../../src/features/auth/api/taxonomy.service.ts"],"names":[],"mappings":";;;AAAA,4DAAwD;AAS3C,QAAA,eAAe,GAAG;IAC7B,WAAW,EAAE,KAAK,IAA2B,EAAE;QAC7C,OAAO,0BAAW,CAAC,GAAG,CAAC,oBAAoB,CAAC,CAAC;IAC/C,CAAC;CACF,CAAC"}

@@ -8,6 +8,7 @@ import { useDebounce } from '@/shared/hooks/useDebounce';
 
 import { MiniQuestionCard } from './MiniQuestionCard';
 import { TreeSelectMulti } from '@/features/exam-builder/components/TreeSelectMulti';
+import type { FolderNode } from '@/features/exam-builder/hooks/useFolders';
 
 import { Input } from '@/shared/components/ui/input';
 import { Skeleton } from '@/shared/components/ui/skeleton';
@@ -26,7 +27,7 @@ export function MiniBankSidebar({ existingQuestionIds }: MiniBankSidebarProps) {
     const debouncedSearch = useDebounce(searchTerm, 500);
 
     const { data: filtersResponse, isLoading: isLoadingFilters } = useActiveFilters(activePayload);
-    const foldersTree = filtersResponse?.folders || (filtersResponse as any)?.data?.folders || [];
+    const foldersTree = (filtersResponse?.folders ?? []) as FolderNode[];
 
     const { data: questionsResponse, isFetching: isFetchingQuestions } = useBankQuestions({
         ...activePayload,

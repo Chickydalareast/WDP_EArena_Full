@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Bell, CheckAll } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { useNotificationStore } from '../stores/notification.store';
 import { notificationService } from '../api/notification.service';
 import { NotificationItem } from './NotificationItem';

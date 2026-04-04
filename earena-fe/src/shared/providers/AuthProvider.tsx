@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/features/auth/stores/auth.store';
@@ -10,8 +10,10 @@ import { useSession } from '@/features/auth/hooks/useSession';
 import { useSyncWallet } from '@/features/billing/hooks/useBillingFlows';
 import dynamic from 'next/dynamic';
 import { useNotificationStream } from '@/features/notifications/hooks/useNotificationStream';
+import { useMessagingRealtime } from '@/features/messaging/hooks/useMessagingRealtime';
+import { ROUTES } from '@/config/routes';
 
-const PUBLIC_ROUTES = ['/', '/login', '/register', '/forgot-password'];
+const WAITING = ROUTES.AUTH.WAITING_APPROVAL;
 
 const DynamicDepositModal = dynamic(
   () => import('@/features/billing/components/DepositModal').then((mod) => mod.DepositModal),
@@ -22,23 +24,40 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const router = useRouter();
   const pathname = usePathname();
   const queryClient = useQueryClient();
-  
+
   const { setAuth, clearAuth, setInitialized, updateBalance } = useAuthStore();
   const { user, isError, isSuccess, isFetched } = useSession();
-  
+
   const { data: walletData, isSuccess: isWalletSuccess } = useSyncWallet();
 
+  // Track if we've already redirected to avoid loops
+  const hasRedirectedRef = useRef(false);
+
   useEffect(() => {
+    if (!isFetched) return;
+
     if (isSuccess && user) {
+      const pendingTeacher =
+        user.role === 'TEACHER' && user.teacherVerificationStatus !== 'VERIFIED';
+
+      if (pendingTeacher && !pathname.startsWith(WAITING)) {
+        if (!hasRedirectedRef.current) {
+          hasRedirectedRef.current = true;
+          router.replace(WAITING);
+        }
+        setAuth(user);
+        setInitialized();
+        return;
+      }
+
+      hasRedirectedRef.current = false;
       setAuth(user);
     } else if (isError) {
       clearAuth();
     }
-    
-    if (isFetched) {
-      setInitialized();
-    }
-  }, [isSuccess, isError, user, isFetched, setAuth, clearAuth, setInitialized]);
+
+    setInitialized();
+  }, [isSuccess, isError, user, isFetched, pathname, router, setAuth, clearAuth, setInitialized]);
 
   useEffect(() => {
     if (isWalletSuccess && walletData !== undefined && typeof walletData.balance === 'number') {
@@ -48,14 +67,21 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
   const handleUnauthorized = useCallback(() => {
     clearAuth();
-    
+
     queryClient.cancelQueries({ queryKey: authKeys.session() });
     queryClient.setQueryData(authKeys.session(), null);
     queryClient.removeQueries({
       predicate: (query) => query.queryKey[0] !== 'auth'
     });
-    
-    if (!PUBLIC_ROUTES.includes(pathname)) {
+
+    const skipUnauthorizedRedirect =
+      pathname === '/' ||
+      pathname.startsWith(ROUTES.AUTH.LOGIN) ||
+      pathname.startsWith(ROUTES.AUTH.REGISTER) ||
+      pathname.startsWith(ROUTES.AUTH.FORGOT_PASSWORD) ||
+      pathname.startsWith(WAITING);
+
+    if (!skipUnauthorizedRedirect) {
       toast.error('Phiên làm việc hết hạn. Vui lòng đăng nhập lại.');
       window.location.href = `/login?clear_session=true&callbackUrl=${encodeURIComponent(pathname)}`;
     }
@@ -67,6 +93,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }, [handleUnauthorized]);
 
   useNotificationStream(isSuccess && !!user);
+  useMessagingRealtime(isSuccess && !!user);
 
   return (
     <>

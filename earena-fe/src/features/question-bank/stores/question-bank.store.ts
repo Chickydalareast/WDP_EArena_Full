@@ -14,10 +14,7 @@ interface QuestionBankState {
     setSelectedFolderId: (id: string | null) => void;
 
     activePayload: ActiveFiltersPayloadDTO;
-    toggleFilter: <K extends keyof ActiveFiltersPayloadDTO>(
-        key: K, 
-        value: NonNullable<ActiveFiltersPayloadDTO[K]>[number]
-    ) => void;
+    toggleFilter: (key: keyof ActiveFiltersPayloadDTO, value: string) => void;
     setFilters: (filters: Partial<ActiveFiltersPayloadDTO>) => void;
     resetFilters: () => void;
 

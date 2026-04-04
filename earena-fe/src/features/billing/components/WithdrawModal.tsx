@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm, type Resolver } from 'react-hook-form';
+import { rhfZodResolver as zodResolver } from '@/shared/lib/rhf-zod-resolver';
 import { useAuthStore } from '@/features/auth/stores/auth.store';
 import { useTransactionConfirmStore } from '../stores/transaction-confirm.store';
 import { withdrawSchema, WithdrawFormDTO } from '../types/billing.schema';
@@ -20,7 +20,7 @@ export function WithdrawModal() {
     const openConfirm = useTransactionConfirmStore((state) => state.openConfirm);
 
     const form = useForm<WithdrawFormDTO>({
-        resolver: zodResolver(withdrawSchema),
+        resolver: zodResolver(withdrawSchema) as Resolver<WithdrawFormDTO>,
         defaultValues: {
             amount: 100000,
             bankName: '',

@@ -21,7 +21,14 @@ export function ExamSelectorSheet({ isOpen, onClose, onSelectExam, currentExamId
 
     // Lọc Data mượt mà trên Client, tránh re-render thừa
     const filteredExams = useMemo(() => {
-        const examsList = Array.isArray(examsData) ? examsData : examsData?.items || examsData?.data || [];
+        const raw = examsData as unknown;
+        const examsList = Array.isArray(raw)
+            ? raw
+            : (raw && typeof raw === 'object' && 'items' in raw
+                ? (raw as { items: unknown[] }).items
+                : (raw && typeof raw === 'object' && 'data' in raw
+                    ? (raw as { data: unknown[] }).data
+                    : [])) || [];
         if (!searchQuery) return examsList;
         return examsList.filter((exam: any) =>
             exam.title.toLowerCase().includes(searchQuery.toLowerCase())

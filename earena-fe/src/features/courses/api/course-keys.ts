@@ -7,6 +7,8 @@ export const courseQueryKeys = {
     publicDetails: () => [...courseQueryKeys.all, 'public', 'detail'] as const,
     publicDetail: (slug: string) => [...courseQueryKeys.publicDetails(), slug] as const,
 
+    featuredCarousel: () => [...courseQueryKeys.all, 'public', 'featured-carousel'] as const,
+
     studyTrees: () => [...courseQueryKeys.all, 'study-tree'] as const,
     studyTree: (courseId: string) => [...courseQueryKeys.studyTrees(), courseId] as const,
 

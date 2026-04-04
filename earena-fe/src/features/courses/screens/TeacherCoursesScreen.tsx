@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useTeacherCourses } from '../hooks/useTeacherCourses';
 import { TeacherCourseCard, TeacherCourseCardSkeleton } from '../components/TeacherCourseCard';
+import type { CourseBasic } from '../types/course.schema';
 import { CreateCourseModal } from '../components/CreateCourseModal';
 import { Button } from '@/shared/components/ui/button';
 import { Plus, GraduationCap, AlertCircle, BookOpen } from 'lucide-react';
@@ -11,7 +12,7 @@ export function TeacherCoursesScreen() {
   const { data: courses, isLoading, isError } = useTeacherCourses();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const courseList = Array.isArray(courses) ? courses : (courses?.data || []);
+  const courseList: CourseBasic[] = courses ?? [];
 
   return (
     <div className="flex flex-col h-full animate-in fade-in duration-500">
@@ -53,10 +54,10 @@ export function TeacherCoursesScreen() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {courseList.map((course: { id?: string; _id?: string; [key: string]: unknown }, index: number) => (
-            <TeacherCourseCard 
-              key={course.id || course._id || `course-fallback-${index}`} 
-              course={course} 
+          {courseList.map((course, index) => (
+            <TeacherCourseCard
+              key={course.id || `course-fallback-${index}`}
+              course={course}
             />
           ))}
         </div>
