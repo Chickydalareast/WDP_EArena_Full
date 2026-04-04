@@ -35,8 +35,8 @@ export interface LessonPreview {
     order: number;
     isFreePreview: boolean;
     examId?: string;
-    
-    examMode?: 'STATIC' | 'DYNAMIC' | null; 
+
+    examMode?: 'STATIC' | 'DYNAMIC' | null;
     examType?: 'COURSE_QUIZ' | 'PRACTICE' | 'OFFICIAL' | null;
 
     isCompleted?: boolean;
@@ -204,8 +204,8 @@ export const updateCourseSchema = baseUpdateCourseSchema.superRefine((data, ctx)
 
 export type UpdateCourseDTO = z.infer<typeof updateCourseSchema>;
 
-
 export type { ExamRuleDTO };
+
 export interface TeacherLessonQuizDynamicConfig {
     matrixId: string | null;
     adHocSections: Array<{
@@ -257,13 +257,24 @@ export interface TeacherLessonQuizDetail {
     updatedAt: string;
 }
 
-
 export const QuizRulePreviewPayloadSchema = z.object({
+    questionType: z.enum(['FLAT', 'PASSAGE', 'MIXED']),
+    limit: z.number().min(1, 'Số lượng tối thiểu là 1'),
+    subQuestionLimit: z.number().optional(),
     folderIds: z.array(z.string()).min(1, 'Phải chọn ít nhất 1 thư mục'),
     topicIds: z.array(z.string()).optional(),
     tags: z.array(z.string()).optional(),
     difficulties: z.array(z.enum(['NB', 'TH', 'VD', 'VDC'])).default([]),
-    limit: z.number().min(1, 'Số câu tối thiểu là 1'),
+}).superRefine((data, ctx) => {
+    if (data.questionType === 'PASSAGE') {
+        if (!data.subQuestionLimit || data.subQuestionLimit < 1) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Bắt buộc nhập số lượng câu hỏi con cho Đoạn văn',
+                path: ['subQuestionLimit'],
+            });
+        }
+    }
 });
 
 export type QuizRulePreviewPayloadDTO = z.infer<typeof QuizRulePreviewPayloadSchema>;
@@ -274,7 +285,6 @@ export interface QuizRulePreviewResponse {
     isSufficient: boolean;
     safetyRatio: number;
 }
-
 
 export const QuizBuilderPreviewPayloadSchema = z.object({
     adHocSections: z.array(MatrixSectionSchema).optional(),
@@ -299,7 +309,6 @@ export interface QuizBuilderPreviewResponse {
     };
 }
 
-
 export interface QuizMatrixItem {
     _id: string;
     title: string;
@@ -319,11 +328,13 @@ export interface QuizMatricesResponse {
 
 export const QuizHealthRuleStatusSchema = z.object({
     sectionName: z.string(),
+    questionType: z.enum(['FLAT', 'PASSAGE', 'MIXED']).optional(),
     requiredCount: z.number(),
     availableCount: z.number(),
     isSufficient: z.boolean(),
     safetyRatio: z.number(),
     isWarning: z.boolean(),
+    errorMessage: z.string().nullable().optional(),
 });
 
 export const QuizHealthDataSchema = z.object({
@@ -333,7 +344,7 @@ export const QuizHealthDataSchema = z.object({
     hasWarning: z.boolean(),
     isLocked: z.boolean(),
     matrixExists: z.boolean().nullable(),
-    configMode: z.enum(['matrix', 'adHoc', 'unconfigured']),
+    configMode: z.enum(['matrix', 'adHoc', 'unconfigured', 'snapshot', 'matrix_missing']),
     rules: z.array(QuizHealthRuleStatusSchema),
 });
 
@@ -343,4 +354,144 @@ export type QuizHealthData = z.infer<typeof QuizHealthDataSchema>;
 export interface QuizHealthResponse {
     message: string;
     data: QuizHealthData;
+}
+
+
+export interface QuizStatsData {
+    passRate: number;
+    averageScore: number;
+    totalCompletedSubmissions: number;
+    scoreDistribution: Array<{
+        range?: string;
+        count?: number;
+        [key: string]: any;
+    }>;
+    topWrongQuestions: any[];
+}
+
+export interface QuizStatsResponse {
+    statusCode?: number;
+    message: string;
+    data: QuizStatsData;
+}
+
+export interface QuizStatsResponse {
+    message: string;
+    data: QuizStatsData;
+}
+
+export const AttemptStatusEnum = z.enum(['IN_PROGRESS', 'COMPLETED', 'ABANDONED']);
+export type AttemptStatus = z.infer<typeof AttemptStatusEnum>;
+
+export interface QuizAttemptItem {
+    id: string;
+    studentId: string;
+    studentName: string;
+    studentEmail?: string;
+    score: number | null;
+    status: AttemptStatus;
+    startedAt: string;
+    completedAt: string | null;
+}
+
+export interface QuizAttemptsResponse {
+    message: string;
+    data: QuizAttemptItem[];
+    meta: {
+        totalItems: number;
+        itemCount: number;
+        itemsPerPage: number;
+        totalPages: number;
+        currentPage: number;
+    };
+}
+
+export type LessonComputedType = 'VIDEO' | 'QUIZ' | 'READING';
+
+export interface LessonDetailResponse {
+    id: string;
+    title: string;
+    content?: string;
+    type: LessonComputedType;
+    isFreePreview: boolean;
+    orderIndex: number;
+
+    examId?: string;
+    primaryVideoId?: string;
+    attachments?: string[];
+
+    dynamicConfig?: any;
+    examRules?: {
+        timeLimit: number;
+        maxAttempts: number;
+        passPercentage: number;
+        showResultMode: string;
+    };
+}
+
+export interface PaginationMeta {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+}
+
+export interface PaginatedResponse<T> {
+    data: T[];
+    meta: PaginationMeta;
+}
+
+export interface TrackingMember {
+    userId: string;
+    fullName: string;
+    email: string;
+    avatar: string | null;
+    progress: number;
+    completedLessonsCount: number;
+    enrolledAt: string;
+}
+
+export interface GetTrackingMembersParams {
+    page?: number;
+    limit?: number;
+    search?: string;
+    sortBy?: 'progress' | 'createdAt';
+    sortOrder?: 'asc' | 'desc';
+}
+
+export interface TrackingExamOverview {
+    lessonId: string;
+    lessonTitle: string;
+    courseId: string;
+    courseTitle: string;
+    attemptsUsed: number;
+    bestScore: number;
+    latestSubmittedAt: string;
+    maxAttempts: number;
+    passPercentage: number;
+}
+
+export interface GetTrackingExamsParams {
+    page?: number;
+    limit?: number;
+}
+
+export interface TrackingAttemptDetail {
+    _id: string;
+    studentId: string;
+    courseId: string;
+    lessonId: string;
+    examId: string;
+    examPaperId: string;
+    attemptNumber: number;
+    score: number | null;
+    status: AttemptStatus;
+    submittedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface GetTrackingAttemptsParams {
+    page?: number;
+    limit?: number;
 }

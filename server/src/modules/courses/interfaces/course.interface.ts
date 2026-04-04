@@ -145,3 +145,21 @@ export interface GetCourseReviewsPayload {
   page: number;
   limit: number;
 }
+
+
+export type LessonComputedType = 'VIDEO' | 'QUIZ' | 'READING';
+
+export interface LessonDetailResponse {
+  id: string;
+  title: string;
+  content?: string;
+  type: LessonComputedType;
+  isFreePreview: boolean;
+  orderIndex: number;
+  examId?: string;
+  primaryVideoId?: string;
+  attachments?: string[];
+
+  dynamicConfig?: any;
+  examRules?: any;
+}

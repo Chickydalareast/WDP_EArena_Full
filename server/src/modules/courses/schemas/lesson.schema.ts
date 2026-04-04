@@ -12,7 +12,7 @@ export class ExamRuleConfig {
   @Prop({ required: true, min: 0 })
   timeLimit: number;
 
-  @Prop({ required: true, min: 1, default: 1 })
+  @Prop({ required: true, min: 0, default: 1 })
   maxAttempts: number;
 
   @Prop({ required: true, min: 0, max: 100, default: 50 })

@@ -16,6 +16,7 @@ import {
 import { SearchPublicCoursesDto } from '../dto/course-reader.dto';
 import {
   CoursePublicDetailResponseDto,
+  LessonContentResponseDto,
   StudyTreeResponseDto,
 } from '../dto/course-reader-response.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -35,7 +36,6 @@ export class CourseReaderController {
     @Query() dto: SearchPublicCoursesDto,
     @CurrentUser('userId') userId: string,
   ) {
-    // [CTO UPGRADE]: Fail-Fast validation. Chặn đứng query vô nghĩa tránh tốn tải DB.
     if (
       dto.minPrice !== undefined &&
       dto.maxPrice !== undefined &&
@@ -46,7 +46,6 @@ export class CourseReaderController {
       );
     }
 
-    // [CTO UPGRADE]: Map DTO thành Domain Payload (Service hoàn toàn "mù" về DTO)
     const payload: SearchPublicCoursesPayload = {
       keyword: dto.keyword,
       subjectId: dto.subjectId,
@@ -119,13 +118,18 @@ export class CourseReaderController {
       lessonId,
       userId,
     };
+    
     const data = await this.courseReaderService.getLessonContent(payload);
 
-    return { message: 'Lấy nội dung bài học thành công', data };
+    const serializedData = plainToInstance(LessonContentResponseDto, data, {
+      excludeExtraneousValues: true,
+    });
+
+    return { message: 'Lấy nội dung bài học thành công', data: serializedData };
   }
 
   @UseGuards(JwtAuthGuard)
-  @Roles(UserRole.STUDENT, UserRole.TEACHER) // Cho phép cả giáo viên xem nếu họ mua khóa của người khác
+  @Roles(UserRole.STUDENT, UserRole.TEACHER)
   @Get('my-learning')
   async getMyLearning(
     @CurrentUser('userId') userId: string,

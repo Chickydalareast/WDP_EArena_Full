@@ -40,7 +40,8 @@ export const API_ENDPOINTS = {
     LESSONS: (courseId: string, sectionId: string) => `/courses/${courseId}/sections/${sectionId}/lessons` as const,
     LESSON_DETAIL: (courseId: string, lessonId: string) => `/courses/${courseId}/lessons/${lessonId}` as const,
     QUIZ_BUILDER: '/courses/builder/quiz',
-    
+
+
     QUIZ_BUILDER_DETAIL: (lessonId: string) => `/courses/builder/quiz/${lessonId}` as const,
     QUIZ_BUILDER_PREVIEW: '/courses/builder/quiz/preview',
     QUIZ_BUILDER_RULE_PREVIEW: '/courses/builder/quiz/rule-preview',
@@ -49,7 +50,7 @@ export const API_ENDPOINTS = {
     QUIZ_BUILDER_STATS: (lessonId: string) => `/courses/builder/quiz/${lessonId}/stats` as const,
     QUIZ_BUILDER_ATTEMPTS: (lessonId: string) => `/courses/builder/quiz/${lessonId}/attempts` as const,
     QUIZ_BUILDER_STATIC_QUESTIONS: (lessonId: string) => `/courses/builder/quiz/${lessonId}/static-questions` as const,
-    
+
     REORDER: (courseId: string) => `/courses/${courseId}/curriculum/reorder` as const,
     PUBLISH: (courseId: string) => `/courses/${courseId}/publish` as const,
     SUBMIT_REVIEW: (courseId: string) => `/courses/${courseId}/submit-for-review` as const,
@@ -64,7 +65,6 @@ export const API_ENDPOINTS = {
 
     REVIEWS: (courseId: string) => `/courses/${courseId}/reviews` as const,
     REVIEW_REPLY: (courseId: string, reviewId: string) => `/courses/${courseId}/reviews/${reviewId}/reply` as const,
-
   },
 
   WALLETS: {
@@ -73,7 +73,7 @@ export const API_ENDPOINTS = {
     MOCK_DEPOSIT: '/wallets/mock-deposit',
     WITHDRAW: '/wallets/withdraw',
   },
-  
+
   ADMIN_WALLETS: {
     WITHDRAWALS: '/admin/wallets/withdrawals',
     PROCESS_WITHDRAWAL: (id: string) => `/admin/wallets/withdrawals/${id}/process` as const,
@@ -88,7 +88,7 @@ export const API_ENDPOINTS = {
     BASE: '/question-folders',
     DETAIL: (id: string) => `/question-folders/${id}` as const,
   },
-  
+
   QUESTIONS: {
     BASE: '/questions',
     BULK_CREATE: '/questions/bulk-create',
@@ -98,14 +98,14 @@ export const API_ENDPOINTS = {
     BULK_DELETE: '/questions/bulk-delete',
     SUGGEST_FOLDERS: '/questions/suggest-folders',
     AI_GENERATE: '/questions/ai-builder/generate',
-  
+
     ORGANIZE_PREVIEW: '/questions/organize/preview',
     ORGANIZE_EXECUTE: '/questions/organize/execute',
-    
+
     CLONE: (id: string) => `/questions/${id}/clone` as const,
     DETAIL: (id: string) => `/questions/${id}` as const,
-    
-    PASSAGE: (id: string) => `/questions/${id}/passage` as const, 
+
+    PASSAGE: (id: string) => `/questions/${id}/passage` as const,
     BULK_AUTO_TAG: '/questions/bulk-auto-tag',
     BULK_PUBLISH: '/questions/bulk-publish',
 
@@ -125,19 +125,20 @@ export const API_ENDPOINTS = {
     UPDATE_POINTS: (paperId: string) => `/exams/manual/papers/${paperId}/points` as const,
 
     PREVIEW_MATRIX_RULE: (paperId: string) => `/exams/manual/papers/${paperId}/matrix/preview-rule` as const,
-    
+
     LEADERBOARD: (courseId: string, lessonId: string) => `/exams/leaderboard/courses/${courseId}/lessons/${lessonId}` as const,
 
     DYNAMIC_PREVIEW: '/exams/dynamic/preview',
   },
 
   EXAM_MATRICES: {
-    BASE: '/exam-matrices',
+    ROOT: '/exam-matrices',
     DETAIL: (id: string) => `/exam-matrices/${id}` as const,
   },
 
   EXAM_TAKING: {
     START: '/exam-take/start',
+    PAPER: (submissionId: string) => `/exam-take/${submissionId}/paper` as const,
     AUTO_SAVE: (submissionId: string) => `/exam-take/${submissionId}/auto-save` as const,
     SUBMIT: (submissionId: string) => `/exam-take/${submissionId}/submit` as const,
     RESULT: (submissionId: string) => `/exam-take/${submissionId}/result` as const,
@@ -154,7 +155,7 @@ export const API_ENDPOINTS = {
     USER_ROLE: (id: string) => `/admin/users/${id}/role` as const,
     USER_STATUS: (id: string) => `/admin/users/${id}/status` as const,
     USER_RESET_PASSWORD: (id: string) => `/admin/users/${id}/reset-password` as const,
-    
+
 
     EXAMS: '/admin/exams',
     EXAM_PUBLISH: (id: string) => `/admin/exams/${id}/publish` as const,
@@ -183,6 +184,9 @@ export const API_ENDPOINTS = {
     COURSE_APPROVE: (id: string) => `/admin/courses/${id}/approve` as const,
     COURSE_REJECT: (id: string) => `/admin/courses/${id}/reject` as const,
     COURSE_FORCE_TAKEDOWN: (id: string) => `/admin/courses/${id}/force-takedown` as const,
+
+    COURSE_LESSON_QUIZ_PREVIEW: (courseId: string, lessonId: string) =>
+      `/admin/courses/${courseId}/lessons/${lessonId}/preview-quiz` as const,
   },
 
   TAXONOMY: {
@@ -205,5 +209,9 @@ export const API_ENDPOINTS = {
 
   LEARNING: {
     HEARTBEAT: '/learning/heartbeat',
+    
+    TRACKING_MEMBERS: (courseId: string) => `/learning/${courseId}/tracking/members` as const,
+    TRACKING_MEMBER_EXAMS: (courseId: string, studentId: string) => `/learning/${courseId}/tracking/members/${studentId}/exams` as const,
+    TRACKING_MEMBER_ATTEMPTS: (courseId: string, studentId: string, lessonId: string) => `/learning/${courseId}/tracking/members/${studentId}/lessons/${lessonId}/attempts` as const,
   },
 } as const;

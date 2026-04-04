@@ -1,4 +1,3 @@
-// File: src/modules/exams/services/exam-take.service.ts
 import {
   Injectable,
   Logger,
@@ -6,6 +5,7 @@ import {
   BadRequestException,
   ForbiddenException,
   InternalServerErrorException,
+  ConflictException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Types } from 'mongoose';
@@ -13,14 +13,16 @@ import { ExamSubmissionsRepository } from './exam-submissions.repository';
 import { ExamPapersRepository } from './exam-papers.repository';
 import { LessonsRepository } from '../courses/repositories/lessons.repository';
 import { EnrollmentsService } from '../courses/services/enrollments.service';
-import { ExamGeneratorService } from './exam-generator.service'; // [MAX PING]: Inject Động cơ sinh đề
+import { ExamGeneratorService } from './exam-generator.service';
 import { SubmissionStatus } from './schemas/exam-submission.schema';
 import {
+  GetExamPaperPayload,
   GetLessonAttemptsPayload,
   GetStudentHistoryOverviewPayload,
   GetStudentHistoryPayload,
   StartExamPayload,
 } from './interfaces/exam-take.interface';
+import { GenerateRawPaperPayload } from './interfaces/exam-generator.interface';
 import { ExamMode, ExamType, ExamDocument } from './schemas/exam.schema';
 import { QuestionType } from '../questions/schemas/question.schema';
 import {
@@ -29,6 +31,11 @@ import {
 } from './constants/exam-event.constant';
 import { ShowResultMode } from '../courses/schemas/lesson.schema';
 import { RedisService } from '../../common/redis/redis.service';
+import { RuleQuestionType } from './interfaces/exam-matrix.interface';
+
+import { CoursesRepository } from '../courses/courses.repository';
+import { LessonProgressRepository } from '../courses/repositories/lesson-progress.repository';
+import { ProgressionLockedException } from '../courses/exceptions/progression-locked.exception';
 
 @Injectable()
 export class ExamTakeService {
@@ -37,206 +44,327 @@ export class ExamTakeService {
   constructor(
     private readonly submissionsRepo: ExamSubmissionsRepository,
     private readonly papersRepo: ExamPapersRepository,
-    // [CLEAN UP]: Đã dọn dẹp ExamsRepository & QuestionsRepository không cần thiết
     private readonly lessonsRepo: LessonsRepository,
     private readonly enrollmentsService: EnrollmentsService,
     private readonly examGeneratorService: ExamGeneratorService,
-    private readonly eventEmitter: EventEmitter2,
     private readonly redisService: RedisService,
-  ) {}
+    private readonly eventEmitter: EventEmitter2,
+    private readonly coursesRepo: CoursesRepository,
+    private readonly lessonProgressRepo: LessonProgressRepository,
+  ) { }
+
+  async getStudentExamPaper(payload: GetExamPaperPayload) {
+    const { submissionId, studentId } = payload;
+
+    if (!Types.ObjectId.isValid(submissionId)) {
+      throw new BadRequestException('ID bài làm không hợp lệ.');
+    }
+
+    const submission = await this.submissionsRepo.findOneSafe(
+      {
+        _id: new Types.ObjectId(submissionId),
+        studentId: new Types.ObjectId(studentId),
+      },
+      { populate: { path: 'lessonId', select: 'examRules' } }
+    );
+
+    if (!submission) {
+      throw new NotFoundException('Không tìm thấy dữ liệu bài làm.');
+    }
+
+    if (submission.status !== SubmissionStatus.IN_PROGRESS) {
+      throw new ForbiddenException('Bài thi này đã kết thúc, không thể xem lại đề trắng.');
+    }
+
+    const paper = await this.papersRepo.findPaperDetailWithRelations(submission.examPaperId);
+    if (!paper) {
+      throw new NotFoundException('Dữ liệu đề thi đã bị lỗi hoặc không tồn tại.');
+    }
+
+    const draftAnswers = await this.submissionsRepo.getDraftAnswersFromRedis(submissionId);
+
+    const sanitizedQuestions = paper.questions.map((q: any) => {
+      const qIdStr = q.originalQuestionId.toString();
+
+      let currentSelectedAnswer = null;
+      if (draftAnswers && draftAnswers[qIdStr]) {
+        currentSelectedAnswer = draftAnswers[qIdStr];
+      } else {
+        const dbAns = submission.answers.find((a: any) => a.questionId.toString() === qIdStr);
+        if (dbAns && dbAns.selectedAnswerId) {
+          currentSelectedAnswer = dbAns.selectedAnswerId;
+        }
+      }
+
+      return {
+        originalQuestionId: q.originalQuestionId,
+        type: q.type,
+        parentPassageId: q.parentPassageId,
+        orderIndex: q.orderIndex,
+        content: q.content,
+        difficultyLevel: q.difficultyLevel,
+        answers: q.answers,
+        attachedMedia: q.attachedMedia,
+        points: q.points,
+        selectedAnswerId: currentSelectedAnswer
+      };
+    });
+
+    this.logger.verbose(`[ExamTake] User ${studentId} đã load đề thi của submission ${submissionId}`);
+
+    const lessonData = submission.lessonId as any;
+    const timeLimit = lessonData?.examRules?.timeLimit || 0;
+    const startedAt = (submission._id as Types.ObjectId).getTimestamp().toISOString();
+
+    return {
+      submissionId: submission._id.toString(),
+      examId: submission.examId.toString(),
+      status: submission.status,
+      timeLimit,
+      startedAt,
+      questions: sanitizedQuestions,
+    };
+  }
+
+  private _mapAdHocSectionsForGenerator(adHocSections?: any[]) {
+    if (!adHocSections || adHocSections.length === 0) return undefined;
+
+    return adHocSections.map((sec) => ({
+      name: sec.name,
+      orderIndex: sec.orderIndex,
+      rules: sec.rules.map((rule: any) => ({
+        questionType: rule.questionType ?? RuleQuestionType.MIXED,
+        subQuestionLimit: rule.subQuestionLimit,
+        folderIds: rule.folderIds?.map((id: any) => id.toString()) || [],
+        topicIds: rule.topicIds?.map((id: any) => id.toString()) || [],
+        difficulties: rule.difficulties || [],
+        tags: rule.tags || [],
+        limit: rule.limit,
+      })),
+    }));
+  }
+
+  private async _checkStrictProgression(userId: string, courseId: string, lessonId: string) {
+    const courseInfo = await this.coursesRepo.findByIdSafe(courseId, { select: 'progressionMode teacherId' });
+    const mode = courseInfo?.progressionMode || 'FREE';
+
+    if (mode === 'STRICT_LINEAR' && courseInfo?.teacherId?.toString() !== userId) {
+      const currentLesson = await this.lessonsRepo.findByIdSafe(lessonId, {
+        populate: [{ path: 'sectionId', select: 'order' }],
+      });
+
+      const sectionData = currentLesson?.sectionId as any;
+      if (currentLesson && sectionData) {
+        const prevLessonId = await this.lessonsRepo.getPreviousLessonId(
+          courseId,
+          sectionData.order,
+          currentLesson.order,
+        );
+
+        if (prevLessonId) {
+          const prevProgress = await this.lessonProgressRepo.findOneSafe(
+            {
+              userId: new Types.ObjectId(userId),
+              lessonId: new Types.ObjectId(prevLessonId),
+            },
+            { select: 'isCompleted' },
+          );
+
+          if (!prevProgress || !prevProgress.isCompleted) {
+            this.logger.warn(`[Security] Chặn User ${userId} spam API startExam (Bypass Strict Linear)`);
+            throw new ProgressionLockedException(prevLessonId);
+          }
+        }
+      }
+    }
+  }
 
   async startExam(payload: StartExamPayload) {
     const { studentId, courseId, lessonId } = payload;
     const studentObjId = new Types.ObjectId(studentId);
-    const courseObjId = new Types.ObjectId(courseId);
     const lessonObjId = new Types.ObjectId(lessonId);
 
-    // Khiên phân tán bằng Redis chống Double Click (Race Condition)
-    const lockKey = `lock:exam-start:${studentId}:${lessonId}`;
-    const isLocked = await this.redisService.setNx(lockKey, 'locked', 5);
-    if (!isLocked) {
-      throw new BadRequestException(
-        'Hệ thống đang xử lý tạo đề thi. Vui lòng không click liên tục!',
-      );
+    const hasAccess = await this.enrollmentsService.validateCourseExamAccess(
+      studentId,
+      courseId,
+      lessonId,
+    );
+    if (!hasAccess) {
+      throw new ForbiddenException('Bạn không có quyền truy cập bài thi này.');
+    }
+
+    await this._checkStrictProgression(studentId, courseId, lessonId);
+
+    const lockKey = `exam:start:${studentId}:${lessonId}`;
+    const lockUuid = await this.redisService.acquireLock(lockKey, 10);
+    if (!lockUuid) {
+      throw new ConflictException('Hệ thống đang xử lý, vui lòng không thao tác quá nhanh.');
     }
 
     try {
-      const lesson = await this.lessonsRepo.findByIdSafe(lessonObjId, {
-        populate: 'examId',
-      });
-      if (!lesson || lesson.courseId.toString() !== courseId) {
-        throw new BadRequestException(
-          'Dữ liệu không hợp lệ. Bài học không thuộc khóa học này.',
-        );
-      }
-      if (!lesson.examId) {
-        throw new BadRequestException('Bài học này không chứa bài thi/quiz.');
+      const lesson = await this.lessonsRepo.findByIdSafe(lessonObjId, { populate: 'examId' });
+      if (!lesson || !lesson.examId || lesson.courseId.toString() !== courseId) {
+        throw new NotFoundException('Bài thi không tồn tại hoặc không hợp lệ.');
       }
 
       const exam = lesson.examId as unknown as ExamDocument;
-      let rules = lesson.examRules;
+      const timeLimit = lesson.examRules?.timeLimit || 0;
 
-      if (!rules) {
-        this.logger.warn(
-          `[Data Recovery] Bài học ${lessonObjId} bị khuyết cấu hình ExamRule. Kích hoạt Fallback mặc định.`,
-        );
-        rules = {
-          timeLimit: 45,
-          maxAttempts: 1,
-          passPercentage: 50,
-          showResultMode: ShowResultMode.IMMEDIATELY,
-        };
-      }
-
-      if (exam.type === ExamType.COURSE_QUIZ) {
-        if (exam.mode !== ExamMode.DYNAMIC) {
-          this.logger.error(
-            `[Integrity Error] Course Quiz ${exam._id} bị mất cờ DYNAMIC.`,
-          );
-          throw new InternalServerErrorException(
-            'Dữ liệu Quiz bị lỗi (Không phải dạng động). Vui lòng báo Giáo viên kiểm tra lại cấu hình.',
-          );
-        }
-        if (!exam.dynamicConfig) {
-          throw new InternalServerErrorException(
-            'Dữ liệu Quiz bị lỗi (Mất cấu hình ma trận). Vui lòng báo Giáo viên cập nhật lại.',
-          );
-        }
-      }
-
-      await this.enrollmentsService.validateCourseExamAccess(
-        studentId,
-        courseId,
-        exam._id.toString(),
-      );
-
-      const latestSubmission = await this.submissionsRepo.findLatestSubmission(
-        studentId,
-        lessonId,
-      );
-
-      if (
-        latestSubmission &&
-        latestSubmission.status === SubmissionStatus.IN_PROGRESS
-      ) {
-        const paper = await this.papersRepo.findByIdSafe(
-          latestSubmission.examPaperId,
-        );
-        return {
-          submissionId: latestSubmission._id,
-          status: latestSubmission.status,
-          timeLimit: rules.timeLimit,
-          startedAt: new Types.ObjectId(latestSubmission._id.toString())
-            .getTimestamp()
-            .toISOString(),
-          paper: { questions: paper?.questions || [] },
-        };
-      }
-
-      const nextAttemptNumber = latestSubmission
-        ? latestSubmission.attemptNumber + 1
-        : 1;
-      if (nextAttemptNumber > rules.maxAttempts) {
-        throw new ForbiddenException(
-          `Bạn đã hết lượt làm bài (Tối đa ${rules.maxAttempts} lượt).`,
-        );
-      }
-
-      // ==========================================
-      // [THE CORE]: JIT SNAPSHOT ENGINE (MATRIX UPGRADED)
-      // ==========================================
-      let paperQuestions = [];
-      let paperAnswerKeys = [];
-
-      if (exam.mode === ExamMode.STATIC) {
-        const masterPaper = await this.papersRepo.findOneSafe(
-          { examId: exam._id, submissionId: null },
-          { select: '+answerKeys' },
-        );
-        if (!masterPaper)
-          throw new InternalServerErrorException(
-            'Đề thi tĩnh chưa có dữ liệu Master.',
-          );
-        paperQuestions = masterPaper.questions;
-        paperAnswerKeys = masterPaper.answerKeys;
-      } else {
-        if (!exam.dynamicConfig) {
-          throw new InternalServerErrorException(
-            'Đề thi động này bị lỗi mất cấu hình ma trận. Vui lòng báo giáo viên tạo lại đề.',
-          );
-        }
-
-        const dynamicContent =
-          await this.examGeneratorService.generateJitPaperFromMatrix(
-            exam.teacherId.toString(),
-            exam.totalScore, // [FIX]: Truyền tổng điểm vào để chia
-            exam.dynamicConfig.matrixId
-              ? exam.dynamicConfig.matrixId.toString()
-              : undefined,
-            exam.dynamicConfig.adHocSections,
-          );
-
-        paperQuestions = dynamicContent.questions;
-        paperAnswerKeys = dynamicContent.answerKeys;
-      }
-
-      const shuffled = this.shufflePaperForStudent(
-        paperQuestions,
-        paperAnswerKeys,
-      );
-
-      const initialAnswers = shuffled.questions.map((q: any) => ({
-        questionId: q.originalQuestionId,
-        selectedAnswerId: null,
-      }));
-
-      let actualSubmissionId = '';
-
-      // [ENTERPRISE FIX]: Khai tử hoàn toàn 'as any', dùng Contextual Repo Methods
-      await this.submissionsRepo.executeInTransaction(async () => {
-        // 1. Lưu Snapshot Đề Thi (Paper) trước
-        const createdPaper = await this.papersRepo.createDocument({
-          examId: exam._id,
-          questions: shuffled.questions,
-          answerKeys: shuffled.answerKeys,
-        });
-
-        // 2. Tạo record Submission gắn với Paper vừa sinh
-        const createdSub = await this.submissionsRepo.createDocument({
-          studentId: studentObjId,
-          courseId: courseObjId,
-          lessonId: lessonObjId,
-          examId: exam._id,
-          examPaperId: createdPaper._id,
-          attemptNumber: nextAttemptNumber,
-          status: SubmissionStatus.IN_PROGRESS,
-          answers: initialAnswers,
-        });
-
-        actualSubmissionId = createdSub._id.toString();
-
-        // 3. Update Reference vòng tròn an toàn
-        await this.papersRepo.updateByIdSafe(createdPaper._id, {
-          $set: { submissionId: createdSub._id },
-        });
+      const inProgressSub = await this.submissionsRepo.findOneSafe({
+        studentId: studentObjId,
+        lessonId: lessonObjId,
+        status: SubmissionStatus.IN_PROGRESS,
       });
 
-      this.logger.log(
-        `[JIT Engine] Đã sinh Paper & Submission ${actualSubmissionId} từ Matrix Engine cho Exam ${exam._id}`,
-      );
+      if (inProgressSub) {
+        const startedAtMs = (inProgressSub._id as Types.ObjectId).getTimestamp().getTime();
+        const timeLimitMs = timeLimit * 60 * 1000;
+        const NETWORK_BUFFER_MS = 60000;
+
+        if (timeLimit > 0 && Date.now() > startedAtMs + timeLimitMs + NETWORK_BUFFER_MS) {
+          this.logger.warn(`[ExamTake] User ${studentId} có phiên thi ${inProgressSub._id} quá hạn. Tự động chuyển sang ABANDONED.`);
+          await this.submissionsRepo.updateByIdSafe(inProgressSub._id, {
+            $set: { status: SubmissionStatus.ABANDONED },
+          });
+        } else {
+          return {
+            message: 'Tiếp tục bài thi đang dang dở.',
+            submissionId: inProgressSub._id.toString(),
+            examPaperId: inProgressSub.examPaperId.toString(),
+            timeLimit,
+            startedAt: new Date(startedAtMs).toISOString(),
+          };
+        }
+      }
+
+      const maxAttempts = lesson.examRules?.maxAttempts ?? 1;
+      
+      const completedCount = await this.submissionsRepo.modelInstance.countDocuments({
+        studentId: studentObjId,
+        lessonId: lessonObjId,
+        status: { $in: [SubmissionStatus.COMPLETED, SubmissionStatus.ABANDONED] },
+      });
+
+      if (maxAttempts > 0 && completedCount >= maxAttempts) {
+        throw new ForbiddenException(`Bạn đã sử dụng hết số lượt thi cho phép (${maxAttempts}/${maxAttempts}).`);
+      }
+
+      let paperQuestions: any[] = [];
+      let answerKeys: any[] = [];
+
+      if (exam.mode === ExamMode.DYNAMIC) {
+        const dynamicPayload: GenerateRawPaperPayload = {
+          teacherId: exam.teacherId.toString(),
+          totalScore: exam.totalScore,
+          matrixId: exam.dynamicConfig?.matrixId?.toString(),
+          adHocSections: this._mapAdHocSectionsForGenerator(exam.dynamicConfig?.adHocSections),
+        };
+
+        const dynamicResult = await this.examGeneratorService.generateRawPaperContent(dynamicPayload);
+
+        paperQuestions = dynamicResult.questions;
+        answerKeys = dynamicResult.answerKeys;
+      } else {
+        const defaultPaper = await this.papersRepo.findOneSafe({ examId: exam._id, submissionId: null });
+        if (!defaultPaper) {
+          throw new InternalServerErrorException('Đề thi tĩnh chưa được thiết lập câu hỏi.');
+        }
+
+        paperQuestions = defaultPaper.questions.map((q: any) => ({
+          ...q,
+          answers: this._shuffleArray(q.answers),
+        }));
+        answerKeys = defaultPaper.answerKeys;
+      }
+
+      const newSubmission = await this.submissionsRepo.executeInTransaction(async () => {
+        const newPaper = await this.papersRepo.createDocument({
+          examId: exam._id,
+          submissionId: null,
+          questions: paperQuestions,
+          answerKeys: answerKeys,
+        });
+
+        const submission = await this.submissionsRepo.createDocument({
+          studentId: studentObjId,
+          courseId: new Types.ObjectId(courseId),
+          lessonId: lessonObjId,
+          examId: exam._id,
+          examPaperId: newPaper._id as any,
+          attemptNumber: completedCount + 1,
+          answers: paperQuestions.map(q => ({
+            questionId: q.originalQuestionId,
+            selectedAnswerId: null,
+          })),
+          status: SubmissionStatus.IN_PROGRESS,
+        });
+
+        await this.papersRepo.updateByIdSafe(newPaper._id.toString(), {
+          $set: { submissionId: submission._id as any },
+        });
+
+        return submission;
+      });
+
+      this.logger.log(`[ExamTake] User ${studentId} started Exam ${exam._id} (Attempt: ${completedCount + 1})`);
 
       return {
-        submissionId: actualSubmissionId,
-        status: SubmissionStatus.IN_PROGRESS,
-        timeLimit: rules.timeLimit,
-        startedAt: new Types.ObjectId(actualSubmissionId)
-          .getTimestamp()
-          .toISOString(),
-        paper: { questions: shuffled.questions },
+        message: 'Bắt đầu làm bài thành công.',
+        submissionId: newSubmission._id.toString(),
+        examPaperId: newSubmission.examPaperId.toString(),
+        timeLimit,
+        startedAt: (newSubmission._id as Types.ObjectId).getTimestamp().toISOString(),
       };
     } finally {
-      await this.redisService.del(lockKey);
+      await this.redisService.releaseLockSafe(lockKey, lockUuid);
     }
+  }
+
+async submitExam(payload: { submissionId: string; studentId: string }) {
+    const { submissionId, studentId } = payload;
+
+    const submission = await this.submissionsRepo.findOneSafe(
+      {
+        _id: new Types.ObjectId(submissionId),
+        studentId: new Types.ObjectId(studentId),
+      },
+      { populate: { path: 'lessonId', select: 'examRules' } }
+    );
+
+    if (!submission) throw new NotFoundException('Không tìm thấy bài thi.');
+    if (submission.status !== SubmissionStatus.IN_PROGRESS) {
+      throw new ConflictException('Bài thi này đã được nộp hoặc đã bị hủy.');
+    }
+
+    const lessonData = submission.lessonId as any;
+    const timeLimit = lessonData?.examRules?.timeLimit || 0;
+    const startedAtMs = (submission._id as Types.ObjectId).getTimestamp().getTime();
+    const timeLimitMs = timeLimit * 60 * 1000;
+    const NETWORK_BUFFER_MS = 60000; 
+
+    if (timeLimit > 0 && Date.now() > startedAtMs + timeLimitMs + NETWORK_BUFFER_MS) {
+      await this.submissionsRepo.updateByIdSafe(submission._id, {
+        $set: { status: SubmissionStatus.ABANDONED }
+      });
+      this.logger.warn(`[Security] Học viên ${studentId} cố tình nộp bài trễ. Đã đánh dấu ABANDONED!`);
+      throw new BadRequestException('Đã quá thời gian làm bài cho phép.');
+    }
+
+    const success = await this.submissionsRepo.syncRedisToMongoOnSubmit(submissionId, studentId);
+    
+    if (!success) {
+      throw new InternalServerErrorException('Lỗi đồng bộ dữ liệu khi nộp bài.');
+    }
+
+    const eventPayload: ExamSubmittedEventPayload = { submissionId, studentId };
+    this.eventEmitter.emit(ExamEventPattern.EXAM_SUBMITTED, eventPayload);
+
+    this.logger.log(`[Assessment Engine] Học viên ${studentId} nộp bài ${submissionId}. Đã phát sự kiện chấm điểm.`);
+
+    return {
+      message: 'Nộp bài thành công. Hệ thống đang tiến hành chấm điểm.',
+      status: 'GRADING_IN_PROGRESS',
+    };
   }
 
   async autoSaveAnswer(payload: {
@@ -254,60 +382,60 @@ export class ExamTakeService {
     return { success: true };
   }
 
-  async submitExam(payload: { submissionId: string; studentId: string }) {
-    const { submissionId, studentId } = payload;
+  // async submitExam(payload: { submissionId: string; studentId: string }) {
+  //   const { submissionId, studentId } = payload;
 
-    const submission = await this.submissionsRepo.findOneSafe(
-      {
-        _id: new Types.ObjectId(submissionId),
-        studentId: new Types.ObjectId(studentId),
-      },
-      { populate: 'lessonId' },
-    );
+  //   const submission = await this.submissionsRepo.findOneSafe(
+  //     {
+  //       _id: new Types.ObjectId(submissionId),
+  //       studentId: new Types.ObjectId(studentId),
+  //     },
+  //     { populate: 'lessonId' },
+  //   );
 
-    if (!submission) throw new NotFoundException('Bài thi không tồn tại.');
-    if (submission.status !== SubmissionStatus.IN_PROGRESS) {
-      throw new BadRequestException(
-        'Bài thi đã được nộp hoặc trạng thái không hợp lệ.',
-      );
-    }
+  //   if (!submission) throw new NotFoundException('Bài thi không tồn tại.');
+  //   if (submission.status !== SubmissionStatus.IN_PROGRESS) {
+  //     throw new BadRequestException(
+  //       'Bài thi đã được nộp hoặc trạng thái không hợp lệ.',
+  //     );
+  //   }
 
-    const lesson = submission.lessonId as any;
-    const timeLimit = lesson?.examRules?.timeLimit || 0;
+  //   const lesson = submission.lessonId as any;
+  //   const timeLimit = lesson?.examRules?.timeLimit || 0;
 
-    if (timeLimit > 0) {
-      const startTimeMs = new Types.ObjectId(submission._id.toString())
-        .getTimestamp()
-        .getTime();
-      const nowMs = Date.now();
-      const allowedTimeMs = timeLimit * 60 * 1000;
-      const networkBufferMs = 60 * 1000;
+  //   if (timeLimit > 0) {
+  //     const startTimeMs = new Types.ObjectId(submission._id.toString())
+  //       .getTimestamp()
+  //       .getTime();
+  //     const nowMs = Date.now();
+  //     const allowedTimeMs = timeLimit * 60 * 1000;
+  //     const networkBufferMs = 60 * 1000;
 
-      if (nowMs > startTimeMs + allowedTimeMs + networkBufferMs) {
-        this.logger.warn(
-          `[Security] Học viên ${studentId} cố tình nộp bài trễ. Bị block!`,
-        );
-        throw new BadRequestException(
-          'Đã quá thời gian làm bài cho phép. Bài làm không được chấp nhận.',
-        );
-      }
-    }
+  //     if (nowMs > startTimeMs + allowedTimeMs + networkBufferMs) {
+  //       this.logger.warn(
+  //         `[Security] Học viên ${studentId} cố tình nộp bài trễ. Bị block!`,
+  //       );
+  //       throw new BadRequestException(
+  //         'Đã quá thời gian làm bài cho phép. Bài làm không được chấp nhận.',
+  //       );
+  //     }
+  //   }
 
-    const success = await this.submissionsRepo.syncRedisToMongoOnSubmit(
-      submissionId,
-      studentId,
-    );
-    if (!success)
-      throw new InternalServerErrorException('Có lỗi xảy ra khi nộp bài.');
+  //   const success = await this.submissionsRepo.syncRedisToMongoOnSubmit(
+  //     submissionId,
+  //     studentId,
+  //   );
+  //   if (!success)
+  //     throw new InternalServerErrorException('Có lỗi xảy ra khi nộp bài.');
 
-    const eventPayload: ExamSubmittedEventPayload = { submissionId, studentId };
-    this.eventEmitter.emit(ExamEventPattern.EXAM_SUBMITTED, eventPayload);
+  //   const eventPayload: ExamSubmittedEventPayload = { submissionId, studentId };
+  //   this.eventEmitter.emit(ExamEventPattern.EXAM_SUBMITTED, eventPayload);
 
-    this.logger.log(
-      `[Assessment Engine] Học viên ${studentId} nộp bài ${submissionId}. Đã phát sự kiện chấm điểm.`,
-    );
-    return { message: 'Nộp bài thành công, hệ thống đang chấm điểm.' };
-  }
+  //   this.logger.log(
+  //     `[Assessment Engine] Học viên ${studentId} nộp bài ${submissionId}. Đã phát sự kiện chấm điểm.`,
+  //   );
+  //   return { message: 'Nộp bài thành công, hệ thống đang chấm điểm.' };
+  // }
 
   async getSubmissionResult(submissionId: string, studentId: string) {
     if (!Types.ObjectId.isValid(submissionId))

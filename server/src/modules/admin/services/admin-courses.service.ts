@@ -5,6 +5,7 @@ import { CoursesRepository } from '../../courses/courses.repository';
 import { CoursesService } from '../../courses/courses.service';
 import { MailService } from '../../mail/mail.service';
 import { CourseStatus } from '../../courses/schemas/course.schema';
+import { ExamGeneratorService } from '../../exams/exam-generator.service';
 import {
     CourseEventPattern,
     CourseApprovedEventPayload,
@@ -15,7 +16,8 @@ import {
     ForceTakedownCoursePayload,
     GetAdminCoursesPayload,
     GetPendingCoursesPayload,
-    RejectCoursePayload
+    RejectCoursePayload,
+    PreviewCourseQuizPayload
 } from '../interfaces/admin-courses.interface';
 
 @Injectable()
@@ -27,6 +29,7 @@ export class AdminCoursesService {
         private readonly coursesService: CoursesService,
         private readonly mailService: MailService,
         private readonly eventEmitter: EventEmitter2,
+        private readonly examGeneratorService: ExamGeneratorService,
     ) { }
 
     async getPendingCourses(payload: GetPendingCoursesPayload) {
@@ -35,12 +38,11 @@ export class AdminCoursesService {
 
         const filter = { status: CourseStatus.PENDING_REVIEW };
 
-        // [CTO Standard]: Không query N+1, dùng lean(), gọi trực tiếp Model Instance từ Repo
         const [items, totalItems] = await Promise.all([
             this.coursesRepo.modelInstance.find(filter)
                 .select('title slug price teacherId submittedAt')
                 .populate('teacherId', 'fullName email avatar')
-                .sort({ submittedAt: 1 }) // FIFO: Gửi trước duyệt trước
+                .sort({ submittedAt: 1 })
                 .skip(skip)
                 .limit(limit)
                 .lean()
@@ -103,7 +105,6 @@ export class AdminCoursesService {
             this.mailService.sendCourseApproval(teacher.email, teacher.fullName, course.title);
         }
 
-        // [RẢI MÌN]: Bắn Event In-App Notification
         this.eventEmitter.emit(CourseEventPattern.COURSE_APPROVED, {
             courseId: courseId,
             teacherId: teacher._id.toString(),
@@ -140,7 +141,6 @@ export class AdminCoursesService {
             this.mailService.sendCourseRejection(teacher.email, teacher.fullName, course.title, reason);
         }
 
-        // [RẢI MÌN]: Bắn Event In-App Notification
         this.eventEmitter.emit(CourseEventPattern.COURSE_REJECTED, {
             courseId: courseId,
             teacherId: teacher._id.toString(),
@@ -257,5 +257,42 @@ export class AdminCoursesService {
         } as CourseRejectedEventPayload);
 
         return { message: 'Đã gỡ khóa học khỏi hệ thống thành công. Cache đã được xóa.' };
+    }
+
+    async previewCourseQuiz(payload: PreviewCourseQuizPayload) {
+        const { courseId, lessonId } = payload;
+
+        const curriculum = await this.coursesRepo.getFullCourseCurriculum(courseId, { maskMediaUrls: false });
+        if (!curriculum) throw new NotFoundException('Khóa học không tồn tại.');
+
+        const teacherId = curriculum.teacherId;
+        if (!teacherId) throw new BadRequestException('Dữ liệu khóa học bị lỗi: Không tìm thấy tác giả.');
+
+        let targetLesson: any = null;
+        for (const section of curriculum.sections) {
+            targetLesson = section.lessons.find((l: any) => l.id === lessonId);
+            if (targetLesson) break;
+        }
+
+        if (!targetLesson) {
+            throw new NotFoundException('Bài học không tồn tại trong khóa học này.');
+        }
+
+        if (!targetLesson.examId) {
+            throw new BadRequestException('Bài học này không có cấu hình bài thi.');
+        }
+
+        const dynamicConfig = targetLesson.dynamicConfig;
+        if (!dynamicConfig || (!dynamicConfig.matrixId && (!dynamicConfig.adHocSections || dynamicConfig.adHocSections.length === 0))) {
+            throw new BadRequestException('Bài thi chưa được cấu hình Ma trận đề (Dynamic Config).');
+        }
+
+        this.logger.log(`[Admin Proxy] Admin is impersonating Teacher ${teacherId} to preview Quiz ${lessonId} of Course ${courseId}`);
+
+        return this.examGeneratorService.previewDynamicExam({
+            teacherId: teacherId, 
+            matrixId: dynamicConfig.matrixId || undefined,
+            adHocSections: dynamicConfig.adHocSections || undefined,
+        });
     }
 }

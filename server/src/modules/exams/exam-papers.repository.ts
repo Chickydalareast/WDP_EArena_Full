@@ -59,4 +59,22 @@ export class ExamPapersRepository extends AbstractRepository<ExamPaperDocument> 
     };
     return this.updateByIdSafe(paperId, updatePayload);
   }
+
+
+  async deletePapersByExamAndSubmission(
+    examId: Types.ObjectId,
+    submissionId: Types.ObjectId | null,
+  ): Promise<void> {
+    const activeSession = this.currentSession ?? undefined;
+    await this.model
+      .deleteMany({ examId, submissionId }, { session: activeSession })
+      .exec();
+  }
+
+  async createPaper(data: any): Promise<ExamPaperDocument> {
+    const activeSession = this.currentSession ?? undefined;
+    const doc = new this.model({ ...data, _id: new Types.ObjectId() });
+    const saved = await doc.save({ session: activeSession });
+    return saved.toObject() as unknown as ExamPaperDocument;
+  }
 }

@@ -80,3 +80,18 @@ export const useForceTakedownCourse = () => {
         },
     });
 };
+
+export const useAdminDryRunQuiz = (
+    courseId: string | null,
+    lessonId: string | null,
+    enabled: boolean
+) => {
+    return useQuery({
+        queryKey: [...ADMIN_COURSES_KEY, 'dry-run', courseId, lessonId],
+        queryFn: () => adminService.previewDynamicQuiz(courseId as string, lessonId as string),
+        enabled: !!courseId && !!lessonId && enabled,
+        retry: false,
+        staleTime: 0,
+        gcTime: 0,
+    });
+};

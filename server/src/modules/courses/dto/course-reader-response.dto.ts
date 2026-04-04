@@ -158,3 +158,7 @@ export class LessonProgressResponseDto {
   @Expose() lastPosition: number;
   @Expose() isCompleted: boolean;
 }
+
+export class LessonContentResponseDto extends LessonResponseDto {
+  @Expose() attemptsUsed?: number;
+}

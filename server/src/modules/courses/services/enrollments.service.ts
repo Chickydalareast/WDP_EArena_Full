@@ -33,21 +33,21 @@ export class EnrollmentsService {
     private readonly lessonsRepo: LessonsRepository,
     private readonly coursesRepo: CoursesRepository,
     private readonly eventEmitter: EventEmitter2,
-  ) {}
+  ) { }
 
   async validateCourseExamAccess(
     userId: string,
     courseId: string,
-    examId: string,
+    lessonId: string,
   ): Promise<boolean> {
-    if (!Types.ObjectId.isValid(courseId) || !Types.ObjectId.isValid(examId)) {
-      throw new BadRequestException('ID khóa học hoặc bài thi không hợp lệ.');
+    if (!Types.ObjectId.isValid(courseId) || !Types.ObjectId.isValid(lessonId)) {
+      throw new BadRequestException('ID khóa học hoặc bài học không hợp lệ.');
     }
 
     const lesson = await this.lessonsRepo.findOneSafe(
       {
         courseId: new Types.ObjectId(courseId),
-        examId: new Types.ObjectId(examId),
+        _id: new Types.ObjectId(lessonId),
       },
       { select: 'isFreePreview' },
     );
@@ -87,13 +87,6 @@ export class EnrollmentsService {
   }
 
   async markLessonCompleted(payload: MarkLessonPayload) {
-    if (
-      !Types.ObjectId.isValid(payload.courseId) ||
-      !Types.ObjectId.isValid(payload.lessonId)
-    ) {
-      throw new BadRequestException('ID không hợp lệ.');
-    }
-
     const enrollment = await this.enrollmentsRepo.findUserEnrollment(
       payload.userId,
       payload.courseId,
@@ -102,44 +95,39 @@ export class EnrollmentsService {
       throw new ForbiddenException('Bạn chưa ghi danh khóa học này.');
 
     const lessonObjectId = new Types.ObjectId(payload.lessonId);
+
     const isAlreadyCompleted = enrollment.completedLessons.some(
       (id) => id.toString() === lessonObjectId.toString(),
     );
-    if (isAlreadyCompleted)
+    if (isAlreadyCompleted) {
       return {
         message: 'Bài học đã được hoàn thành trước đó.',
         progress: enrollment.progress,
       };
+    }
 
     const totalLessons = await this.lessonsRepo.countLessonsByCourse(
       payload.courseId,
     );
-
     if (totalLessons === 0)
       return { message: 'Khóa học chưa có bài học nào.', progress: 0 };
-
-    const newCompletedCount = enrollment.completedLessons.length + 1;
-    let newProgress = Math.floor((newCompletedCount / totalLessons) * 100);
-    newProgress = Math.min(newProgress, 100);
 
     const updated = await this.enrollmentsRepo.atomicUpdateProgress(
       enrollment._id,
       lessonObjectId,
-      newProgress,
+      totalLessons,
     );
 
-    const finalProgress = updated?.progress || newProgress;
+    const finalProgress = updated?.progress || 0;
 
     if (finalProgress === 100 && enrollment.progress < 100) {
       this.eventEmitter.emit(CourseEventPattern.COURSE_COMPLETED, {
         userId: payload.userId,
         courseId: payload.courseId,
+        completedAt: new Date(),
       } as CourseCompletedEventPayload);
     }
 
-    return {
-      message: 'Đã lưu tiến độ học tập.',
-      progress: finalProgress,
-    };
+    return { message: 'Đã lưu tiến độ.', progress: finalProgress };
   }
 }

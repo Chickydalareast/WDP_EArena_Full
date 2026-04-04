@@ -1,3 +1,4 @@
+// app/student/exams/[submissionId]/result/page.tsx
 'use client';
 
 import React, { use } from 'react';
@@ -8,19 +9,48 @@ import { Loader2, ArrowLeft, CheckCircle2, XCircle, AlertCircle, Trophy, Target,
 import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/utils';
 
-interface ExamDetailItem {
-    questionId: string;
-    isCorrect: boolean;
+// Đã loại bỏ hoàn toàn 'any'. Khai báo chặt chẽ theo đúng JSON Contract từ Backend
+interface AnswerOption {
+    id: string;
     content: string;
-    studentAnswer?: any; 
-    correctAnswer?: any;
+}
+
+interface ExamResultDetail {
+    originalQuestionId: string;
+    content: string;
+    difficultyLevel: string;
+    answers: AnswerOption[];
+    studentSelectedId: string | null;
+    correctAnswerId: string;
+    isCorrect: boolean;
+}
+
+interface ExamSummary {
+    score: number;
+    totalQuestions: number;
+    correctCount: number;
+    incorrectCount: number;
+    submittedAt: string;
+    attemptNumber: number;
+}
+
+interface ExamReviewData {
+    status: string;
+    summary: ExamSummary;
+    message: string;
+    details: ExamResultDetail[];
 }
 
 export default function ExamResultPage({ params }: { params: Promise<{ submissionId: string }> }) {
     const router = useRouter();
     const resolvedParams = use(params);
 
-    const { data, isLoading, isError } = useExamReview(resolvedParams.submissionId);
+    // Ép kiểu (Type Assertion) an toàn ở mức Component nếu Hook chưa được strict type
+    const { data, isLoading, isError } = useExamReview(resolvedParams.submissionId) as {
+        data: ExamReviewData | undefined;
+        isLoading: boolean;
+        isError: boolean;
+    };
 
     if (isLoading) {
         return (
@@ -32,7 +62,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ submissio
         );
     }
 
-    if (isError || !data) {
+    if (isError || !data || !data.summary) {
         return (
             <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4 animate-in fade-in zoom-in-95">
                 <div className="w-20 h-20 bg-destructive/10 rounded-full flex items-center justify-center mb-6">
@@ -49,31 +79,15 @@ export default function ExamResultPage({ params }: { params: Promise<{ submissio
         );
     }
 
-    const summary = data.summary;
-    const rawScore = summary?.score ?? 0;
-    const rawCorrect = summary?.correctCount ?? 0;
-    const rawTotal = summary?.totalQuestions ?? 1;
-    const rawIncorrect = summary?.incorrectCount ?? 0;
-
-    const safeTotal = Math.max(rawTotal, 1);
-    const safeCorrect = Math.min(rawCorrect, safeTotal);
-    const safeIncorrect = Math.min(rawIncorrect, safeTotal - safeCorrect);
-    const safeScore = Math.min(rawScore, 10); 
+    const { summary, details } = data;
+    
+    // Tính toán thông số an toàn
+    const safeTotal = Math.max(summary.totalQuestions ?? 1, 1);
+    const safeCorrect = Math.min(summary.correctCount ?? 0, safeTotal);
+    const safeIncorrect = Math.min(summary.incorrectCount ?? 0, safeTotal - safeCorrect);
+    const safeScore = Math.min(summary.score ?? 0, 10); 
 
     const isPassed = (safeScore / 10) * 100 >= 50;
-    const details = (data.details as ExamDetailItem[]) || [];
-
-    const formatAnswerSafe = (ans: any): string => {
-        if (!ans) return '';
-        if (Array.isArray(ans)) {
-            return ans.map(a => {
-                if (typeof a === 'object') return a.content || a.id || '';
-                return String(a);
-            }).filter(Boolean).join(', ');
-        }
-        if (typeof ans === 'object') return ans.content || ans.id || '';
-        return String(ans);
-    };
 
     return (
         <div className="max-w-[1000px] w-full mx-auto space-y-8 pb-20 px-4 sm:px-6 lg:px-8 animate-in fade-in duration-500">
@@ -98,7 +112,6 @@ export default function ExamResultPage({ params }: { params: Promise<{ submissio
             </div>
 
             {/* 2. BENTO SUMMARY CARD */}
-            {/* [CTO FIX]: Chuyển md:grid-cols-12 thành lg:grid-cols-12 để màn hình tablet được full width */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
                 <div className={cn(
                     "lg:col-span-5 rounded-[2rem] p-6 lg:p-8 flex flex-col items-center justify-center text-center shadow-sm border",
@@ -115,7 +128,7 @@ export default function ExamResultPage({ params }: { params: Promise<{ submissio
                     </p>
                     <div className="flex items-baseline gap-1">
                         <span className={cn("text-6xl font-black tracking-tight drop-shadow-sm", isPassed ? "text-green-600 dark:text-green-500" : "text-destructive")}>
-                            {safeScore.toFixed(1)}
+                            {safeScore.toFixed(2)}
                         </span>
                         <span className="text-2xl font-bold text-muted-foreground">/ 10</span>
                     </div>
@@ -125,7 +138,6 @@ export default function ExamResultPage({ params }: { params: Promise<{ submissio
                     <h3 className="font-bold text-foreground flex items-center gap-2 mb-6 text-lg">
                         <Target className="w-5 h-5 text-primary" /> Thống kê chi tiết
                     </h3>
-                    {/* [CTO FIX]: Chuyển thành grid-cols-1 sm:grid-cols-3 để tự xuống dòng trên màn hình quá bé */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="bg-secondary/50 rounded-2xl p-4 border border-border/50 text-center flex flex-col items-center justify-center">
                             <FileQuestion className="w-6 h-6 text-muted-foreground mb-2 shrink-0" />
@@ -157,12 +169,22 @@ export default function ExamResultPage({ params }: { params: Promise<{ submissio
                     <div className="space-y-6">
                         {details.map((item, index) => {
                             const isCorrect = item.isCorrect;
-                            const displayStudentAnswer = formatAnswerSafe(item.studentAnswer) || 'Chưa trả lời';
-                            const displayCorrectAnswer = formatAnswerSafe(item.correctAnswer) || 'Không có đáp án';
+
+                            // TÌM MAP ĐÁP ÁN THEO ID TỪ MẢNG `answers`
+                            const selectedAnswerObj = item.answers?.find(a => a.id === item.studentSelectedId);
+                            const correctAnswerObj = item.answers?.find(a => a.id === item.correctAnswerId);
+
+                            const displayStudentAnswer = selectedAnswerObj 
+                                ? `${selectedAnswerObj.id}. ${selectedAnswerObj.content}` 
+                                : 'Chưa trả lời';
+                                
+                            const displayCorrectAnswer = correctAnswerObj 
+                                ? `${correctAnswerObj.id}. ${correctAnswerObj.content}` 
+                                : 'Không có đáp án';
 
                             return (
                                 <div 
-                                    key={item.questionId || index} 
+                                    key={item.originalQuestionId || index} 
                                     className={cn(
                                         "bg-card rounded-3xl border p-5 md:p-8 shadow-sm transition-all hover:shadow-md",
                                         isCorrect ? "border-green-500/30 hover:border-green-500/60" : "border-destructive/30 hover:border-destructive/60"

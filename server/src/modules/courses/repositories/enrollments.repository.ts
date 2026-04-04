@@ -7,6 +7,7 @@ import {
   EnrollmentDocument,
   EnrollmentStatus,
 } from '../schemas/enrollment.schema';
+import { ICourseMemberOverview, IGetCourseMembersParams } from '../interfaces/teacher-tracking.interface';
 
 @Injectable()
 export class EnrollmentsRepository extends AbstractRepository<EnrollmentDocument> {
@@ -33,16 +34,40 @@ export class EnrollmentsRepository extends AbstractRepository<EnrollmentDocument
   async atomicUpdateProgress(
     enrollmentId: Types.ObjectId,
     lessonId: Types.ObjectId,
-    newProgress: number,
+    totalCourseLessons: number,
   ): Promise<EnrollmentDocument | null> {
+    const safeTotal = Math.max(1, totalCourseLessons);
+
     return this.enrollmentModel
       .findByIdAndUpdate(
         enrollmentId,
-        {
-          $addToSet: { completedLessons: lessonId },
-          $set: { progress: newProgress },
-        },
-        { returnDocument: 'after', lean: true, session: this.currentSession },
+        [
+          {
+            $set: {
+              completedLessons: {
+                $setUnion: [{ $ifNull: ['$completedLessons', []] }, [lessonId]],
+              },
+            },
+          },
+          {
+            $set: {
+              progress: {
+                $min: [
+                  100,
+                  {
+                    $floor: {
+                      $multiply: [
+                        { $divide: [{ $size: '$completedLessons' }, safeTotal] },
+                        100,
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        ],
+        { new: true }
       )
       .exec();
   }
@@ -166,4 +191,72 @@ export class EnrollmentsRepository extends AbstractRepository<EnrollmentDocument
     const result = await this.enrollmentModel.aggregate(pipeline).exec();
     return result.length > 0 ? result[0].avgProgress : 0;
   }
+  
+  async getMembersWithProgress(
+    params: IGetCourseMembersParams
+  ): Promise<{ data: ICourseMemberOverview[]; total: number }> {
+    const { courseId, page, limit, search, sortBy, sortOrder } = params;
+    const skip = (page - 1) * limit;
+
+
+    const matchStage: any = {
+      courseId: new Types.ObjectId(courseId),
+      status: 'ACTIVE'
+    };
+
+    const pipeline: any[] = [
+      { $match: matchStage },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: 'user',
+        },
+      },
+      { $unwind: '$user' },
+    ];
+
+    if (search) {
+      pipeline.push({
+        $match: {
+          $or: [
+            { 'user.fullName': { $regex: search, $options: 'i' } },
+            { 'user.email': { $regex: search, $options: 'i' } },
+          ],
+        },
+      });
+    }
+
+    pipeline.push({
+      $project: {
+        userId: '$user._id',
+        fullName: '$user.fullName',
+        email: '$user.email',
+        avatar: { $ifNull: ['$user.avatar', null] },
+        progress: 1,
+        completedLessonsCount: { $size: { $ifNull: ['$completedLessons', []] } },
+        enrolledAt: '$createdAt',
+      },
+    });
+
+    const sortDirection = sortOrder === 'desc' ? -1 : 1;
+    pipeline.push({ $sort: { [sortBy as string]: sortDirection, _id: 1 } });
+
+    pipeline.push({
+      $facet: {
+        metadata: [{ $count: 'total' }],
+        data: [{ $skip: skip }, { $limit: limit }],
+      },
+    });
+
+    const result = await this.modelInstance.aggregate(pipeline).exec();
+
+    const total = result[0]?.metadata[0]?.total || 0;
+    const data = result[0]?.data || [];
+
+    return { data, total };
+  }
 }
+
+

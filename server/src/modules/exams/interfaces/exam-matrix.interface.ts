@@ -1,7 +1,15 @@
 import { Types } from 'mongoose';
 import { DifficultyLevel } from '../../questions/schemas/question.schema';
 
+export enum RuleQuestionType {
+  FLAT = 'FLAT',
+  PASSAGE = 'PASSAGE',
+  MIXED = 'MIXED',
+}
+
 export interface MatrixRulePayload {
+  questionType: RuleQuestionType; 
+  subQuestionLimit?: number;
   folderIds?: string[];
   topicIds?: string[];
   difficulties?: DifficultyLevel[];

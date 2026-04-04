@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 
@@ -12,6 +12,7 @@ import { courseQueryKeys } from '../api/course-keys';
 import { StudyTreeResponse } from '../types/course.schema';
 
 import { useHistoryOverview } from '@/features/exam-taking/hooks/useExamHistory';
+import { useStartExam, useExamReview } from '@/features/exam-taking/hooks/useTakeExam';
 
 import { VideoPlayer } from '@/shared/components/ui/video-player';
 import dynamic from 'next/dynamic';
@@ -37,7 +38,6 @@ import { CheckCircle2, Play, FileText, BrainCircuit, Loader2, Download, Lock, Al
 import { toast } from 'sonner';
 
 import { StudentExamEngine } from '@/features/exam-taking/components/StudentExamEngine';
-import { useExamReview } from '@/features/exam-taking/hooks/useTakeExam';
 import { parseApiError } from '@/shared/lib/error-parser';
 
 interface LessonViewerProps {
@@ -51,6 +51,9 @@ export function LessonViewer({ courseId, lessonId }: LessonViewerProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
 
+  const searchParams = useSearchParams();
+  const urlSubmissionId = searchParams.get('submissionId');
+
   const { data: lessonContent, isLoading: isLoadingContent, isError, isFetching, error } = useLessonContent(courseId, lessonId);
   const { data: studyTree } = useStudyTree(courseId);
   const { mutate: markCompleted, isPending: isMarking } = useMarkLessonCompleted(courseId);
@@ -58,9 +61,18 @@ export function LessonViewer({ courseId, lessonId }: LessonViewerProps) {
 
   const { data: historyOverviews, isLoading: isHistoryLoading } = useHistoryOverview();
 
+  const { mutate: startExam, isPending: isStartingExam } = useStartExam();
+
   const [activeAttachmentId, setActiveAttachmentId] = useState<string | null>(null);
-  const [quizState, setQuizState] = useState<QuizViewState>('PREVIEW');
+
+  const [quizState, setQuizState] = useState<QuizViewState>(urlSubmissionId ? 'TAKING' : 'PREVIEW');
   const [completedSubmissionId, setCompletedSubmissionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (urlSubmissionId && quizState === 'PREVIEW') {
+      setQuizState('TAKING');
+    }
+  }, [urlSubmissionId, quizState]);
 
   const lessonMeta = useMemo(() => {
     if (!studyTree || !lessonId) return null;
@@ -158,6 +170,15 @@ export function LessonViewer({ courseId, lessonId }: LessonViewerProps) {
 
   if (!lessonContent || !lessonMeta) return <ErrorState />;
 
+  const handleStartExamFlow = () => {
+    startExam({ courseId, lessonId }, {
+      onSuccess: (data) => {
+        router.push(`${ROUTES.STUDENT.STUDY_ROOM(courseId)}?lessonId=${lessonId}&submissionId=${data.submissionId}`, { scroll: false });
+        setQuizState('TAKING');
+      }
+    });
+  };
+
   const handleMarkCompleted = () => {
     if (!lessonMeta.isCompleted) {
       markCompleted(lessonId, {
@@ -214,7 +235,6 @@ export function LessonViewer({ courseId, lessonId }: LessonViewerProps) {
           {isQuiz && (
             <div className="w-full max-w-5xl mx-auto shadow-sm">
 
-              {/* STATE 1: PREVIEW */}
               {quizState === 'PREVIEW' && (
                 <div className="bg-card border-2 border-border border-dashed rounded-[2rem] p-8 md:p-12 text-center transition-all animate-in fade-in duration-500 relative overflow-hidden">
 
@@ -230,7 +250,7 @@ export function LessonViewer({ courseId, lessonId }: LessonViewerProps) {
 
                       <div className="flex flex-wrap justify-center gap-4 text-sm font-medium text-muted-foreground mb-6 bg-secondary/40 p-4 rounded-2xl inline-flex shadow-inner">
                         <span className="flex items-center gap-2 bg-background px-3 py-1.5 rounded-lg shadow-sm border border-border/50">
-                         Thời gian: <strong className="text-foreground">{rules?.timeLimit === 0 ? 'Không giới hạn' : `${rules?.timeLimit} phút`}</strong>
+                          Thời gian: <strong className="text-foreground">{rules?.timeLimit === 0 ? 'Không giới hạn' : `${rules?.timeLimit} phút`}</strong>
                         </span>
                         <span className="flex items-center gap-2 bg-background px-3 py-1.5 rounded-lg shadow-sm border border-border/50">
                           Điểm qua: <strong className="text-foreground">{rules?.passPercentage}%</strong>
@@ -267,7 +287,8 @@ export function LessonViewer({ courseId, lessonId }: LessonViewerProps) {
                         {(!rules?.maxAttempts || (examHistory?.attemptsUsed || 0) < rules.maxAttempts || examHistory?.isLatestInProgress) && (
                           <Button
                             size="lg"
-                            onClick={() => setQuizState('TAKING')}
+                            onClick={handleStartExamFlow}
+                            disabled={isStartingExam}
                             className={cn(
                               "font-bold h-14 px-10 text-lg shadow-lg transition-transform hover:scale-105 w-full sm:w-auto",
                               examHistory?.isLatestInProgress
@@ -275,7 +296,7 @@ export function LessonViewer({ courseId, lessonId }: LessonViewerProps) {
                                 : "bg-primary hover:bg-primary/90 text-primary-foreground shadow-primary/25"
                             )}
                           >
-                            <PlayCircle className="w-5 h-5 mr-2" />
+                            {isStartingExam ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <PlayCircle className="w-5 h-5 mr-2" />}
                             {examHistory?.isLatestInProgress ? 'Tiếp tục làm bài' : examHistory ? 'Làm lại bài thi' : 'Bắt đầu làm bài'}
                           </Button>
                         )}
@@ -294,12 +315,14 @@ export function LessonViewer({ courseId, lessonId }: LessonViewerProps) {
                 </div>
               )}
 
-              {quizState === 'TAKING' && (
+              {quizState === 'TAKING' && urlSubmissionId && (
                 <div className="fixed inset-0 z-[100] bg-background overflow-y-auto animate-in slide-in-from-bottom-4 duration-500">
                   <StudentExamEngine
                     courseId={courseId}
                     lessonId={lessonId}
+                    submissionId={urlSubmissionId}
                     onComplete={(subId) => {
+                      router.replace(`${ROUTES.STUDENT.STUDY_ROOM(courseId)}?lessonId=${lessonId}`, { scroll: false });
                       setCompletedSubmissionId(subId);
                       setQuizState('RESULT');
                     }}

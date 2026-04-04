@@ -105,5 +105,9 @@ export class Question {
 
 export const QuestionSchema = SchemaFactory.createForClass(Question);
 
+QuestionSchema.index({ ownerId: 1, isArchived: 1, isDraft: 1, parentPassageId: 1, type: 1 });
+
+QuestionSchema.index({ parentPassageId: 1, isArchived: 1, isDraft: 1 });
+
 QuestionSchema.index({ folderId: 1, type: 1, isDraft: 1 });
-QuestionSchema.index({ parentPassageId: 1, orderIndex: 1 });
+QuestionSchema.index({ topicId: 1, difficultyLevel: 1 });

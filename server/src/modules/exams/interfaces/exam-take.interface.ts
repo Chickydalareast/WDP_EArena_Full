@@ -25,3 +25,8 @@ export interface GetLessonAttemptsPayload {
   page: number;
   limit: number;
 }
+
+export interface GetExamPaperPayload {
+  submissionId: string;
+  studentId: string;
+}

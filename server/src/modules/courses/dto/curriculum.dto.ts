@@ -21,7 +21,7 @@ export class ExamRuleConfigDto {
   timeLimit: number;
 
   @IsInt({ message: 'Số lần thi phải là số nguyên' })
-  @Min(1, { message: 'Số lần thi tối thiểu là 1' })
+  @Min(0, { message: 'Số lần thi tối thiểu là 0 (0 = Không giới hạn)' }) 
   maxAttempts: number;
 
   @IsInt({ message: 'Điểm chuẩn phải là số nguyên' })
@@ -32,7 +32,6 @@ export class ExamRuleConfigDto {
   @IsEnum(ShowResultMode, { message: 'Chế độ hiển thị kết quả không hợp lệ' })
   showResultMode: ShowResultMode;
 }
-
 export class CreateSectionDto {
   @IsString()
   @IsNotEmpty({ message: 'Tên chương/phần không được để trống' })

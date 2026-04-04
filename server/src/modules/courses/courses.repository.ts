@@ -50,7 +50,6 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
       .populate('teacherId', 'fullName avatar bio')
       .populate('subjectId', 'name')
       .populate('coverImageId', 'url blurHash')
-      // [CTO FIX]: Populate thêm metadata cho Video Trailer
       .populate('promotionalVideoId', 'url blurHash duration')
       .lean()
       .exec();
@@ -72,27 +71,27 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
         : null,
       teacher: teacherId
         ? {
-            id: teacherId._id.toString(),
-            fullName: teacherId.fullName,
-            avatar: teacherId.avatar,
-            bio: teacherId.bio || null,
-          }
+          id: teacherId._id.toString(),
+          fullName: teacherId.fullName,
+          avatar: teacherId.avatar,
+          bio: teacherId.bio || null,
+        }
         : null,
       coverImage: coverImageId
         ? {
-            id: coverImageId._id.toString(),
-            url: coverImageId.url,
-            blurHash: coverImageId.blurHash,
-          }
+          id: coverImageId._id.toString(),
+          url: coverImageId.url,
+          blurHash: coverImageId.blurHash,
+        }
         : null,
 
       promotionalVideo: promotionalVideoId
         ? {
-            id: promotionalVideoId._id.toString(),
-            url: promotionalVideoId.url,
-            blurHash: promotionalVideoId.blurHash || null,
-            duration: promotionalVideoId.duration || null,
-          }
+          id: promotionalVideoId._id.toString(),
+          url: promotionalVideoId.url,
+          blurHash: promotionalVideoId.blurHash || null,
+          duration: promotionalVideoId.duration || null,
+        }
         : null,
       ...rest,
     };
@@ -120,7 +119,6 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
                 foreignField: 'sectionId',
                 pipeline: [
                   { $sort: { order: 1 } },
-                  
                   {
                     $lookup: {
                       from: 'exams',
@@ -135,7 +133,6 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
                       preserveNullAndEmptyArrays: true
                     }
                   },
-
                   {
                     $lookup: {
                       from: 'media',
@@ -194,6 +191,7 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
       {
         $addFields: {
           id: { $toString: '$_id' },
+          teacherId: { $toString: '$teacherId' },
           totalLessons: {
             $sum: {
               $map: {
@@ -287,7 +285,6 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
                           null,
                         ],
                       },
-                      
                       examMode: {
                         $cond: [
                           { $ifNull: ['$$lesson.examData', false] },
@@ -302,7 +299,22 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
                           null,
                         ],
                       },
-
+                      dynamicConfig: {
+                        $cond: [
+                          { $ifNull: ['$$lesson.examData.dynamicConfig', false] },
+                          {
+                            matrixId: {
+                              $cond: [
+                                { $ifNull: ['$$lesson.examData.dynamicConfig.matrixId', false] },
+                                { $toString: '$$lesson.examData.dynamicConfig.matrixId' },
+                                null,
+                              ],
+                            },
+                            adHocSections: { $ifNull: ['$$lesson.examData.dynamicConfig.adHocSections', []] },
+                          },
+                          null,
+                        ],
+                      },
                       primaryVideo: {
                         $cond: [
                           { $ifNull: ['$$lesson.primaryVideoData', false] },
@@ -310,12 +322,12 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
                             id: { $toString: '$$lesson.primaryVideoData._id' },
                             url: maskUrls
                               ? {
-                                  $cond: [
-                                    { $eq: ['$$lesson.isFreePreview', true] },
-                                    '$$lesson.primaryVideoData.url',
-                                    null,
-                                  ],
-                                }
+                                $cond: [
+                                  { $eq: ['$$lesson.isFreePreview', true] },
+                                  '$$lesson.primaryVideoData.url',
+                                  null,
+                                ],
+                              }
                               : '$$lesson.primaryVideoData.url',
                             blurHash: '$$lesson.primaryVideoData.blurHash',
                             duration: '$$lesson.primaryVideoData.duration',
@@ -323,7 +335,6 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
                           null,
                         ],
                       },
-
                       attachments: {
                         $map: {
                           input: '$$lesson.attachmentsData',
@@ -332,12 +343,12 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
                             id: { $toString: '$$att._id' },
                             url: maskUrls
                               ? {
-                                  $cond: [
-                                    { $eq: ['$$lesson.isFreePreview', true] },
-                                    '$$att.url',
-                                    null,
-                                  ],
-                                }
+                                $cond: [
+                                  { $eq: ['$$lesson.isFreePreview', true] },
+                                  '$$att.url',
+                                  null,
+                                ],
+                              }
                               : '$$att.url',
                             originalName: '$$att.originalName',
                             mimetype: '$$att.mimetype',
@@ -357,7 +368,6 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
         $project: {
           _id: 0,
           __v: 0,
-          teacherId: 0,
           subjectId: 0,
           coverImageId: 0,
           promotionalVideoId: 0,
@@ -371,7 +381,6 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
     return result[0] || null;
   }
 
-  // [CTO UPGRADE]: Viết lại lõi Search Engine sử dụng Dynamic Query Builder (Đã Fix Lỗi Data Rác)
   async searchPublicCourses(options: SearchPublicCoursesOptions) {
     const {
       keyword,
@@ -384,7 +393,6 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
       sort,
     } = options;
 
-    // 1. Build Query (Mảng chứa các điều kiện AND)
     const andConditions: any[] = [{ status: 'PUBLISHED' }];
 
     if (keyword) {
@@ -401,22 +409,16 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
     }
 
     if (isFree) {
-      // [CTO FIX]: Không check discountPrice = 0 nữa vì data FE lưu đang bị rác.
-      // Khóa học free chuẩn xác nhất là khóa có giá gốc (price) = 0.
       andConditions.push({ price: 0 });
     } else if (minPrice !== undefined || maxPrice !== undefined) {
-      // Logic xử lý giá cực kỳ chặt chẽ: Phớt lờ data rác discountPrice = 0
       const priceCondition: any = {};
       if (minPrice !== undefined) priceCondition.$gte = minPrice;
       if (maxPrice !== undefined) priceCondition.$lte = maxPrice;
 
       andConditions.push({
         $or: [
-          // TH1: Đang sale thật sự (discountPrice > 0 VÀ nằm trong khoảng giá)
-          // [CTO FIX]: Gộp chung điều kiện vào một object
           { discountPrice: { $gt: 0, ...priceCondition } },
 
-          // TH2: KHÔNG sale (discountPrice = 0 do rác, hoặc null, hoặc không tồn tại) -> Áp dụng cho giá gốc
           {
             $or: [
               { discountPrice: 0 },
@@ -431,8 +433,7 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
 
     const filter = { $and: andConditions };
 
-    // 2. Build Sort
-    let sortConfig: Record<string, 1 | -1> = { createdAt: -1 }; // Mặc định khóa học mới nhất
+    let sortConfig: Record<string, 1 | -1> = { createdAt: -1 };
 
     if (sort) {
       switch (sort) {
@@ -443,7 +444,6 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
           sortConfig = { price: -1, createdAt: -1 };
           break;
         case CourseSortType.POPULAR:
-          // Xếp hạng sao từ cao xuống thấp, review nhiều xuống ít
           sortConfig = { averageRating: -1, totalReviews: -1, createdAt: -1 };
           break;
         case CourseSortType.NEWEST:
@@ -453,7 +453,6 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
       }
     }
 
-    // 3. Thực thi Query
     const skip = (page - 1) * limit;
 
     const [data, total] = await Promise.all([
@@ -483,17 +482,17 @@ export class CoursesRepository extends AbstractRepository<CourseDocument> {
           : null,
         teacher: teacherId
           ? {
-              id: teacherId._id.toString(),
-              fullName: teacherId.fullName,
-              avatar: teacherId.avatar,
-            }
+            id: teacherId._id.toString(),
+            fullName: teacherId.fullName,
+            avatar: teacherId.avatar,
+          }
           : null,
         coverImage: coverImageId
           ? {
-              id: coverImageId._id.toString(),
-              url: coverImageId.url,
-              blurHash: coverImageId.blurHash,
-            }
+            id: coverImageId._id.toString(),
+            url: coverImageId.url,
+            blurHash: coverImageId.blurHash,
+          }
           : null,
         ...rest,
       };

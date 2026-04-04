@@ -254,18 +254,27 @@ export class QuestionsController {
     });
   }
 
-  // @Post('active-filters/query')
+
+  // @Post('active-filters')
   // @HttpCode(HttpStatus.OK)
   // async getActiveFilters(
   //   @CurrentUser('userId') userId: string,
-  //   @Body() dto: ActiveFiltersDto
+  //   @Body() dto: ActiveFiltersDto,
   // ) {
-  //   return this.questionsService.getActiveFilters(userId, {
+  //   const payload: GetActiveFiltersPayload = {
   //     folderIds: dto.folderIds,
   //     topicIds: dto.topicIds,
   //     difficulties: dto.difficulties,
-  //     tags: dto.tags
-  //   });
+  //     tags: dto.tags,
+  //     isDraft: dto.isDraft,
+  //   };
+
+  //   const data = await this.questionsService.getActiveFilters(userId, payload);
+
+  //   return {
+  //     message: 'Lấy bộ lọc động thành công.',
+  //     data,
+  //   };
   // }
 
   @Post('active-filters')
@@ -274,19 +283,13 @@ export class QuestionsController {
     @CurrentUser('userId') userId: string,
     @Body() dto: ActiveFiltersDto,
   ) {
-    const payload: GetActiveFiltersPayload = {
+    return this.questionsService.getActiveFilters(userId, {
       folderIds: dto.folderIds,
       topicIds: dto.topicIds,
       difficulties: dto.difficulties,
       tags: dto.tags,
       isDraft: dto.isDraft,
-    };
-
-    const data = await this.questionsService.getActiveFilters(userId, payload);
-
-    return {
-      message: 'Lấy bộ lọc động thành công.',
-      data,
-    };
+      questionType: dto.questionType,
+    });
   }
 }

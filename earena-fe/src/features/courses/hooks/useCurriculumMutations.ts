@@ -7,6 +7,7 @@ import { CreateSectionDTO, CreateLessonDTO, UpdateSectionDTO, UpdateLessonDTO, A
 import { useRouter } from 'next/navigation';
 import { ROUTES } from '@/config/routes';
 import { useUpgradeUIStore } from '@/features/billing/stores/upgrade-ui.store';
+import { CreateExamMatrixDTO } from '@/features/exam-builder/types/exam.schema';
 
 const invalidateCurriculumCache = (queryClient: any, courseId: string) => {
   queryClient.invalidateQueries({ queryKey: courseQueryKeys.studyTree(courseId) });
@@ -231,6 +232,28 @@ export const useUpdateQuizLesson = (courseId: string) => {
         throw error; 
       }
       toast.error('Lỗi cập nhật bài kiểm tra', { description: parsed.message });
+    },
+  });
+};
+
+export const useCreateExamMatrix = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: CreateExamMatrixDTO) => courseService.createExamMatrix(payload),
+    onSuccess: () => {
+      toast.success('Lưu cấu hình thành Khuôn mẫu thành công!', {
+        description: 'Khuôn mẫu này đã được lưu vào thư viện của bạn.'
+      });
+      queryClient.invalidateQueries({
+        queryKey: courseQueryKeys.quizMatrices(),
+      });
+    },
+    onError: (error: unknown) => {
+      const parsed = parseApiError(error);
+      toast.error('Lưu Khuôn mẫu thất bại', { 
+        description: parsed.message 
+      });
     },
   });
 };
