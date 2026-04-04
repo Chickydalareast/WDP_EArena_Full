@@ -66,44 +66,36 @@ export async function getCommunityPostsByCourse(
 }
 
 /**
- * Upload ảnh đính kèm community qua BE (multipart + cookie), giống tinh thần luồng đăng ký GV.
- * Tránh phụ thuộc GET /media/signature + POST trực tiếp Cloudinary từ trình duyệt.
+ * Upload ảnh đính kèm community qua BE (multipart + cookie) → Cloudinary.
+ * KHÔNG đặt Content-Type → axios tự gắn multipart/form-data;boundary=...
  */
 export async function uploadCommunityImage(file: File): Promise<{ url: string; name?: string }> {
   const fd = new FormData();
   fd.append('file', file, file.name || 'community-image');
 
-  /**
-   * Dùng axiosClient để đi qua interceptor refresh token, nhưng override header JSON mặc định
-   * bằng multipart/form-data cho request này. Axios sẽ tự gắn boundary phù hợp trong browser.
-   */
-  const payload = (await axiosClient.request({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const raw: any = await axiosClient.request({
     method: 'post',
     url: API_ENDPOINTS.COMMUNITY.UPLOAD_IMAGE,
     data: fd,
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-    transformRequest: [(data) => data],
-  })) as
-    | {
-        url?: string;
-        name?: string;
-      }
-    | {
-        data?: {
-          url?: string;
-          name?: string;
-        };
-      };
+    // KHÔNG ghi đè headers — axios sẽ tự phát hiện FormData và gắn boundary đúng
+    timeout: 120_000,
+  });
 
-  const normalized = 'url' in (payload || {}) ? payload : payload?.data;
+  // Intercept trả { statusCode, message, data } → lấy url từ data
+  const r = raw as Record<string, unknown>;
+  const layer1 = (r.data != null && typeof r.data === 'object' && !Array.isArray(r.data))
+    ? (r.data as Record<string, unknown>) : r;
+  const layer2 = (layer1.data != null && typeof layer1.data === 'object' && !Array.isArray(layer1.data))
+    ? (layer1.data as Record<string, unknown>) : layer1;
 
-  if (!normalized?.url) {
+  const url = typeof layer2.url === 'string' ? layer2.url
+    : typeof layer2.secure_url === 'string' ? layer2.secure_url : null;
+
+  if (!url) {
     throw new Error('Phản hồi máy chủ không hợp lệ khi tải ảnh cộng đồng.');
   }
-
-  return { url: normalized.url, name: normalized.name };
+  return { url, name: typeof layer2.name === 'string' ? layer2.name : undefined };
 }
 
 export async function createCommunityPost(body: {
