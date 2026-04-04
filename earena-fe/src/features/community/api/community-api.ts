@@ -1,4 +1,5 @@
 import { axiosClient } from '@/shared/lib/axios-client';
+import type { ApiError } from '@/shared/lib/error-parser';
 import { API_ENDPOINTS } from '@/config/api-endpoints';
 
 export type CommunityPostType =
@@ -18,6 +19,14 @@ export type CommunityReactionKind =
   | 'SPOT_ON'
   | 'THANKS';
 
+
+function unwrapData<T>(payload: T | { data?: T } | undefined | null): T | undefined {
+  if (payload && typeof payload === 'object' && 'data' in (payload as Record<string, unknown>)) {
+    return (payload as { data?: T }).data;
+  }
+  return payload as T | undefined;
+}
+
 export async function getCommunityFeed(params: {
   sort?: CommunityFeedSort;
   type?: CommunityPostType;
@@ -28,19 +37,23 @@ export async function getCommunityFeed(params: {
   cursor?: string;
   limit?: number;
 }) {
-  return axiosClient.get(API_ENDPOINTS.COMMUNITY.FEED, { params });
+  const res = await axiosClient.get(API_ENDPOINTS.COMMUNITY.FEED, { params });
+  return unwrapData(res) ?? { items: [], nextCursor: null };
 }
 
 export async function getCommunitySidebar() {
-  return axiosClient.get(API_ENDPOINTS.COMMUNITY.SIDEBAR);
+  const res = await axiosClient.get(API_ENDPOINTS.COMMUNITY.SIDEBAR);
+  return unwrapData(res) ?? {};
 }
 
 export async function getCommunityPost(postId: string) {
-  return axiosClient.get(API_ENDPOINTS.COMMUNITY.POST(postId));
+  const res = await axiosClient.get(API_ENDPOINTS.COMMUNITY.POST(postId));
+  return unwrapData(res);
 }
 
 export async function getCommunityPostComments(postId: string) {
-  return axiosClient.get(API_ENDPOINTS.COMMUNITY.POST_COMMENTS(postId));
+  const res = await axiosClient.get(API_ENDPOINTS.COMMUNITY.POST_COMMENTS(postId));
+  return unwrapData(res) ?? { comments: [] };
 }
 
 export async function getCommunityPostsByCourse(
@@ -52,6 +65,47 @@ export async function getCommunityPostsByCourse(
   });
 }
 
+/**
+ * Upload ảnh đính kèm community qua BE (multipart + cookie), giống tinh thần luồng đăng ký GV.
+ * Tránh phụ thuộc GET /media/signature + POST trực tiếp Cloudinary từ trình duyệt.
+ */
+export async function uploadCommunityImage(file: File): Promise<{ url: string; name?: string }> {
+  const fd = new FormData();
+  fd.append('file', file, file.name || 'community-image');
+
+  /**
+   * Dùng axiosClient để đi qua interceptor refresh token, nhưng override header JSON mặc định
+   * bằng multipart/form-data cho request này. Axios sẽ tự gắn boundary phù hợp trong browser.
+   */
+  const payload = (await axiosClient.request({
+    method: 'post',
+    url: API_ENDPOINTS.COMMUNITY.UPLOAD_IMAGE,
+    data: fd,
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+    transformRequest: [(data) => data],
+  })) as
+    | {
+        url?: string;
+        name?: string;
+      }
+    | {
+        data?: {
+          url?: string;
+          name?: string;
+        };
+      };
+
+  const normalized = 'url' in (payload || {}) ? payload : payload?.data;
+
+  if (!normalized?.url) {
+    throw new Error('Phản hồi máy chủ không hợp lệ khi tải ảnh cộng đồng.');
+  }
+
+  return { url: normalized.url, name: normalized.name };
+}
+
 export async function createCommunityPost(body: {
   type: CommunityPostType;
   bodyJson: string;
@@ -61,7 +115,28 @@ export async function createCommunityPost(body: {
   courseId?: string;
   examId?: string;
 }) {
-  return axiosClient.post(API_ENDPOINTS.COMMUNITY.POSTS, body);
+  const res = await axiosClient.post(API_ENDPOINTS.COMMUNITY.POSTS, body);
+  return unwrapData(res);
+}
+
+export async function updateCommunityPost(
+  postId: string,
+  body: {
+    type?: CommunityPostType;
+    bodyJson?: string;
+    attachments?: { url: string; kind: 'IMAGE' | 'FILE'; name?: string; mime?: string }[];
+    tags?: string[];
+    subjectId?: string;
+    courseId?: string;
+    examId?: string;
+  },
+) {
+  const res = await axiosClient.patch(API_ENDPOINTS.COMMUNITY.POST(postId), body);
+  return unwrapData(res);
+}
+
+export async function deleteCommunityPost(postId: string) {
+  return axiosClient.delete(API_ENDPOINTS.COMMUNITY.POST(postId));
 }
 
 export async function saveCommunityPost(postId: string) {
@@ -136,7 +211,8 @@ export async function unfollowCommunity(
 }
 
 export async function getCommunityProfile(userId: string) {
-  return axiosClient.get(API_ENDPOINTS.COMMUNITY.PROFILE(userId));
+  const res = await axiosClient.get(API_ENDPOINTS.COMMUNITY.PROFILE(userId));
+  return unwrapData(res);
 }
 
 export async function getAdminCommunityReports(params?: {

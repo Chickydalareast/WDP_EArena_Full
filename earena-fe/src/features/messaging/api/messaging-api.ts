@@ -57,3 +57,7 @@ export async function sendMessage(
 ) {
   return axiosClient.post(API_ENDPOINTS.MESSAGING.SEND(threadId), body);
 }
+
+export async function markThreadRead(threadId: string) {
+  return axiosClient.post(API_ENDPOINTS.MESSAGING.MARK_READ(threadId));
+}

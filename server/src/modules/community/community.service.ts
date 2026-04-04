@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -17,6 +18,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/constants/notification-event.constant';
 import { UsersRepository } from '../users/users.repository';
 import { SubjectsService } from '../taxonomy/subjects.service';
+import { CLOUDINARY_PROVIDER } from '../media/interfaces/storage-provider.interface';
+import type { ICloudinaryProvider } from '../media/interfaces/storage-provider.interface';
 
 import { CommunityPost, CommunityPostDocument } from './schemas/community-post.schema';
 import { CommunityComment, CommunityCommentDocument } from './schemas/community-comment.schema';
@@ -95,7 +98,47 @@ export class CommunityService {
     private readonly notificationsService: NotificationsService,
     private readonly usersRepository: UsersRepository,
     private readonly subjectsService: SubjectsService,
+    @Inject(CLOUDINARY_PROVIDER)
+    private readonly cloudinaryProvider: ICloudinaryProvider,
   ) {}
+
+  private readonly communityImageFolder = 'earena/community';
+
+  /** Upload ảnh đính kèm qua server (giống luồng đăng ký GV — không phụ thuộc chữ ký Cloudinary phía client). */
+  async uploadAttachmentImage(userId: string, file: Express.Multer.File) {
+    await this.assertCommunityNotRestricted(userId);
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('File ảnh không hợp lệ.');
+    }
+    const mime = (file.mimetype || '').toLowerCase();
+    const name = file.originalname || 'image';
+    if (mime === 'image/svg+xml') {
+      throw new BadRequestException('Không chấp nhận ảnh SVG.');
+    }
+    const allowedMime = new Set([
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'image/gif',
+      'image/bmp',
+      'image/heic',
+      'image/heif',
+      'image/avif',
+    ]);
+    const extOk = /\.(jpe?g|png|gif|webp|bmp|heic|heif|avif)$/i.test(name);
+    const mimeOk =
+      (mime.startsWith('image/') && allowedMime.has(mime)) ||
+      (!mime && extOk) ||
+      (mime === 'application/octet-stream' && extOk);
+    if (!mimeOk) {
+      throw new BadRequestException(
+        'Chỉ chấp nhận ảnh JPEG, PNG, WebP, GIF, BMP, HEIC hoặc AVIF.',
+      );
+    }
+    const folder = `${this.communityImageFolder}/${userId}`;
+    const meta = await this.cloudinaryProvider.uploadImageBuffer(file.buffer, folder);
+    return { url: meta.url, name };
+  }
 
   private bannedWords(): string[] {
     const raw = this.configService.get<string>('COMMUNITY_BANNED_WORDS') || '';
@@ -278,6 +321,9 @@ export class CommunityService {
       post.bodyJson = dto.bodyJson;
       post.bodyPlain = bodyPlain;
     }
+    if (dto.type) {
+      post.type = dto.type;
+    }
     if (dto.attachments) post.attachments = dto.attachments;
     if (dto.tags) {
       post.tags = dto.tags.map((t) => t.replace(/^#/, '').trim()).filter(Boolean);
@@ -286,6 +332,23 @@ export class CommunityService {
       post.subjectId = dto.subjectId
         ? new Types.ObjectId(dto.subjectId)
         : undefined;
+    }
+    if (dto.courseId !== undefined) {
+      let courseSnapshot: Awaited<ReturnType<typeof this.buildCourseSnapshot>> | undefined;
+      let courseOid: Types.ObjectId | undefined;
+      if (dto.courseId) {
+        courseSnapshot = await this.buildCourseSnapshot(dto.courseId);
+        courseOid = new Types.ObjectId(dto.courseId);
+      }
+      post.courseId = courseOid;
+      post.courseSnapshot = courseSnapshot;
+    }
+    if (dto.examId !== undefined) {
+      if (dto.examId) {
+        const exam = await this.examsRepository.findByIdSafe(dto.examId);
+        if (!exam) throw new BadRequestException('Đề thi không tồn tại.');
+      }
+      post.examId = dto.examId ? new Types.ObjectId(dto.examId) : undefined;
     }
     const upCreated =
       (post as unknown as { createdAt?: Date }).createdAt || new Date();

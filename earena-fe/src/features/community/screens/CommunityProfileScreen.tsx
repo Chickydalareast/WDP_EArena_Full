@@ -7,7 +7,7 @@ import { getCommunityProfile, followCommunity, unfollowCommunity } from '../api/
 import { formatCommunityBadges } from '../lib/community-badge-labels';
 import { Button } from '@/shared/components/ui/button';
 import { Card } from '@/shared/components/ui/card';
-import { Loader2 } from 'lucide-react';
+import { Loader2, MessageCircle } from 'lucide-react';
 import { useAuthStore } from '@/features/auth/stores/auth.store';
 import { toast } from 'sonner';
 
@@ -59,9 +59,19 @@ export function CommunityProfileScreen({ userId }: { userId: string }) {
           </p>
         </div>
         {me?.id && me.id !== userId && (
-          <Button variant={data.following ? 'outline' : 'default'} onClick={toggleFollow}>
-            {data.following ? 'Đang theo dõi' : 'Theo dõi'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant={data.following ? 'outline' : 'default'} onClick={toggleFollow}>
+              {data.following ? 'Đang theo dõi' : 'Theo dõi'}
+            </Button>
+            <Button variant="secondary" asChild>
+              <Link
+                href={`${me.role === 'TEACHER' ? ROUTES.TEACHER.MESSAGES : ROUTES.STUDENT.MESSAGES}?peer=${userId}`}
+              >
+                <MessageCircle className="mr-2 h-4 w-4" />
+                Trò chuyện riêng
+              </Link>
+            </Button>
+          </div>
         )}
       </Card>
 

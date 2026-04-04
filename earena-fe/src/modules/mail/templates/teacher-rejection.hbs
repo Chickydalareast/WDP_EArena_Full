@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>EArena - Yêu cầu chỉnh sửa hồ sơ giáo viên</title>
+</head>
+<body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0;">
+    <div style="max-width: 600px; margin: 20px auto; background-color: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+        
+        <div style="text-align: center; margin-bottom: 25px; border-bottom: 2px solid #f0f0f0; padding-bottom: 20px;">
+            <h1 style="color: #e91e63; margin: 0; font-size: 32px; letter-spacing: 1px;">EArena</h1>
+            <span style="color: #888; font-size: 14px; text-transform: uppercase; letter-spacing: 2px;">Teacher Portal</span>
+        </div>
+
+        <h2 style="color: #333333; text-align: center;">Hồ sơ giáo viên bị từ chối ⚠️</h2>
+        
+        <p style="color: #555555; font-size: 16px; line-height: 1.6;">Xin chào <strong>{{name}}</strong>,</p>
+        
+        <p style="color: #555555; font-size: 16px; line-height: 1.6;">Cảm ơn bạn đã đăng ký tài khoản giáo viên trên EArena. Sau khi kiểm duyệt hồ sơ, Ban quản trị nhận thấy hồ sơ của bạn chưa đáp ứng đầy đủ yêu cầu xác minh của hệ thống.</p>
+        
+        {{#if reason}}
+        <div style="background-color: #fff3f3; border-left: 5px solid #f44336; padding: 18px; margin: 25px 0; border-radius: 0 4px 4px 0;">
+            <p style="color: #d32f2f; margin: 0 0 10px 0; font-weight: bold; font-size: 15px;">Chi tiết phản hồi từ Admin:</p>
+            <p style="color: #333333; margin: 0; font-size: 15px; line-height: 1.5; white-space: pre-wrap;">{{reason}}</p>
+        </div>
+        {{/if}}
+        
+        <p style="color: #555555; font-size: 16px; line-height: 1.6;">Vui lòng liên hệ bộ phận hỗ trợ hoặc đăng ký lại với hồ sơ đầy đủ và chính xác hơn.</p>
+        
+        <div style="margin-top: 40px; border-top: 1px solid #eeeeee; padding-top: 20px; text-align: center; color: #aaaaaa; font-size: 12px;">
+            <p>&copy; {{year}} EArena Team. All rights reserved.</p>
+            <p>Hệ thống tự động, vui lòng không trả lời email này.</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -9,22 +9,25 @@ import { ROUTES } from '@/config/routes';
 import { Button } from '@/shared/components/ui/button';
 import { Card } from '@/shared/components/ui/card';
 import { Textarea } from '@/shared/components/ui/textarea';
+import { RichTextEditor } from '@/shared/components/ui/rich-text-editor';
 import {
   getCommunityPost,
   getCommunityPostComments,
   createCommunityComment,
   reactCommunityComment,
   setBestAnswer,
+  updateCommunityPost,
+  deleteCommunityPost,
   reportCommunity,
-  type CommunityReactionKind,
+  type CommunityReactionKind
 } from '../api/community-api';
 import { PostBodyDisplay } from '../components/PostBodyDisplay';
 import { PostAttachmentsDisplay } from '../components/PostAttachmentsDisplay';
-import { CommunityAttachmentPicker } from '../components/CommunityAttachmentPicker';
 import type { CommunityAttachment } from '../components/PostAttachmentsDisplay';
 import { toast } from 'sonner';
 import { Loader2, ArrowLeft, Reply } from 'lucide-react';
 import { formatCurrency } from '@/shared/lib/utils';
+import { parseApiError } from '@/shared/lib/error-parser';
 
 const REACTIONS: { kind: CommunityReactionKind; label: string }[] = [
   { kind: 'HELPFUL', label: 'Hữu ích' },
@@ -33,6 +36,15 @@ const REACTIONS: { kind: CommunityReactionKind; label: string }[] = [
   { kind: 'SPOT_ON', label: 'Đúng ý' },
   { kind: 'THANKS', label: 'Cảm ơn' },
 ];
+
+function hasMeaningfulRichText(value: string) {
+  const plain = value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return plain.length > 0;
+}
 
 type CommentRow = {
   id: string;
@@ -74,6 +86,8 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [commentReport, setCommentReport] = useState<{ id: string } | null>(null);
+  const [isEditingPost, setIsEditingPost] = useState(false);
+  const [editPostBody, setEditPostBody] = useState('');
 
   const postQ = useQuery({
     queryKey: ['community-post', postId],
@@ -86,6 +100,10 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
   });
 
   const post = postQ.data as Record<string, unknown> | undefined;
+  useEffect(() => {
+    setEditPostBody(String(post?.bodyJson || ''));
+  }, [post?.bodyJson, postId]);
+
   const pack = commentsQ.data as {
     comments?: CommentRow[];
     bestAnswerCommentId?: string | null;
@@ -203,6 +221,34 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
     }
   };
 
+  const onUpdatePost = async () => {
+    if (!hasMeaningfulRichText(editPostBody)) {
+      toast.error('Nội dung bài viết không được để trống');
+      return;
+    }
+    try {
+      await updateCommunityPost(postId, {
+        bodyJson: editPostBody,
+      });
+      toast.success('Đã cập nhật bài viết');
+      setIsEditingPost(false);
+      refetchAll();
+    } catch (error) {
+      toast.error(parseApiError(error).message || 'Không thể cập nhật bài viết');
+    }
+  };
+
+  const onDeletePost = async () => {
+    if (!window.confirm('Bạn chắc chắn muốn xóa bài viết này?')) return;
+    try {
+      await deleteCommunityPost(postId);
+      toast.success('Đã xóa bài viết');
+      router.push(ROUTES.PUBLIC.COMMUNITY);
+    } catch {
+      toast.error('Không thể xóa bài viết');
+    }
+  };
+
   if (postQ.isLoading || !post) {
     return (
       <div className="flex justify-center py-24">
@@ -215,6 +261,7 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
   const author = post.author as Record<string, unknown> | null;
   const subject = post.subject as { id: string; name: string } | null | undefined;
   const commentsLocked = !!post.commentsLocked;
+  const canManagePost = !!user?.id && String(post.authorId || author?.id || '') === user.id;
 
   const renderCommentNode = (c: CommentRow, depth: number): ReactNode => {
     const cid = String(c.id);
@@ -234,7 +281,16 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
           {isBest && (
             <span className="text-xs font-bold text-primary">Câu trả lời hay nhất</span>
           )}
-          <div className="text-sm font-medium">{ca?.fullName as string}</div>
+          {ca?.id ? (
+            <Link
+              href={ROUTES.PUBLIC.COMMUNITY_PROFILE(String(ca.id))}
+              className="inline-block text-sm font-medium hover:text-primary hover:underline transition-colors"
+            >
+              {ca?.fullName as string}
+            </Link>
+          ) : (
+            <div className="text-sm font-medium">{ca?.fullName as string}</div>
+          )}
           {!(
             c.body === '[Đính kèm ảnh]' &&
             Array.isArray(c.attachments) &&
@@ -356,8 +412,24 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
             </div>
           </div>
         </div>
-        <PostBodyDisplay bodyJson={String(post.bodyJson || '')} />
-        <PostAttachmentsDisplay attachments={post.attachments} className="pt-1" />
+        {isEditingPost ? (
+          <div className="space-y-3 rounded-xl border border-primary/20 bg-muted/20 p-3">
+            <RichTextEditor value={editPostBody} onChange={setEditPostBody} placeholder="Chỉnh sửa bài viết..." />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => { setIsEditingPost(false); setEditPostBody(String(post.bodyJson || '')); }}>
+                Hủy
+              </Button>
+              <Button size="sm" onClick={onUpdatePost}>
+                Lưu chỉnh sửa
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <PostBodyDisplay bodyJson={String(post.bodyJson || '')} />
+            <PostAttachmentsDisplay attachments={post.attachments} className="pt-1" />
+          </>
+        )}
         {snap && (
           <Link
             href={ROUTES.PUBLIC.COURSE_DETAIL(String(snap.slug))}
@@ -374,6 +446,16 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
           </Link>
         )}
         <div className="flex flex-wrap gap-2">
+          {canManagePost && (
+            <>
+              <Button variant="secondary" size="sm" onClick={() => { setIsEditingPost((v) => !v); setEditPostBody(String(post.bodyJson || '')); }}>
+                {isEditingPost ? 'Đóng chỉnh sửa' : 'Sửa bài viết'}
+              </Button>
+              <Button variant="outline" size="sm" className="text-destructive" onClick={onDeletePost}>
+                Xóa bài viết
+              </Button>
+            </>
+          )}
           <Button variant="outline" size="sm" onClick={() => setReportOpen((v) => !v)}>
             Báo cáo bài viết
           </Button>
@@ -421,11 +503,6 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
               onChange={(e) => setBody(e.target.value)}
               placeholder={parentCommentId ? 'Viết phản hồi...' : 'Viết bình luận...'}
               rows={3}
-            />
-            <CommunityAttachmentPicker
-              attachments={commentAttachments}
-              onChange={setCommentAttachments}
-              maxImages={4}
             />
             <Button onClick={sendComment}>Gửi</Button>
           </>

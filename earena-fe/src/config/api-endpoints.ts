@@ -222,6 +222,7 @@ export const API_ENDPOINTS = {
   },
 
   COMMUNITY: {
+    UPLOAD_IMAGE: '/community/upload/image',
     FEED: '/community/feed',
     SIDEBAR: '/community/sidebar',
     RECOMMENDED: '/community/recommended',

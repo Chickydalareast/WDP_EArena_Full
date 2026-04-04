@@ -45,6 +45,23 @@ export const useNotificationStream = (isAuthenticated: boolean) => {
             }
         };
 
+        const handleChatMessage = (event: MessageEvent) => {
+            if (!event.data) return;
+            try {
+                const rawData = JSON.parse(event.data) as {
+                    threadId?: string;
+                    message?: { id?: string };
+                };
+                if (rawData?.threadId && rawData?.message?.id) {
+                    window.dispatchEvent(
+                        new CustomEvent('messaging:chat_message', { detail: rawData }),
+                    );
+                }
+            } catch {
+                /* ignore */
+            }
+        };
+
         const handleStreamData = (event: MessageEvent) => {
             if (!event.data) return;
 
@@ -101,6 +118,8 @@ export const useNotificationStream = (isAuthenticated: boolean) => {
             });
         }
 
+        eventSource.addEventListener('CHAT_MESSAGE', handleChatMessage);
+
         eventSource.onmessage = handleStreamData;
 
         eventSource.onerror = () => {
@@ -116,6 +135,7 @@ export const useNotificationStream = (isAuthenticated: boolean) => {
                     eventSource.removeEventListener(type, handleStreamData);
                 });
             }
+            eventSource.removeEventListener('CHAT_MESSAGE', handleChatMessage);
             eventSource.close();
         };
     }, [isAuthenticated, setInitialData, addRealtimeNotification]);

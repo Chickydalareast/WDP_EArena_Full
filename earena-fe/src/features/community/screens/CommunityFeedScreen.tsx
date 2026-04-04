@@ -20,6 +20,8 @@ import {
   getCommunityFeed,
   getCommunitySidebar,
   createCommunityPost,
+  updateCommunityPost,
+  deleteCommunityPost,
   saveCommunityPost,
   unsaveCommunityPost,
   reactCommunityPost,
@@ -34,11 +36,11 @@ import {
 } from '../api/community-api';
 import { PostBodyDisplay } from '../components/PostBodyDisplay';
 import { PostAttachmentsDisplay } from '../components/PostAttachmentsDisplay';
-import { CommunityAttachmentPicker } from '../components/CommunityAttachmentPicker';
 import type { CommunityAttachment } from '../components/PostAttachmentsDisplay';
 import { toast } from 'sonner';
 import { Loader2, Bookmark, MessageCircle, Sparkles, Bell, BellOff } from 'lucide-react';
 import { cn, formatCurrency } from '@/shared/lib/utils';
+import { parseApiError } from '@/shared/lib/error-parser';
 
 const TYPE_LABELS: Record<string, string> = {
   HOMEWORK_QUESTION: 'Hỏi bài',
@@ -56,6 +58,16 @@ const REACTIONS: { kind: CommunityReactionKind; label: string }[] = [
   { kind: 'SPOT_ON', label: 'Đúng ý' },
   { kind: 'THANKS', label: 'Cảm ơn' },
 ];
+
+
+function hasMeaningfulRichText(value: string) {
+  const plain = value
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return plain.length > 0;
+}
 
 export function CommunityFeedScreen(props?: { lockedSubjectId?: string }) {
   const { lockedSubjectId } = props || {};
@@ -162,7 +174,7 @@ export function CommunityFeedScreen(props?: { lockedSubjectId?: string }) {
       router.push(ROUTES.AUTH.LOGIN + '?callbackUrl=' + encodeURIComponent(path));
       return;
     }
-    const hasText = !!(body.trim() && body !== '<p></p>');
+    const hasText = hasMeaningfulRichText(body);
     if (!hasText && composerAttachments.length === 0) {
       toast.error('Nhập nội dung hoặc thêm ít nhất một ảnh.');
       return;
@@ -171,7 +183,7 @@ export function CommunityFeedScreen(props?: { lockedSubjectId?: string }) {
     try {
       await createCommunityPost({
         type: postType,
-        bodyJson: body.trim() ? body : '<p></p>',
+        bodyJson: hasText ? body : '<p></p>',
         ...(composerAttachments.length
           ? { attachments: composerAttachments }
           : {}),
@@ -182,10 +194,9 @@ export function CommunityFeedScreen(props?: { lockedSubjectId?: string }) {
       setComposerAttachments([]);
       setComposerOpen(false);
       setCursor(undefined);
-      feedQuery.refetch();
-      sidebarQuery.refetch();
-    } catch {
-      toast.error('Không thể đăng bài');
+      await Promise.all([feedQuery.refetch(), sidebarQuery.refetch()]);
+    } catch (error) {
+      toast.error(parseApiError(error).message || 'Không thể đăng bài');
     }
   };
 
@@ -399,10 +410,6 @@ export function CommunityFeedScreen(props?: { lockedSubjectId?: string }) {
               </p>
             )}
             <RichTextEditor value={body} onChange={setBody} placeholder="Viết nội dung..." />
-            <CommunityAttachmentPicker
-              attachments={composerAttachments}
-              onChange={setComposerAttachments}
-            />
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setComposerOpen(false)}>
                 Hủy
@@ -475,11 +482,19 @@ function PostCard({
   const id = String(post.id);
   const author = post.author as Record<string, unknown> | null;
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const saved = !!post.savedByMe;
   const myReaction = post.myReaction as CommunityReactionKind | null | undefined;
   const snap = post.courseSnapshot as Record<string, unknown> | undefined;
   const subject = post.subject as { id: string; name: string } | null | undefined;
+  const canManagePost = !!user?.id && String(post.authorId || author?.id || '') === user.id;
+  const [isEditing, setIsEditing] = useState(false);
+  const [editBody, setEditBody] = useState(String(post.bodyJson || ''));
+
+  useEffect(() => {
+    setEditBody(String(post.bodyJson || ''));
+  }, [post.bodyJson, id]);
 
   const toggleSave = async () => {
     if (!isAuthenticated) {
@@ -509,10 +524,41 @@ function PostCard({
     }
   };
 
+  const onSaveEdit = async () => {
+    if (!hasMeaningfulRichText(editBody)) {
+      toast.error('Nội dung bài viết không được để trống');
+      return;
+    }
+    try {
+      await updateCommunityPost(id, {
+        bodyJson: editBody,
+      });
+      toast.success('Đã cập nhật bài viết');
+      setIsEditing(false);
+      onFeedChange();
+    } catch (error) {
+      toast.error(parseApiError(error).message || 'Không thể cập nhật bài viết');
+    }
+  };
+
+  const onDelete = async () => {
+    if (!window.confirm('Bạn chắc chắn muốn xóa bài viết này?')) return;
+    try {
+      await deleteCommunityPost(id);
+      toast.success('Đã xóa bài viết');
+      onFeedChange();
+    } catch {
+      toast.error('Không thể xóa bài viết');
+    }
+  };
+
   return (
     <Card className="p-5 space-y-3">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0">
+        <Link
+          href={author?.id ? ROUTES.PUBLIC.COMMUNITY_PROFILE(String(author.id)) : '#'}
+          className="flex min-w-0 items-center gap-3 rounded-xl pr-3 transition hover:bg-muted/40"
+        >
           <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold shrink-0">
             {(author?.fullName as string)?.charAt(0) || '?'}
           </div>
@@ -536,14 +582,50 @@ function PostCard({
               )}
             </div>
           </div>
+        </Link>
+        <div className="flex items-center gap-1 shrink-0">
+          {canManagePost && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => {
+                  setIsEditing((v) => !v);
+                  setEditBody(String(post.bodyJson || ''));
+                }}
+              >
+                {isEditing ? 'Đóng' : 'Sửa'}
+              </Button>
+              <Button variant="ghost" size="sm" className="h-8 text-xs text-destructive" onClick={onDelete}>
+                Xóa
+              </Button>
+            </>
+          )}
+          <Button variant="ghost" size="icon" onClick={toggleSave} aria-label="Lưu bài">
+            <Bookmark className={cn('w-5 h-5', saved && 'fill-primary text-primary')} />
+          </Button>
         </div>
-        <Button variant="ghost" size="icon" onClick={toggleSave} aria-label="Lưu bài">
-          <Bookmark className={cn('w-5 h-5', saved && 'fill-primary text-primary')} />
-        </Button>
       </div>
 
-      <PostBodyDisplay bodyJson={String(post.bodyJson || '')} />
-      <PostAttachmentsDisplay attachments={post.attachments} className="pt-1" />
+      {isEditing ? (
+        <div className="space-y-3 rounded-xl border border-primary/20 bg-muted/20 p-3">
+          <RichTextEditor value={editBody} onChange={setEditBody} placeholder="Chỉnh sửa bài viết..." />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => { setIsEditing(false); setEditBody(String(post.bodyJson || '')); }}>
+              Hủy
+            </Button>
+            <Button size="sm" onClick={onSaveEdit}>
+              Lưu chỉnh sửa
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <PostBodyDisplay bodyJson={String(post.bodyJson || '')} />
+          <PostAttachmentsDisplay attachments={post.attachments} className="pt-1" />
+        </>
+      )}
 
       {snap && (
         <Link

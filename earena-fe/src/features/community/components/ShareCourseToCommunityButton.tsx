@@ -13,7 +13,6 @@ import {
 } from '@/shared/components/ui/dialog';
 import { RichTextEditor } from '@/shared/components/ui/rich-text-editor';
 import { createCommunityPost } from '../api/community-api';
-import { CommunityAttachmentPicker } from './CommunityAttachmentPicker';
 import type { CommunityAttachment } from './PostAttachmentsDisplay';
 import { toast } from 'sonner';
 import { Share2 } from 'lucide-react';
@@ -90,7 +89,6 @@ export function ShareCourseToCommunityButton({
             onChange={setBody}
             placeholder="Ví dụ: Khóa này hợp người mất gốc..."
           />
-          <CommunityAttachmentPicker attachments={attachments} onChange={setAttachments} />
           <Button className="w-full" onClick={submit}>
             Đăng lên Community
           </Button>

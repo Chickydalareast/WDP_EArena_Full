@@ -5,7 +5,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { flushSync } from 'react-dom';
 import { ImagePlus, Loader2, X } from 'lucide-react';
 import { Button, buttonVariants } from '@/shared/components/ui/button';
-import { useMediaUpload } from '@/shared/hooks/useMediaUpload';
+import { uploadCommunityImage } from '../api/community-api';
 import { toast } from 'sonner';
 import { cn } from '@/shared/lib/utils';
 import type { CommunityAttachment } from './PostAttachmentsDisplay';
@@ -36,7 +36,7 @@ export function CommunityAttachmentPicker({
 }) {
   const reactId = useId().replace(/:/g, '');
   const fileInputId = `community-att-${reactId}`;
-  const { uploadMedia, isUploading } = useMediaUpload();
+  const [isUploading, setIsUploading] = useState(false);
   const [pending, setPending] = useState<{ key: string; previewUrl: string }[]>([]);
 
   const onFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -75,7 +75,8 @@ export function CommunityAttachmentPicker({
       });
 
       try {
-        const { url } = await uploadMedia(file, 'general');
+        setIsUploading(true);
+        const { url } = await uploadCommunityImage(file);
         onChange((prev) => {
           if (prev.length >= maxImages) return prev;
           return [
@@ -89,9 +90,11 @@ export function CommunityAttachmentPicker({
           ];
         });
         room -= 1;
-      } catch {
-        /* Lỗi + toast trong useMediaUpload */
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : 'Không thể tải ảnh lên.';
+        toast.error('Lỗi tải ảnh', { description: msg });
       } finally {
+        setIsUploading(false);
         setPending((p) => p.filter((x) => x.key !== key));
         URL.revokeObjectURL(previewUrl);
       }

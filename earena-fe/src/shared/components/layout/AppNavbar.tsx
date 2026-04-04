@@ -8,6 +8,7 @@ import { useLogout } from '@/features/auth/hooks/useLogout';
 import { useBillingUIStore } from '@/features/billing/stores/billing-ui.store';
 import { useSyncWallet } from '@/features/billing/hooks/useBillingFlows';
 import { NotificationDropdown } from '@/features/notifications/components/NotificationDropdown';
+import { MessagesNavIcon } from '@/features/messaging/components/MessagesNavIcon';
 import { UserCircle, Settings, LogOut, School, Menu, Wallet, PlusCircle, History } from 'lucide-react';
 import { cn } from "@/shared/lib/utils";
 
@@ -309,6 +310,11 @@ export function AppNavbar() {
 
           <div className="flex items-center space-x-2 sm:space-x-4">
             <NavbarWalletBadge />
+
+            <MessagesNavIcon
+              href={role === 'TEACHER' ? ROUTES.TEACHER.MESSAGES : ROUTES.STUDENT.MESSAGES}
+              role={role}
+            />
 
             <NotificationDropdown />
             

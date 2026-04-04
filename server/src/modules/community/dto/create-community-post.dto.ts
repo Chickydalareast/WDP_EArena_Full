@@ -64,6 +64,10 @@ export class CreateCommunityPostDto {
 
 export class UpdateCommunityPostDto {
   @IsOptional()
+  @IsEnum(CommunityPostType)
+  type?: CommunityPostType;
+
+  @IsOptional()
   @IsString()
   @MaxLength(200000)
   bodyJson?: string;
@@ -83,4 +87,12 @@ export class UpdateCommunityPostDto {
   @IsOptional()
   @IsMongoId()
   subjectId?: string;
+
+  @IsOptional()
+  @IsMongoId()
+  courseId?: string;
+
+  @IsOptional()
+  @IsMongoId()
+  examId?: string;
 }

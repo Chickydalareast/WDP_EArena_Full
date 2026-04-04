@@ -10,6 +10,7 @@ import { useSession } from '@/features/auth/hooks/useSession';
 import { useSyncWallet } from '@/features/billing/hooks/useBillingFlows';
 import dynamic from 'next/dynamic';
 import { useNotificationStream } from '@/features/notifications/hooks/useNotificationStream';
+import { useMessagingRealtime } from '@/features/messaging/hooks/useMessagingRealtime';
 import { ROUTES } from '@/config/routes';
 
 const WAITING = ROUTES.AUTH.WAITING_APPROVAL;
@@ -92,6 +93,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }, [handleUnauthorized]);
 
   useNotificationStream(isSuccess && !!user);
+  useMessagingRealtime(isSuccess && !!user);
 
   return (
     <>
