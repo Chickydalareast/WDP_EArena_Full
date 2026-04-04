@@ -5,6 +5,8 @@ import {
   ForbiddenException,
   BadRequestException,
   InternalServerErrorException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import {
@@ -19,6 +21,8 @@ import { CourseSortType } from '../enums/course-search.enum';
 import { CourseReviewsRepository } from '../repositories/course-reviews.repository';
 import { LessonProgressRepository } from '../repositories/lesson-progress.repository';
 import { ProgressionLockedException } from '../exceptions/progression-locked.exception';
+import { ExamSubmissionsRepository } from 'src/modules/exams/exam-submissions.repository';
+import { SubmissionStatus } from 'src/modules/exams/schemas/exam-submission.schema';
 
 export type SearchPublicCoursesPayload = {
   keyword?: string;
@@ -61,6 +65,8 @@ export class CourseReaderService {
     private readonly mediaService: MediaService,
     private readonly reviewsRepo: CourseReviewsRepository,
     private readonly lessonProgressRepo: LessonProgressRepository,
+    @Inject(forwardRef(() => ExamSubmissionsRepository))
+    private readonly examSubmissionsRepo: ExamSubmissionsRepository,
   ) {}
 
   async searchPublicCourses(payload: SearchPublicCoursesPayload) {
@@ -361,6 +367,8 @@ export class CourseReaderService {
     const examData = lesson.examId as any;
 
     let progressData = null;
+    let attemptsUsed = 0;
+
     if (payload.userId) {
       const history = await this.lessonProgressRepo.findOneSafe(
         {
@@ -377,16 +385,29 @@ export class CourseReaderService {
           isCompleted: history.isCompleted,
         };
       }
+
+      if (examData) {
+        attemptsUsed = await this.examSubmissionsRepo.modelInstance.countDocuments({
+          studentId: new Types.ObjectId(payload.userId),
+          lessonId: new Types.ObjectId(payload.lessonId),
+          status: { $in: [SubmissionStatus.COMPLETED, SubmissionStatus.ABANDONED] }
+        });
+      }
     }
 
     return {
       id: lesson._id.toString(),
       title: lesson.title,
+      order: lesson.order,
+      isFreePreview: lesson.isFreePreview,
       content: lesson.content || null,
       
       examId: examData ? examData._id.toString() : null,
       examMode: examData ? examData.mode : null,
       examType: examData ? examData.type : null,
+
+      examRules: lesson.examRules || null, 
+      attemptsUsed,
 
       progress: progressData,
 

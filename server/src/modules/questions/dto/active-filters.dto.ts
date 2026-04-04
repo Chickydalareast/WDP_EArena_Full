@@ -7,6 +7,7 @@ import {
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { DifficultyLevel } from '../schemas/question.schema';
+import { RuleQuestionType } from '../../exams/interfaces/exam-matrix.interface';
 
 export class ActiveFiltersDto {
   @IsOptional()
@@ -40,4 +41,8 @@ export class ActiveFiltersDto {
   })
   @IsBoolean()
   isDraft?: boolean;
+
+  @IsOptional()
+  @IsEnum(RuleQuestionType)
+  questionType?: RuleQuestionType;
 }

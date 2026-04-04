@@ -88,6 +88,7 @@ export const API_ENDPOINTS = {
     WITHDRAW: '/wallets/withdraw',
   },
 
+  // Giữ lại block PAYMENT từ nhánh payos-integration-v2
   PAYMENT: {
     CREATE_EMBEDDED_LINK: '/payment/create-embedded-link',
     CONFIRM_RETURN: '/payment/confirm-return',
@@ -151,12 +152,13 @@ export const API_ENDPOINTS = {
   },
 
   EXAM_MATRICES: {
-    BASE: '/exam-matrices',
+    ROOT: '/exam-matrices', // Lấy ROOT theo nhánh main
     DETAIL: (id: string) => `/exam-matrices/${id}` as const,
   },
 
   EXAM_TAKING: {
     START: '/exam-take/start',
+    PAPER: (submissionId: string) => `/exam-take/${submissionId}/paper` as const, // Cập nhật từ nhánh main
     AUTO_SAVE: (submissionId: string) => `/exam-take/${submissionId}/auto-save` as const,
     SUBMIT: (submissionId: string) => `/exam-take/${submissionId}/submit` as const,
     RESULT: (submissionId: string) => `/exam-take/${submissionId}/result` as const,
@@ -174,7 +176,6 @@ export const API_ENDPOINTS = {
     USER_STATUS: (id: string) => `/admin/users/${id}/status` as const,
     USER_RESET_PASSWORD: (id: string) => `/admin/users/${id}/reset-password` as const,
     
-
     EXAMS: '/admin/exams',
     EXAM_PUBLISH: (id: string) => `/admin/exams/${id}/publish` as const,
     EXAM_PAPER_DETAIL_BY_EXAM: (examId: string) => `/admin/exams/${examId}/paper` as const,
@@ -202,6 +203,9 @@ export const API_ENDPOINTS = {
     COURSE_APPROVE: (id: string) => `/admin/courses/${id}/approve` as const,
     COURSE_REJECT: (id: string) => `/admin/courses/${id}/reject` as const,
     COURSE_FORCE_TAKEDOWN: (id: string) => `/admin/courses/${id}/force-takedown` as const,
+
+    COURSE_LESSON_QUIZ_PREVIEW: (courseId: string, lessonId: string) => // Cập nhật từ nhánh main
+      `/admin/courses/${courseId}/lessons/${lessonId}/preview-quiz` as const,
   },
 
   TAXONOMY: {
@@ -224,6 +228,10 @@ export const API_ENDPOINTS = {
 
   LEARNING: {
     HEARTBEAT: '/learning/heartbeat',
+    // Cập nhật thêm các endpoints tracking từ nhánh main
+    TRACKING_MEMBERS: (courseId: string) => `/learning/${courseId}/tracking/members` as const,
+    TRACKING_MEMBER_EXAMS: (courseId: string, studentId: string) => `/learning/${courseId}/tracking/members/${studentId}/exams` as const,
+    TRACKING_MEMBER_ATTEMPTS: (courseId: string, studentId: string, lessonId: string) => `/learning/${courseId}/tracking/members/${studentId}/lessons/${lessonId}/attempts` as const,
   },
 
   COMMUNITY: {

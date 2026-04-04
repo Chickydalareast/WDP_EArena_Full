@@ -22,12 +22,37 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { UserRole } from '../../common/enums/user-role.enum';
-import { UpdateMatrixPayload } from './interfaces/exam-matrix.interface';
+import {
+  CreateMatrixPayload,
+  RuleQuestionType,
+  UpdateMatrixPayload,
+} from './interfaces/exam-matrix.interface';
 
 @Controller('exam-matrices')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class ExamMatricesController {
   constructor(private readonly matricesService: ExamMatricesService) {}
+
+  private mapSectionsToDomain(sections?: any[]): any[] | undefined {
+    if (!sections) return undefined;
+    
+    return sections.map((sec) => ({
+      name: sec.name,
+      orderIndex: sec.orderIndex,
+      rules: sec.rules.map((rule: any) => ({
+        questionType: rule.questionType ?? RuleQuestionType.MIXED,
+        subQuestionLimit:
+          rule.questionType === RuleQuestionType.PASSAGE
+            ? rule.subQuestionLimit
+            : undefined,
+        folderIds: rule.folderIds,
+        topicIds: rule.topicIds,
+        difficulties: rule.difficulties,
+        tags: rule.tags,
+        limit: rule.limit,
+      })),
+    }));
+  }
 
   @Post()
   @Roles(UserRole.TEACHER)
@@ -36,11 +61,11 @@ export class ExamMatricesController {
     @Body() dto: CreateExamMatrixDto,
     @CurrentUser('userId') userId: string,
   ) {
-    const payload = {
+    const payload: CreateMatrixPayload = {
       title: dto.title,
       description: dto.description,
       subjectId: dto.subjectId,
-      sections: dto.sections,
+      sections: this.mapSectionsToDomain(dto.sections)!,
     };
     return this.matricesService.createMatrixTemplate(userId, payload);
   }
@@ -92,7 +117,7 @@ export class ExamMatricesController {
       title: dto.title,
       description: dto.description,
       subjectId: dto.subjectId,
-      sections: dto.sections,
+      sections: this.mapSectionsToDomain(dto.sections),
     };
     return this.matricesService.updateMatrix(id, userId, payload);
   }

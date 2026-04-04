@@ -27,6 +27,7 @@ import {
     GetQuizHealthParams,
     QuizHealthResult,
     QuizHealthRuleStatus,
+    MatrixSectionParam,
 } from '../interfaces/course-quiz-builder.interface';
 import { CourseStatus } from '../schemas/course.schema';
 import { EnrollmentStatus } from '../schemas/enrollment.schema';
@@ -39,12 +40,14 @@ import {
     CourseEventPattern,
     CourseNewLessonEventPayload,
 } from '../constants/course-event.constant';
-import { ExamGeneratorService } from 'src/modules/exams/exam-generator.service';
-import { ExamMatricesService } from 'src/modules/exams/exam-matrices.service';
-import { SubmissionStatus } from 'src/modules/exams/schemas/exam-submission.schema';
-import { ExamSubmissionsRepository } from 'src/modules/exams/exam-submissions.repository';
-import { QuestionsRepository } from 'src/modules/questions/questions.repository';
-import { ExamPapersRepository } from 'src/modules/exams/exam-papers.repository';
+import { ExamGeneratorService } from '../../exams/exam-generator.service';
+import { ExamMatricesService } from '../../exams/exam-matrices.service';
+import { SubmissionStatus } from '../../exams/schemas/exam-submission.schema';
+import { ExamSubmissionsRepository } from '../../exams/exam-submissions.repository';
+import { QuestionsRepository } from '../../questions/questions.repository';
+import { ExamPapersRepository } from '../../exams/exam-papers.repository';
+import { RuleQuestionType } from '../../exams/interfaces/exam-matrix.interface';
+import { QuestionType } from 'src/modules/questions/schemas/question.schema';
 
 @Injectable()
 export class CourseQuizBuilderService {
@@ -96,6 +99,25 @@ export class CourseQuizBuilderService {
         }
     }
 
+    // =========================================================================
+    // [CTO UPGRADE]: Helper Method dọn dẹp Data Type (Tránh rò rỉ Types.ObjectId)
+    // =========================================================================
+    private mapMatrixToAdHocSections(sections: any[]): MatrixSectionParam[] {
+        return sections.map((sec) => ({
+            name: sec.name,
+            orderIndex: sec.orderIndex,
+            rules: sec.rules.map((rule: any) => ({
+                questionType: rule.questionType ?? RuleQuestionType.MIXED,
+                subQuestionLimit: rule.subQuestionLimit,
+                folderIds: rule.folderIds?.map((id: Types.ObjectId) => id.toString()) || [],
+                topicIds: rule.topicIds?.map((id: Types.ObjectId) => id.toString()) || [],
+                difficulties: rule.difficulties || [],
+                tags: rule.tags || [],
+                limit: rule.limit,
+            })),
+        }));
+    }
+
     async createUnifiedQuizLesson(params: CreateCourseQuizParams) {
         const {
             teacherId,
@@ -137,6 +159,17 @@ export class CourseQuizBuilderService {
             );
         }
 
+        let snapshotConfig = dynamicConfig ? { ...dynamicConfig } : undefined;
+
+        if (snapshotConfig && snapshotConfig.matrixId) {
+            const matrixTemplate = await this.examMatricesService.getMatrixDetail(
+                snapshotConfig.matrixId.toString(),
+                teacherId,
+            );
+            // Sử dụng Helper để tránh Type Mismatch
+            snapshotConfig.adHocSections = this.mapMatrixToAdHocSections(matrixTemplate.sections);
+        }
+
         const MAX_RETRIES = 3;
         let attempt = 0;
 
@@ -153,7 +186,7 @@ export class CourseQuizBuilderService {
                             isPublished: true,
                             type: ExamType.COURSE_QUIZ,
                             mode: ExamMode.DYNAMIC,
-                            dynamicConfig: dynamicConfig,
+                            dynamicConfig: snapshotConfig,
                         });
 
                         const nextOrder = await this.lessonsRepo.getNextOrder(
@@ -271,6 +304,8 @@ export class CourseQuizBuilderService {
     ): Promise<RulePreviewResult> {
         const availableCount =
             await this.examGeneratorService.countAvailableForRule(params.teacherId, {
+                questionType: params.questionType,
+                subQuestionLimit: params.subQuestionLimit,
                 folderIds: params.folderIds,
                 topicIds: params.topicIds,
                 difficulties: params.difficulties,
@@ -333,6 +368,18 @@ export class CourseQuizBuilderService {
             );
         }
 
+        const lessonUpdatePayload: any = {};
+        if (title !== undefined) lessonUpdatePayload.title = title;
+        if (content !== undefined) lessonUpdatePayload.content = content;
+        if (isFreePreview !== undefined)
+            lessonUpdatePayload.isFreePreview = isFreePreview;
+        if (examRules !== undefined) lessonUpdatePayload.examRules = examRules;
+
+        const examUpdatePayload: any = {};
+        if (title !== undefined)
+            examUpdatePayload.title = `Quiz: ${title} (Course Builder)`;
+        if (totalScore !== undefined) examUpdatePayload.totalScore = totalScore;
+
         if (dynamicConfig !== undefined) {
             const completedSubmissionsCount =
                 await this.submissionsRepo.modelInstance.countDocuments({
@@ -347,21 +394,18 @@ export class CourseQuizBuilderService {
                     `Chỉ có thể cập nhật tiêu đề, nội dung và quy tắc thi.`,
                 );
             }
+
+            let snapshotConfig = { ...dynamicConfig };
+            if (snapshotConfig.matrixId) {
+                const matrixTemplate = await this.examMatricesService.getMatrixDetail(
+                    snapshotConfig.matrixId.toString(),
+                    teacherId,
+                );
+                // Sử dụng Helper
+                snapshotConfig.adHocSections = this.mapMatrixToAdHocSections(matrixTemplate.sections);
+            }
+            examUpdatePayload.dynamicConfig = snapshotConfig;
         }
-
-        const lessonUpdatePayload: any = {};
-        if (title !== undefined) lessonUpdatePayload.title = title;
-        if (content !== undefined) lessonUpdatePayload.content = content;
-        if (isFreePreview !== undefined)
-            lessonUpdatePayload.isFreePreview = isFreePreview;
-        if (examRules !== undefined) lessonUpdatePayload.examRules = examRules;
-
-        const examUpdatePayload: any = {};
-        if (title !== undefined)
-            examUpdatePayload.title = `Quiz: ${title} (Course Builder)`;
-        if (totalScore !== undefined) examUpdatePayload.totalScore = totalScore;
-        if (dynamicConfig !== undefined)
-            examUpdatePayload.dynamicConfig = dynamicConfig;
 
         const updatedLesson = await this.lessonsRepo.executeInTransaction(
             async () => {
@@ -388,7 +432,7 @@ export class CourseQuizBuilderService {
         return { id: lessonId, ...(updatedLesson as any) };
     }
 
-async getQuizHealth(params: GetQuizHealthParams): Promise<QuizHealthResult> {
+    async getQuizHealth(params: GetQuizHealthParams): Promise<QuizHealthResult> {
         const { teacherId, courseId, lessonId } = params;
 
         await this.validateCourseOwnership(courseId, teacherId);
@@ -409,7 +453,6 @@ async getQuizHealth(params: GetQuizHealthParams): Promise<QuizHealthResult> {
 
         const exam = lesson.examId as unknown as ExamDocument;
 
-        // [MAX PING]: Kiểm tra xem bài thi đã có kết quả hoàn thành chưa để khóa Form
         const completedCount = await this.submissionsRepo.modelInstance.countDocuments({
             lessonId: new Types.ObjectId(lessonId),
             status: SubmissionStatus.COMPLETED
@@ -422,7 +465,7 @@ async getQuizHealth(params: GetQuizHealthParams): Promise<QuizHealthResult> {
                 examId: exam._id.toString(),
                 isHealthy: false,
                 hasWarning: false,
-                isLocked, // Trả về cờ isLocked khi chưa có config
+                isLocked,
                 matrixExists: null,
                 configMode: 'unconfigured',
                 rules: [],
@@ -431,34 +474,40 @@ async getQuizHealth(params: GetQuizHealthParams): Promise<QuizHealthResult> {
 
         const hasMatrix = !!exam.dynamicConfig.matrixId;
         const hasAdHoc = (exam.dynamicConfig.adHocSections?.length ?? 0) > 0;
-        const configMode = hasMatrix
-            ? 'matrix'
-            : hasAdHoc
-                ? 'adHoc'
-                : 'unconfigured';
+
+        // [CTO UPGRADE]: Đảm bảo Literal Union Type chuẩn xác
+        let configMode: 'matrix' | 'adHoc' | 'unconfigured' | 'snapshot' | 'matrix_missing' = 'unconfigured';
 
         let matrixExists: boolean | null = null;
-        if (hasMatrix) {
+        let sectionsToCheck: any[] = [];
+
+        if (hasAdHoc) {
+            sectionsToCheck = exam.dynamicConfig.adHocSections!;
+            configMode = hasMatrix ? 'snapshot' : 'adHoc';
+            if (hasMatrix) {
+                try {
+                    await this.examMatricesService.getMatrixDetail(
+                        exam.dynamicConfig.matrixId!.toString(),
+                        teacherId,
+                    );
+                    matrixExists = true;
+                } catch {
+                    matrixExists = false;
+                }
+            }
+        } else if (hasMatrix) {
             try {
-                await this.examMatricesService.getMatrixDetail(
+                const matrixDetail = await this.examMatricesService.getMatrixDetail(
                     exam.dynamicConfig.matrixId!.toString(),
                     teacherId,
                 );
+                sectionsToCheck = matrixDetail.sections;
                 matrixExists = true;
+                configMode = 'matrix';
             } catch {
                 matrixExists = false;
+                configMode = 'matrix_missing';
             }
-        }
-
-        let sectionsToCheck: any[] = [];
-        if (hasMatrix && matrixExists) {
-            const matrixDetail = await this.examMatricesService.getMatrixDetail(
-                exam.dynamicConfig.matrixId!.toString(),
-                teacherId,
-            );
-            sectionsToCheck = matrixDetail.sections;
-        } else if (hasAdHoc) {
-            sectionsToCheck = exam.dynamicConfig.adHocSections!;
         }
 
         const ruleStatusList: QuizHealthRuleStatus[] = [];
@@ -467,8 +516,13 @@ async getQuizHealth(params: GetQuizHealthParams): Promise<QuizHealthResult> {
             sectionsToCheck.map(async (section: any) => {
                 const sectionRuleResults = await Promise.all(
                     section.rules.map(async (rule: any) => {
+                        const questionType = rule.questionType ?? RuleQuestionType.MIXED;
+                        const subQuestionLimit = questionType === RuleQuestionType.PASSAGE ? rule.subQuestionLimit : undefined;
+
                         const availableCount =
                             await this.examGeneratorService.countAvailableForRule(teacherId, {
+                                questionType,
+                                subQuestionLimit,
                                 folderIds: rule.folderIds?.map((id: any) => id.toString()),
                                 topicIds: rule.topicIds?.map((id: any) => id.toString()),
                                 difficulties: rule.difficulties,
@@ -476,18 +530,36 @@ async getQuizHealth(params: GetQuizHealthParams): Promise<QuizHealthResult> {
                                 limit: rule.limit,
                             });
 
-                        const safetyRatio =
-                            rule.limit > 0
-                                ? parseFloat((availableCount / rule.limit).toFixed(2))
-                                : 0;
+                        const isSufficient = availableCount >= rule.limit;
+                        const safetyRatio = rule.limit > 0 ? parseFloat((availableCount / rule.limit).toFixed(2)) : 0;
+                        const isWarning = availableCount < rule.limit * 1.5;
+                        let errorMessage = '';
+
+                        if (!isSufficient) {
+                            if (questionType === RuleQuestionType.PASSAGE) {
+                                errorMessage = `Thiếu Bài đọc. Cần ${rule.limit} đoạn văn, nhưng kho chỉ có ${availableCount} đoạn hợp lệ.`;
+                            } else if (questionType === RuleQuestionType.FLAT) {
+                                errorMessage = `Thiếu Câu hỏi đơn. Cần ${rule.limit} câu, nhưng kho chỉ có ${availableCount} câu hợp lệ.`;
+                            } else {
+                                errorMessage = `Thiếu Câu hỏi. Cần ${rule.limit} câu, nhưng kho chỉ có ${availableCount} câu hợp lệ.`;
+                            }
+                        } else if (isWarning) {
+                            if (questionType === RuleQuestionType.PASSAGE) {
+                                errorMessage = `Cảnh báo: Kho chỉ có ${availableCount} Đoạn văn. Đề thi sẽ dễ bị trùng lặp Bài đọc.`;
+                            } else {
+                                errorMessage = `Cảnh báo: Kho chỉ có ${availableCount} Câu hỏi. Đề thi sẽ thiếu tính xáo trộn.`;
+                            }
+                        }
 
                         return {
                             sectionName: section.name,
+                            questionType,
                             requiredCount: rule.limit,
                             availableCount,
-                            isSufficient: availableCount >= rule.limit,
+                            isSufficient,
                             safetyRatio,
-                            isWarning: availableCount < rule.limit * 1.5,
+                            isWarning,
+                            errorMessage: errorMessage || undefined,
                         } as QuizHealthRuleStatus;
                     }),
                 );
@@ -495,8 +567,7 @@ async getQuizHealth(params: GetQuizHealthParams): Promise<QuizHealthResult> {
             }),
         );
 
-        const isHealthy =
-            matrixExists !== false && ruleStatusList.every((r) => r.isSufficient);
+        const isHealthy = configMode !== 'matrix_missing' && ruleStatusList.every((r) => r.isSufficient);
         const hasWarning = ruleStatusList.some((r) => r.isWarning);
 
         return {
@@ -504,7 +575,7 @@ async getQuizHealth(params: GetQuizHealthParams): Promise<QuizHealthResult> {
             examId: exam._id.toString(),
             isHealthy,
             hasWarning,
-            isLocked, // Trả về cho FE
+            isLocked,
             matrixExists,
             configMode,
             rules: ruleStatusList,
@@ -518,7 +589,7 @@ async getQuizHealth(params: GetQuizHealthParams): Promise<QuizHealthResult> {
         if (!lesson || lesson.courseId.toString() !== courseId) {
             throw new NotFoundException('Bài học không tồn tại trong khóa học này.');
         }
-        
+
         const exam = lesson.examId as unknown as ExamDocument;
         const totalScore = exam.totalScore || 100;
         const passPercentage = lesson.examRules?.passPercentage || 50;
@@ -528,43 +599,54 @@ async getQuizHealth(params: GetQuizHealthParams): Promise<QuizHealthResult> {
 
     async getTeacherAttemptHistory(teacherId: string, courseId: string, lessonId: string, page: number, limit: number, search?: string) {
         await this.validateCourseOwnership(courseId, teacherId);
-        
-        // Xác minh lesson thuộc course
+
         const lesson = await this.lessonsRepo.findOneSafe({ _id: new Types.ObjectId(lessonId), courseId: new Types.ObjectId(courseId) });
         if (!lesson) throw new NotFoundException('Bài học không tồn tại.');
 
         return this.submissionsRepo.getTeacherAttemptHistoryData(courseId, lessonId, page, limit, search);
     }
 
-    async assignStaticQuestions(teacherId: string, courseId: string, lessonId: string, questionIds: string[]) {
-        await this.validateCourseOwnership(courseId, teacherId);
+    async assignStaticQuestions(
+        teacherId: string,
+        courseId: string,
+        lessonId: string,
+        questionIds: string[]
+    ) {
+        const course = await this.coursesRepo.findOneSafe({
+            _id: new Types.ObjectId(courseId)
+        });
 
-        const lesson = await this.lessonsRepo.findByIdSafe(new Types.ObjectId(lessonId));
-        if (!lesson || lesson.courseId.toString() !== courseId) {
-            throw new NotFoundException('Bài học không tồn tại.');
+        if (!course || course.teacherId.toString() !== teacherId) {
+            throw new ForbiddenException('Không tìm thấy khóa học, hoặc bạn không có quyền.');
         }
-        if (!lesson.examId) throw new BadRequestException('Bài học này không phải là Quiz.');
 
-        // 1. Lấy Data câu hỏi từ QuestionsRepository
-        const objectIds = questionIds.map(id => new Types.ObjectId(id));
-        const questions = await (this.questionsRepo as any).modelInstance
-            .find({ _id: { $in: objectIds }, ownerId: new Types.ObjectId(teacherId), isArchived: false, isDraft: false })
-            .lean()
-            .exec();
+        const lesson = await this.lessonsRepo.findOneSafe({
+            _id: new Types.ObjectId(lessonId),
+            courseId: new Types.ObjectId(courseId)
+        });
+
+        if (!lesson) throw new NotFoundException('Không tìm thấy bài học.');
+        if (!lesson.examId) throw new BadRequestException('Bài học này chưa được cấu hình làm bài thi.');
+
+        const questionObjectIds = questionIds.map(id => new Types.ObjectId(id));
+
+        const questions = await this.questionsRepo.findByIdsAndOwner(
+            questionObjectIds,
+            new Types.ObjectId(teacherId)
+        );
 
         if (questions.length !== questionIds.length) {
-            throw new BadRequestException('Một số câu hỏi không tồn tại, đang là bản nháp, hoặc bạn không có quyền sử dụng.');
+            throw new BadRequestException('Một hoặc nhiều câu hỏi không tồn tại hoặc không thuộc quyền sở hữu của bạn.');
         }
 
-        // 2. Chuyển đổi định dạng sang PaperQuestion và lấy AnswerKeys
         const paperQuestions: any[] = [];
         const answerKeys: any[] = [];
-        
         let orderIdx = 1;
+
         for (const q of questions) {
             const correctAns = q.answers?.find((a: any) => a.isCorrect);
-            if (!correctAns && q.type !== 'PASSAGE') {
-                throw new BadRequestException(`Câu hỏi gốc ID ${q._id} chưa được set đáp án đúng.`);
+            if (q.type !== QuestionType.PASSAGE && !correctAns) {
+                throw new ConflictException(`Câu hỏi gốc ID ${q._id} bị lỗi dữ liệu (không có đáp án đúng).`);
             }
 
             paperQuestions.push({
@@ -588,16 +670,11 @@ async getQuizHealth(params: GetQuizHealthParams): Promise<QuizHealthResult> {
             }
         }
 
-        // 3. Transaction: Xóa Master Paper cũ (nếu có), tạo Master Paper mới, và update mode: STATIC
         await this.examsRepo.executeInTransaction(async () => {
-            await (this.examPapersRepo as any).deleteManySafe({ 
-                examId: lesson.examId, 
-                submissionId: null // Xóa Master Paper cũ
-            });
+            await this.examPapersRepo.deletePapersByExamAndSubmission(lesson.examId!, null);
 
-            await (this.examPapersRepo as any).createDocument({
+            await this.examPapersRepo.createPaper({
                 examId: lesson.examId,
-                submissionId: null, // Đây là cờ đánh dấu Master Paper
                 questions: paperQuestions,
                 answerKeys: answerKeys,
             });

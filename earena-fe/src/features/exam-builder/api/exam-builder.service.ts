@@ -71,7 +71,7 @@ export const examBuilderService = {
   },
 
   getMatrices: async (params?: Record<string, unknown>): Promise<PaginatedMatrixResponse> => {
-    return axiosClient.get(API_ENDPOINTS.EXAM_MATRICES.BASE, { params });
+    return axiosClient.get(API_ENDPOINTS.EXAM_MATRICES.ROOT, { params });
   },
 
   getMatrixDetail: async (matrixId: string): Promise<MatrixTemplate> => {

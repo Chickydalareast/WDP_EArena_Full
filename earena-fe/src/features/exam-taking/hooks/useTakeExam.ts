@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { axiosClient } from '@/shared/lib/axios-client';
 import { API_ENDPOINTS } from '@/config/api-endpoints';
 import { toast } from 'sonner';
+import { StartExamPayload, StartExamResponse, ExamPaperResponse } from '../types/exam-take.schema';
 
 export interface ExamResultResponse {
   status: 'GRADING_IN_PROGRESS' | 'COMPLETED';
@@ -20,11 +21,6 @@ export interface ExamResultResponse {
   details?: unknown[];
 }
 
-interface StartExamPayload {
-  courseId: string;
-  lessonId: string;
-}
-
 export const useStartExam = () => {
   return useMutation({
     mutationFn: async (payload: StartExamPayload) => {
@@ -32,34 +28,40 @@ export const useStartExam = () => {
         throw new Error('Thiếu định danh bài học hoặc khóa học');
       }
 
-      const response = await axiosClient.post(API_ENDPOINTS.EXAM_TAKING.START, payload);
-      return response?.data?.data || response?.data || response;
+      return axiosClient.post<unknown, StartExamResponse>(API_ENDPOINTS.EXAM_TAKING.START, payload);
     },
-    onError: (error: any) => {
-      toast.error('Lỗi không gian thi', { 
-        description: error?.response?.data?.message || error.message || 'Không thể bắt đầu' 
-      });
-    }
   });
 };
 
+export const useGetExamPaper = (submissionId: string | null) => {
+  return useQuery({
+    queryKey: ['exam-paper', submissionId],
+    queryFn: async () => {
+      if (!submissionId) throw new Error('Không tìm thấy phiên làm bài');
+      return axiosClient.get<unknown, ExamPaperResponse>(API_ENDPOINTS.EXAM_TAKING.PAPER(submissionId));
+    },
+    enabled: !!submissionId,
+    refetchOnWindowFocus: false,
+    staleTime: 0,
+  });
+};
 
 export const useAutoSave = (submissionId: string | null) => {
   return useMutation({
     mutationFn: async (payload: { questionId: string; selectedAnswerId: string | null }) => {
-      if (!submissionId) throw new Error('Mất phiên Session');
+      if (!submissionId) throw new Error('Mất phiên Session thi');
       return axiosClient.patch(API_ENDPOINTS.EXAM_TAKING.AUTO_SAVE(submissionId), payload);
     },
-    retry: 3, 
+    retry: 3,
     retryDelay: 1500,
-    onError: () => toast.error('Mất kết nối mạng! Hệ thống đang cố gắng lưu lại...'),
+    onError: () => toast.error('Mạng chậm! Hệ thống đang cố gắng lưu ngầm đáp án...'),
   });
 };
 
 export const useSubmitExam = (submissionId: string | null) => {
   return useMutation({
     mutationFn: async () => {
-      if (!submissionId) throw new Error('Mất phiên Session');
+      if (!submissionId) throw new Error('Mất phiên Session thi');
       return axiosClient.post(API_ENDPOINTS.EXAM_TAKING.SUBMIT(submissionId));
     }
   });
@@ -70,14 +72,14 @@ export const useExamResultPolling = (submissionId: string | null, isEnabled: boo
     queryKey: ['exam-result', submissionId],
     queryFn: async () => {
       const response = await axiosClient.get(API_ENDPOINTS.EXAM_TAKING.RESULT(submissionId!));
-      const result = response?.data?.data || response?.data || response;
-      return result ?? null; 
+      const result = response as unknown as ExamResultResponse;
+      return result ?? null;
     },
     enabled: !!submissionId && isEnabled,
     refetchInterval: (query) => {
-      const currentData = query.state.data as any;
+      const currentData = query.state.data;
       if (currentData?.status === 'GRADING_IN_PROGRESS') return 2500;
-      return false; 
+      return false;
     },
   });
 };
@@ -87,7 +89,7 @@ export const useExamReview = (submissionId: string) => {
     queryKey: ['exam-review', submissionId],
     queryFn: async () => {
       const response = await axiosClient.get(API_ENDPOINTS.EXAM_TAKING.RESULT(submissionId));
-      return response?.data?.data || response?.data || response;
+      return response as unknown as ExamResultResponse;
     },
     enabled: !!submissionId,
     refetchInterval: (query) => {
@@ -95,8 +97,8 @@ export const useExamReview = (submissionId: string) => {
       if (data?.status === 'GRADING_IN_PROGRESS') {
         return data.retryAfter || 2000;
       }
-      return false; 
+      return false;
     },
-    refetchOnWindowFocus: false, 
+    refetchOnWindowFocus: false,
   });
 };

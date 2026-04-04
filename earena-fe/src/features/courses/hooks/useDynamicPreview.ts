@@ -5,10 +5,9 @@ import { courseService } from '../api/course.service';
 import { QuizBuilderPreviewPayloadDTO } from '../types/course.schema';
 import { MatrixSectionDTO } from '@/features/exam-builder/types/exam.schema';
 
-
 const hasValidRule = (sections: MatrixSectionDTO[]): boolean =>
     sections.some((section) =>
-        section.rules.some((rule) => rule.folderIds.length > 0 && rule.limit >= 1),
+        section.rules.some((rule) => rule.folderIds.length > 0 && rule.limit >= 1 && !!rule.questionType),
     );
 
 export const useDynamicPreview = (payload: QuizBuilderPreviewPayloadDTO | null) => {
@@ -21,7 +20,10 @@ export const useDynamicPreview = (payload: QuizBuilderPreviewPayloadDTO | null) 
 
     return useQuery({
         queryKey: ['quiz-builder', 'dry-run-preview', payload],
-        queryFn: () => courseService.previewQuizConfig(payload!),
+        queryFn: async ({ signal }) => {
+            const response = await courseService.previewQuizConfig(payload!, signal);
+            return (response as any).data || response;
+        },
         enabled: isEnabled,
         staleTime: 30 * 1000,
         retry: false,

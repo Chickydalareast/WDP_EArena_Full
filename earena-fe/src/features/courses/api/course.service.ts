@@ -16,10 +16,20 @@ import {
     QuizMatricesResponse,
     QuizBuilderPreviewPayloadDTO,
     QuizBuilderPreviewResponse,
-    QuizHealthResponse
+    QuizHealthResponse,
+    QuizAttemptsResponse,
+    QuizStatsResponse,
+    LessonDetailResponse,
+    GetTrackingMembersParams,
+    PaginatedResponse,
+    TrackingMember,
+    GetTrackingExamsParams,
+    TrackingExamOverview,
+    TrackingAttemptDetail,
+    GetTrackingAttemptsParams
 } from '../types/course.schema';
 import { AiBuilderFormDTO, AiBuilderResponse, CreateLessonDTO, CreateQuizLessonDTO, CreateSectionDTO, UpdateLessonDTO, UpdateQuizLessonDTO, UpdateSectionDTO } from '../types/curriculum.schema';
-import { CreateQuizLessonResponse } from '@/features/exam-builder/types/exam.schema';
+import { CreateExamMatrixDTO, CreateExamMatrixResponse, CreateQuizLessonResponse } from '@/features/exam-builder/types/exam.schema';
 
 export const courseService = {
     getPublicCourses: async (params: Record<string, unknown>): Promise<{ items: CourseBasic[], total: number }> => {
@@ -175,42 +185,45 @@ export const courseService = {
     getTeacherLessonQuizDetail: async (
         courseId: string,
         lessonId: string,
-    ): Promise<TeacherLessonQuizDetail> => {
-        return axiosClient.get<unknown, TeacherLessonQuizDetail>(
+    ): Promise<{ data: LessonDetailResponse } | LessonDetailResponse> => {
+        return axiosClient.get(
             API_ENDPOINTS.COURSES.LESSON_DETAIL(courseId, lessonId),
         );
     },
 
     previewQuizRule: async (
         payload: QuizRulePreviewPayloadDTO,
+        signal?: AbortSignal
     ): Promise<QuizRulePreviewResponse> => {
         return axiosClient.post<unknown, QuizRulePreviewResponse>(
             API_ENDPOINTS.COURSES.QUIZ_BUILDER_RULE_PREVIEW,
             payload,
+            { signal }
         );
     },
 
     previewQuizConfig: async (
         payload: QuizBuilderPreviewPayloadDTO,
+        signal?: AbortSignal
     ): Promise<QuizBuilderPreviewResponse> => {
         return axiosClient.post<unknown, QuizBuilderPreviewResponse>(
             API_ENDPOINTS.COURSES.QUIZ_BUILDER_PREVIEW,
             payload,
-            { timeout: 20000 },
+            { timeout: 20000, signal }
         );
     },
 
-    getQuizMatrices: async (params: {
-        courseId: string;
-        page?: number;
-        limit?: number;
-        search?: string;
-    }): Promise<QuizMatricesResponse> => {
-        return axiosClient.get<unknown, QuizMatricesResponse>(
-            API_ENDPOINTS.COURSES.QUIZ_BUILDER_MATRICES,
-            { params },
-        );
-    },
+    // getQuizMatrices: async (params: {
+    //     courseId: string;
+    //     page?: number;
+    //     limit?: number;
+    //     search?: string;
+    // }): Promise<QuizMatricesResponse> => {
+    //     return axiosClient.get<unknown, QuizMatricesResponse>(
+    //         API_ENDPOINTS.COURSES.QUIZ_BUILDER_MATRICES,
+    //         { params },
+    //     );
+    // },
 
 
     createQuizLesson: async (payload: CreateQuizLessonDTO): Promise<CreateQuizLessonResponse> => {
@@ -234,9 +247,83 @@ export const courseService = {
         );
     },
 
-    getQuizHealth: async (lessonId: string): Promise<QuizHealthResponse> => {
+    // getQuizHealth: async (lessonId: string): Promise<QuizHealthResponse> => {
+    //     return axiosClient.get<unknown, QuizHealthResponse>(
+    //         API_ENDPOINTS.COURSES.QUIZ_BUILDER_HEALTH(lessonId)
+    //     );
+    // },
+
+    getQuizHealth: async (courseId: string, lessonId: string): Promise<QuizHealthResponse> => {
         return axiosClient.get<unknown, QuizHealthResponse>(
-            API_ENDPOINTS.COURSES.QUIZ_BUILDER_HEALTH(lessonId)
+            API_ENDPOINTS.COURSES.QUIZ_BUILDER_HEALTH(lessonId),
+            {
+                params: { courseId }
+            }
         );
+    },
+
+    getQuizStats: async (
+        courseId: string,
+        lessonId: string
+    ): Promise<QuizStatsResponse> => {
+        return axiosClient.get<unknown, QuizStatsResponse>(
+            API_ENDPOINTS.COURSES.QUIZ_BUILDER_STATS(lessonId),
+            {
+                params: { courseId }
+            }
+        );
+    },
+
+    getQuizAttempts: async (
+        courseId: string,
+        lessonId: string,
+        page: number = 1,
+        limit: number = 10
+    ): Promise<QuizAttemptsResponse> => {
+        return axiosClient.get<unknown, QuizAttemptsResponse>(
+            API_ENDPOINTS.COURSES.QUIZ_BUILDER_ATTEMPTS(lessonId),
+            {
+                params: {
+                    courseId,
+                    page,
+                    limit
+                }
+            }
+        );
+    },
+
+    getQuizMatrices: async (params: {
+        courseId: string;
+        page?: number;
+        limit?: number;
+        search?: string;
+    }): Promise<QuizMatricesResponse> => {
+        return axiosClient.get<unknown, QuizMatricesResponse>(
+            API_ENDPOINTS.EXAM_MATRICES.ROOT, // [CTO FIX]: Trỏ đúng vào Endpoint Global của Exam Matrices
+            { params },
+        );
+    },
+
+    createExamMatrix: async (payload: CreateExamMatrixDTO): Promise<CreateExamMatrixResponse> => {
+        return axiosClient.post<unknown, CreateExamMatrixResponse>(
+            API_ENDPOINTS.EXAM_MATRICES.ROOT,
+            payload
+        );
+    },
+
+    getExamMatrixDetail: async (id: string): Promise<{ data: any }> => {
+        return axiosClient.get(API_ENDPOINTS.EXAM_MATRICES.DETAIL(id));
+    },
+
+    getTrackingMembers: async (courseId: string, params: GetTrackingMembersParams): Promise<PaginatedResponse<TrackingMember>> => {
+        return axiosClient.get(API_ENDPOINTS.LEARNING.TRACKING_MEMBERS(courseId), { params });
+    },
+
+    getTrackingMemberExams: async (courseId: string, studentId: string, params: GetTrackingExamsParams): Promise<PaginatedResponse<TrackingExamOverview>> => {
+        return axiosClient.get(API_ENDPOINTS.LEARNING.TRACKING_MEMBER_EXAMS(courseId, studentId), { params });
+    },
+
+    getTrackingMemberAttempts: async (courseId: string, studentId: string, lessonId: string, params: GetTrackingAttemptsParams): Promise<PaginatedResponse<TrackingAttemptDetail>> => {
+        return axiosClient.get(API_ENDPOINTS.LEARNING.TRACKING_MEMBER_ATTEMPTS(courseId, studentId, lessonId), { params });
     },
 };

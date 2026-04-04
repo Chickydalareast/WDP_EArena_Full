@@ -3,7 +3,7 @@ import { MatrixSectionSchema } from '@/features/exam-builder/types/exam.schema';
 
 export const ExamRuleSchema = z.object({
   timeLimit: z.number().min(0, 'Thời gian làm bài không được âm').default(45),
-  maxAttempts: z.number().min(1, 'Số lần làm bài tối thiểu là 1').default(1),
+  maxAttempts: z.number().min(0, 'Số lần làm bài tối thiểu là 0 (0 = Không giới hạn)').default(1),
   passPercentage: z.number().min(0).max(100, 'Điểm chuẩn không vượt quá 100%').default(50),
   showResultMode: z.enum(['IMMEDIATELY', 'AFTER_END_TIME', 'NEVER']).default('IMMEDIATELY'),
 });

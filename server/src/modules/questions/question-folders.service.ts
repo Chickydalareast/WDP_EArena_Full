@@ -9,6 +9,7 @@ import {
 import { Types } from 'mongoose';
 import { QuestionFoldersRepository } from './question-folders.repository';
 import { QuestionsRepository } from './questions.repository';
+import { RedisService } from '../../common/redis/redis.service';
 import {
   CreateFolderPayload,
   UpdateFolderPayload,
@@ -21,6 +22,7 @@ export class QuestionFoldersService {
   constructor(
     private readonly foldersRepo: QuestionFoldersRepository,
     private readonly questionsRepo: QuestionsRepository,
+    private readonly redisService: RedisService,
   ) {}
 
   async createFolder(ownerId: string, payload: CreateFolderPayload) {
@@ -41,13 +43,17 @@ export class QuestionFoldersService {
       parentAncestors = [...(parent.ancestors || []), parent._id];
     }
 
-    return this.foldersRepo.createDocument({
+    const newFolder = await this.foldersRepo.createDocument({
       name: payload.name,
       description: payload.description || '',
       ownerId: new Types.ObjectId(ownerId),
       parentId: payload.parentId ? new Types.ObjectId(payload.parentId) : null,
       ancestors: parentAncestors,
     });
+
+    await this.redisService.deleteByPattern('hierarchy:folder:*');
+
+    return newFolder;
   }
 
   async updateFolder(
@@ -59,7 +65,9 @@ export class QuestionFoldersService {
       throw new BadRequestException('ID thư mục không hợp lệ.');
     const folderObjectId = new Types.ObjectId(folderId);
 
-    return this.foldersRepo.executeInTransaction(async () => {
+    let isHierarchyChanged = false;
+
+    await this.foldersRepo.executeInTransaction(async () => {
       const folder = await this.foldersRepo.findByIdSafe(folderObjectId);
       if (!folder) throw new NotFoundException('Thư mục không tồn tại.');
       if (folder.ownerId.toString() !== ownerId) {
@@ -77,6 +85,7 @@ export class QuestionFoldersService {
         payload.parentId !== undefined &&
         payload.parentId !== folder.parentId?.toString()
       ) {
+        isHierarchyChanged = true;
         let newAncestors: Types.ObjectId[] = [];
 
         if (payload.parentId === null) {
@@ -158,10 +167,14 @@ export class QuestionFoldersService {
           );
         }
       }
-
-      this.logger.log(`[Folder] User ${ownerId} updated folder: ${folderId}`);
-      return { message: 'Cập nhật thư mục thành công.' };
     });
+
+    if (isHierarchyChanged) {
+      await this.redisService.deleteByPattern('hierarchy:folder:*');
+    }
+    
+    this.logger.log(`[Folder] User ${ownerId} updated folder: ${folderId}`);
+    return { message: 'Cập nhật thư mục thành công.' };
   }
 
   async getMyFolders(ownerId: string) {
@@ -228,6 +241,9 @@ export class QuestionFoldersService {
     }
 
     await this.foldersRepo.deleteOneSafe({ _id: folderObjectId });
+    
+    await this.redisService.deleteByPattern('hierarchy:folder:*');
+
     this.logger.log(
       `[Folder] User ${ownerId} đã xóa thư mục rỗng: ${folderId}`,
     );

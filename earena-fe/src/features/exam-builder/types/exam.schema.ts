@@ -211,13 +211,24 @@ export interface GenerateExamResponse {
   totalActualQuestions: number;
 }
 
-
 export const MatrixRuleSchema = z.object({
+  questionType: z.enum(['FLAT', 'PASSAGE', 'MIXED']).default('FLAT'),
   limit: z.number().min(1, 'Số lượng tối thiểu là 1'),
+  subQuestionLimit: z.number().min(1, 'Số câu hỏi con tối thiểu là 1').optional(),
   folderIds: z.array(z.string()).default([]),
   topicIds: z.array(z.string()).default([]),
   difficulties: z.array(z.enum(['NB', 'TH', 'VD', 'VDC'])).default([]),
   tags: z.array(z.string()).default([]),
+}).superRefine((data, ctx) => {
+  if (data.questionType === 'PASSAGE') {
+    if (!data.subQuestionLimit || data.subQuestionLimit < 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Bắt buộc nhập số lượng câu hỏi con khi bốc Đoạn văn',
+        path: ['subQuestionLimit'],
+      });
+    }
+  }
 });
 export type MatrixRuleDTO = z.infer<typeof MatrixRuleSchema>;
 
@@ -287,6 +298,7 @@ export const ActiveFiltersPayloadSchema = z.object({
   difficulties: z.array(z.enum(['NB', 'TH', 'VD', 'VDC', 'UNKNOWN'])).optional(),
   tags: z.array(z.string()).optional(),
   isDraft: z.boolean().optional(),
+  questionType: z.enum(['FLAT', 'PASSAGE', 'MIXED']).optional(),
 });
 export type ActiveFiltersPayloadDTO = z.infer<typeof ActiveFiltersPayloadSchema>;
 
@@ -337,4 +349,20 @@ export interface CreateQuizLessonResponse {
   id: string;
   title: string;
   order: number;
+}
+
+export const CreateExamMatrixSchema = z.object({
+  title: z.string().min(1, 'Vui lòng nhập tên khuôn mẫu'),
+  description: z.string().optional(),
+  subjectId: z.string().min(1, 'Thiếu ID môn học để gán khuôn mẫu'),
+  sections: z.array(MatrixSectionSchema).min(1, 'Khuôn mẫu phải có ít nhất 1 phần thi'),
+});
+
+export type CreateExamMatrixDTO = z.infer<typeof CreateExamMatrixSchema>;
+
+export interface CreateExamMatrixResponse {
+  message: string;
+  data: {
+    id: string;
+  };
 }

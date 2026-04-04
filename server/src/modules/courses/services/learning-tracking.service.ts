@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Inject, Logger, OnModuleInit, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { Redis } from 'ioredis';
@@ -6,7 +6,6 @@ import { Types } from 'mongoose';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SyncHeartbeatPayload } from '../interfaces/learning-tracking.interface';
 
-// [ENTERPRISE FIX]: Import các module xử lý DB để chấm điểm nóng
 import { LessonProgressRepository } from '../repositories/lesson-progress.repository';
 import { LessonsRepository } from '../repositories/lessons.repository';
 import { EnrollmentsService } from './enrollments.service';
@@ -14,6 +13,12 @@ import {
   ProgressEventPattern,
   LessonCompletedEventPayload,
 } from '../constants/progress-event.constant';
+import { RedisService } from 'src/common/redis/redis.service';
+import { EnrollmentsRepository } from '../repositories/enrollments.repository';
+import { IGetCourseMembersParams, IStudentAnalyticsParams, IStudentLessonAttemptsParams } from '../interfaces/teacher-tracking.interface';
+import { CoursesRepository } from '../courses.repository';
+import { ExamSubmissionsRepository } from 'src/modules/exams/exam-submissions.repository';
+import { EnrollmentStatus } from '../schemas/enrollment.schema';
 
 @Injectable()
 export class LearningTrackingService implements OnModuleInit {
@@ -28,6 +33,10 @@ export class LearningTrackingService implements OnModuleInit {
     private readonly lessonsRepo: LessonsRepository,
     private readonly enrollmentsService: EnrollmentsService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly redisService: RedisService,
+    private readonly enrollmentsRepo: EnrollmentsRepository,
+    private readonly examSubmissionsRepo: ExamSubmissionsRepository,
+    private readonly coursesRepo: CoursesRepository,
   ) {}
 
   async onModuleInit() {
@@ -136,5 +145,88 @@ export class LearningTrackingService implements OnModuleInit {
         `[Fast-Lane Error] Lỗi khi xử lý chấm điểm tức thời: ${error.message}`,
       );
     }
+  }
+
+  async getCourseMembersList(params: IGetCourseMembersParams) {
+    const course = await this.coursesRepo.findByIdSafe(params.courseId, { select: 'teacherId' });
+    if (!course || course.teacherId.toString() !== params.teacherId) {
+      throw new ForbiddenException('Bạn không có quyền truy cập dữ liệu của khóa học này.');
+    }
+
+    const cacheKey = `teacher_dashboard:members:${params.courseId}:${params.page}:${params.limit}:${params.search || 'all'}:${params.sortBy}:${params.sortOrder}`;
+    
+    const cachedData = await this.redisService.get(cacheKey);
+    if (cachedData) {
+      return JSON.parse(cachedData);
+    }
+
+    const { data, total } = await this.enrollmentsRepo.getMembersWithProgress(params);
+
+    const result = {
+      data,
+      meta: {
+        total,
+        page: params.page,
+        limit: params.limit,
+        totalPages: Math.ceil(total / params.limit),
+      },
+    };
+
+    await this.redisService.set(cacheKey, JSON.stringify(result), 300);
+
+    return result;
+  }
+
+  private async validateTeacherAndStudentAccess(courseId: string, teacherId: string, studentId: string) {
+    const course = await this.coursesRepo.findByIdSafe(courseId, { select: 'teacherId' });
+    if (!course || course.teacherId.toString() !== teacherId) {
+      throw new ForbiddenException('Bạn không có quyền truy cập dữ liệu của khóa học này.');
+    }
+
+    const enrollment = await this.enrollmentsRepo.findOneSafe({
+      courseId: new Types.ObjectId(courseId),
+      userId: new Types.ObjectId(studentId),
+      status: EnrollmentStatus.ACTIVE
+    }, { select: '_id' });
+
+    if (!enrollment) {
+      throw new NotFoundException('Học viên này không tồn tại hoặc không đăng ký khóa học này.');
+    }
+  }
+
+  async getStudentExamsOverview(params: IStudentAnalyticsParams) {
+    await this.validateTeacherAndStudentAccess(params.courseId, params.teacherId, params.studentId);
+
+    const cacheKey = `teacher_dashboard:course:${params.courseId}:student:${params.studentId}:analytics:overview:p${params.page}:l${params.limit}`;
+    const cachedData = await this.redisService.get(cacheKey);
+    if (cachedData) return JSON.parse(cachedData);
+
+    const result = await this.examSubmissionsRepo.getStudentHistoryOverviewData(
+      params.studentId,
+      params.page,
+      params.limit,
+      params.courseId
+    );
+
+    await this.redisService.set(cacheKey, JSON.stringify(result), 300);
+    return result;
+  }
+
+  async getStudentLessonAttempts(params: IStudentLessonAttemptsParams) {
+    await this.validateTeacherAndStudentAccess(params.courseId, params.teacherId, params.studentId);
+
+    const cacheKey = `teacher_dashboard:course:${params.courseId}:student:${params.studentId}:lesson:${params.lessonId}:attempts:p${params.page}:l${params.limit}`;
+    const cachedData = await this.redisService.get(cacheKey);
+    if (cachedData) return JSON.parse(cachedData);
+
+    const result = await this.examSubmissionsRepo.getLessonAttemptsData(
+      params.studentId,
+      params.lessonId,
+      params.page,
+      params.limit
+    );
+
+    await this.redisService.set(cacheKey, JSON.stringify(result), 300);
+    return result;
   }
 }

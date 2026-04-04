@@ -7,6 +7,7 @@ import {
   Param,
   UseGuards,
   Patch,
+  Get,
 } from '@nestjs/common';
 import { CurriculumService } from '../services/curriculum.service';
 import {
@@ -148,5 +149,23 @@ export class CurriculumController {
       description: dto.description,
     };
     return this.curriculumService.updateSection(payload);
+  }
+
+  @Get(':courseId/lessons/:lessonId')
+  @Roles(UserRole.TEACHER, UserRole.ADMIN)
+  async getLessonDetail(
+    @Param('courseId') courseId: string,
+    @Param('lessonId') lessonId: string,
+    @CurrentUser('userId') userId: string,
+  ) {
+    const data = await this.curriculumService.getLessonDetail(
+      courseId,
+      lessonId,
+      userId,
+    );
+    return {
+      message: 'Lấy chi tiết bài học thành công.',
+      data,
+    };
   }
 }

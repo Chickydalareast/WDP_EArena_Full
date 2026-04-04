@@ -34,10 +34,10 @@ export function TeacherCourseNav({ courseId }: TeacherCourseNavProps) {
         },
         {
             name: 'Học viên',
-            href: '#',
+            href: ROUTES.TEACHER.COURSE_MEMBERS(courseId),
             icon: Users,
-            isActive: false,
-            disabled: true,
+            isActive: pathname.includes('/members'),
+            disabled: false,
         },
         {
             name: 'Q&A',

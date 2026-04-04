@@ -10,11 +10,22 @@ import {
   Min,
   ValidateNested,
   ArrayMinSize,
+  ValidateIf,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { DifficultyLevel } from '../../questions/schemas/question.schema';
+import { RuleQuestionType } from '../interfaces/exam-matrix.interface';
 
 export class MatrixRuleDto {
+  @IsEnum(RuleQuestionType)
+  @IsOptional()
+  questionType?: RuleQuestionType = RuleQuestionType.MIXED;
+
+  @ValidateIf((o) => o.questionType === RuleQuestionType.PASSAGE)
+  @IsInt()
+  @Min(1)
+  subQuestionLimit?: number;
+
   @IsOptional()
   @IsArray()
   @IsMongoId({ each: true })

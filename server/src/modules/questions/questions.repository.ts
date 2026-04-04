@@ -10,6 +10,7 @@ import {
 } from './schemas/question.schema';
 import { CandidatePool } from '../exams/interfaces/exam-generator.interface';
 import { GetActiveFiltersPayload } from './interfaces/question.interface';
+import { RuleQuestionType } from '../exams/interfaces/exam-matrix.interface';
 
 export type QuestionFilterParams = {
   page: number;
@@ -31,6 +32,16 @@ export type RepoQuestionFilterParams = {
   search?: string;
   isDraft?: boolean;
 };
+
+export interface RepositoryRuleFilter {
+  questionType: RuleQuestionType;
+  subQuestionLimit?: number;
+  folderIds?: Types.ObjectId[];
+  topicIds?: Types.ObjectId[];
+  difficulties?: DifficultyLevel[];
+  tags?: string[];
+  limit: number;
+}
 
 @Injectable()
 export class QuestionsRepository extends AbstractRepository<QuestionDocument> {
@@ -301,13 +312,9 @@ export class QuestionsRepository extends AbstractRepository<QuestionDocument> {
       .exec();
   }
 
-  // =======================================================================
-  // DYNAMIC RULE ENGINE - REFACTORED FOR ENTERPRISE (STEP 1)
-  // =======================================================================
-
-  async getCandidatePoolForRule(
+async getCandidatePoolForRule(
     ownerId: Types.ObjectId,
-    rule: any,
+    rule: RepositoryRuleFilter,
     excludeIds: Types.ObjectId[],
     poolSizeMultiplier: number = 3,
   ): Promise<CandidatePool> {
@@ -324,75 +331,108 @@ export class QuestionsRepository extends AbstractRepository<QuestionDocument> {
 
     const poolLimit = rule.limit * poolSizeMultiplier;
 
-    // 1. Pipeline cho các câu đơn (Flats)
-    const flatMatch = { ...baseMatch, type: { $ne: QuestionType.PASSAGE } };
-    if (rule.difficulties?.length) flatMatch.difficultyLevel = { $in: rule.difficulties };
-    if (rule.tags?.length) flatMatch.tags = { $in: rule.tags };
+    // Chuẩn bị Pipeline Flat (Câu đơn)
+    const getFlatsPipeline = async () => {
+      const flatMatch = { ...baseMatch, type: { $ne: QuestionType.PASSAGE } };
+      if (rule.difficulties?.length) flatMatch.difficultyLevel = { $in: rule.difficulties };
+      if (rule.tags?.length) flatMatch.tags = { $in: rule.tags };
 
-    // 2. Pipeline cho câu chùm (Passages)
-    const passageMatch = { ...baseMatch, type: QuestionType.PASSAGE };
-    
-    // Xây dựng điều kiện lọc Rule áp dụng cho Cha HOẶC Con
-    const ruleAndConditions = [];
-    if (rule.difficulties?.length) {
-      ruleAndConditions.push({
-        $or: [
-          { difficultyLevel: { $in: rule.difficulties } },
-          { 'children.difficultyLevel': { $in: rule.difficulties } }
-        ]
-      });
-    }
-    if (rule.tags?.length) {
-      ruleAndConditions.push({
-        $or: [
-          { tags: { $in: rule.tags } },
-          { 'children.tags': { $in: rule.tags } }
-        ]
-      });
-    }
-    const passageRuleMatch = ruleAndConditions.length > 0 ? { $and: ruleAndConditions } : {};
+      return this.model.aggregate([
+        { $match: flatMatch },
+        { $sample: { size: poolLimit } },
+        { $project: { __v: 0, createdAt: 0, updatedAt: 0, ownerId: 0 } },
+      ]).exec();
+    };
 
-    const [flats, passagesRaw] = await Promise.all([
-      this.model
-        .aggregate([
-          { $match: flatMatch },
-          { $sample: { size: poolLimit } },
-          { $project: { __v: 0, createdAt: 0, updatedAt: 0, ownerId: 0 } },
-        ])
-        .exec(),
+    // Chuẩn bị Pipeline Passage áp dụng 2-Phase Lookup siêu nhẹ
+    const getPassagesPipeline = async () => {
+      const passageMatch = { ...baseMatch, type: QuestionType.PASSAGE };
+      const pipeline: any[] = [{ $match: passageMatch }];
 
-      this.model
-        .aggregate([
-          { $match: passageMatch },
-          {
-            $lookup: {
-              from: 'questions',
-              localField: '_id',
-              foreignField: 'parentPassageId',
-              pipeline: [
-                { $match: { isArchived: false, isDraft: false } },
-                { $sort: { orderIndex: 1 } },
-                { $project: { __v: 0, createdAt: 0, updatedAt: 0, ownerId: 0 } },
-              ],
-              as: 'children',
+      // [MAX PING]: Nếu có filter con HOẶC yêu cầu subQuestionLimit thì phải chạy Phase 0.5
+      const requiresChildrenFilter = rule.difficulties?.length || rule.tags?.length || rule.subQuestionLimit;
+
+      if (requiresChildrenFilter) {
+        // PHA 0.5: Lightweight Lookup - Kéo _id của children để xác định Passage có hợp lệ không
+        pipeline.push({
+          $lookup: {
+            from: 'questions',
+            let: { parentId: '$_id' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ['$parentPassageId', '$$parentId'] },
+                  isArchived: false,
+                  isDraft: false,
+                  ...(rule.difficulties?.length ? { difficultyLevel: { $in: rule.difficulties } } : {}),
+                  ...(rule.tags?.length ? { tags: { $in: rule.tags } } : {})
+                }
+              },
+              { $project: { _id: 1 } } // Tiết kiệm RAM tuyệt đối
+            ],
+            as: 'matchingChildren'
+          }
+        });
+        
+        // Lọc bỏ các đoạn văn rác/không đủ số lượng câu yêu cầu
+        if (rule.questionType === RuleQuestionType.PASSAGE && rule.subQuestionLimit) {
+            pipeline.push({
+                $match: {
+                    $expr: { $gte: [{ $size: '$matchingChildren' }, rule.subQuestionLimit] }
+                }
+            });
+        } else {
+            pipeline.push({ $match: { 'matchingChildren.0': { $exists: true } } });
+        }
+      }
+
+      pipeline.push({ $sample: { size: poolLimit } });
+
+      pipeline.push({
+        $lookup: {
+          from: 'questions',
+          let: { parentId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$parentPassageId', '$$parentId'] },
+                isArchived: false,
+                isDraft: false,
+                ...(rule.difficulties?.length ? { difficultyLevel: { $in: rule.difficulties } } : {}),
+                ...(rule.tags?.length ? { tags: { $in: rule.tags } } : {})
+              }
             },
-          },
-          // Phải có ít nhất 1 câu con
-          { $match: { 'children.0': { $exists: true } } },
-          // Apply Rule (Khó, Tags) trên Cha HOẶC Con
-          ...(Object.keys(passageRuleMatch).length > 0 ? [{ $match: passageRuleMatch }] : []),
-          { $sample: { size: poolLimit } },
-          { $project: { __v: 0, createdAt: 0, updatedAt: 0, ownerId: 0 } },
-        ])
-        .exec(),
-    ]);
+            ...(rule.questionType === RuleQuestionType.PASSAGE && rule.subQuestionLimit 
+                  ? [{ $sample: { size: rule.subQuestionLimit } }] 
+                  : []),
+            { $sort: { orderIndex: 1 } },
+            { $project: { __v: 0, createdAt: 0, updatedAt: 0, ownerId: 0 } }
+          ],
+          as: 'childQuestions'
+        }
+      });
 
-    return { flats, passages: passagesRaw };
+      pipeline.push({ $match: { 'childQuestions.0': { $exists: true } } });
+      pipeline.push({ $project: { matchingChildren: 0, __v: 0, createdAt: 0, updatedAt: 0, ownerId: 0 } });
+
+      return this.model.aggregate(pipeline).exec();
+    };
+
+    switch (rule.questionType) {
+      case RuleQuestionType.FLAT:
+        return { flats: await getFlatsPipeline(), passages: [] };
+      case RuleQuestionType.PASSAGE:
+        return { flats: [], passages: await getPassagesPipeline() };
+      case RuleQuestionType.MIXED:
+      default:
+        const [flats, passagesRaw] = await Promise.all([getFlatsPipeline(), getPassagesPipeline()]);
+        return { flats, passages: passagesRaw };
+    }
   }
 
   async countAvailableQuestionsForRule(
     ownerId: Types.ObjectId,
-    rule: any,
+    rule: RepositoryRuleFilter,
     excludeIds: Types.ObjectId[],
   ): Promise<number> {
     const baseMatch: QueryFilter<QuestionDocument> = {
@@ -406,85 +446,186 @@ export class QuestionsRepository extends AbstractRepository<QuestionDocument> {
     if (rule.folderIds?.length) baseMatch.folderId = { $in: rule.folderIds };
     if (rule.topicIds?.length) baseMatch.topicId = { $in: rule.topicIds };
 
-    // 1. Pipeline đếm câu đơn (Flats)
-    const flatMatch = { ...baseMatch, type: { $ne: QuestionType.PASSAGE } };
-    if (rule.difficulties?.length) flatMatch.difficultyLevel = { $in: rule.difficulties };
-    if (rule.tags?.length) flatMatch.tags = { $in: rule.tags };
+    const countFlats = async () => {
+      const flatMatch = { ...baseMatch, type: { $ne: QuestionType.PASSAGE } };
+      if (rule.difficulties?.length) flatMatch.difficultyLevel = { $in: rule.difficulties };
+      if (rule.tags?.length) flatMatch.tags = { $in: rule.tags };
 
-    const flatsPipeline = [
-      { $match: flatMatch },
-      { $count: 'total' }
-    ];
+      const result = await this.model.aggregate([
+        { $match: flatMatch },
+        { $count: 'total' }
+      ]).exec();
+      return result[0]?.total || 0;
+    };
+    const countPassages = async (legacyMixedMode: boolean = false) => {
+      const passageMatch = { ...baseMatch, type: QuestionType.PASSAGE };
+      const pipeline: any[] = [{ $match: passageMatch }];
 
-    // 2. Pipeline đếm câu chùm (Passages)
-    const passageMatch = { ...baseMatch, type: QuestionType.PASSAGE };
-    
-    const ruleAndConditions = [];
-    if (rule.difficulties?.length) {
-      ruleAndConditions.push({
-        $or: [
-          { difficultyLevel: { $in: rule.difficulties } },
-          { 'children.difficultyLevel': { $in: rule.difficulties } }
-        ]
-      });
+      const requiresChildrenFilter = rule.difficulties?.length || rule.tags?.length || legacyMixedMode || rule.subQuestionLimit;
+
+      if (requiresChildrenFilter) {
+        pipeline.push({
+          $lookup: {
+            from: 'questions',
+            let: { parentId: '$_id' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ['$parentPassageId', '$$parentId'] },
+                  isArchived: false,
+                  isDraft: false,
+                  ...(rule.difficulties?.length && !legacyMixedMode ? { difficultyLevel: { $in: rule.difficulties } } : {}),
+                  ...(rule.tags?.length && !legacyMixedMode ? { tags: { $in: rule.tags } } : {})
+                }
+              },
+              { $project: { _id: 1 } }
+            ],
+            as: 'matchingChildren'
+          }
+        });
+
+        // Đếm Health Check: Nếu là bài đọc, chỉ đếm những đoạn văn đủ giới hạn subQuestionLimit
+        if (rule.questionType === RuleQuestionType.PASSAGE && rule.subQuestionLimit) {
+            pipeline.push({
+                $match: {
+                    $expr: { $gte: [{ $size: '$matchingChildren' }, rule.subQuestionLimit] }
+                }
+            });
+        } else {
+            pipeline.push({ $match: { 'matchingChildren.0': { $exists: true } } });
+        }
+      }
+
+      if (legacyMixedMode) {
+        pipeline.push(
+          { $project: { countContribution: { $size: '$matchingChildren' } } },
+          { $group: { _id: null, totalAvailable: { $sum: '$countContribution' } } }
+        );
+        const res = await this.model.aggregate(pipeline).exec();
+        return res[0]?.totalAvailable || 0;
+      } else {
+        pipeline.push({ $count: 'total' });
+        const res = await this.model.aggregate(pipeline).exec();
+        return res[0]?.total || 0;
+      }
+    };
+
+    switch (rule.questionType) {
+      case RuleQuestionType.FLAT:
+        return await countFlats();
+      case RuleQuestionType.PASSAGE:
+        return await countPassages(false);
+      case RuleQuestionType.MIXED:
+      default:
+        const [flatCount, passageChildrenCount] = await Promise.all([
+          countFlats(),
+          countPassages(true)
+        ]);
+        return flatCount + passageChildrenCount;
     }
-    if (rule.tags?.length) {
-      ruleAndConditions.push({
-        $or: [
-          { tags: { $in: rule.tags } },
-          { 'children.tags': { $in: rule.tags } }
-        ]
-      });
-    }
-    const passageRuleMatch = ruleAndConditions.length > 0 ? { $and: ruleAndConditions } : {};
-
-    const passagesPipeline = [
-      { $match: passageMatch },
-      {
-        $lookup: {
-          from: 'questions',
-          localField: '_id',
-          foreignField: 'parentPassageId',
-          pipeline: [
-            { $match: { isArchived: false, isDraft: false } },
-            // Tối ưu Performance: Chỉ project fields cần để tính match & size
-            { $project: { _id: 1, difficultyLevel: 1, tags: 1 } },
-          ],
-          as: 'children',
-        },
-      },
-      // Đảm bảo không đếm passage rỗng
-      { $match: { 'children.0': { $exists: true } } },
-      // Apply Rule
-      ...(Object.keys(passageRuleMatch).length > 0 ? [{ $match: passageRuleMatch }] : []),
-      {
-        $project: {
-          // Tính tổng lượng sub-questions đóng góp. KHÔNG tính bản thân passage body (0).
-          countContribution: { $size: '$children' } 
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalAvailable: { $sum: '$countContribution' },
-        },
-      },
-    ];
-
-    const [flatsResult, passagesResult] = await Promise.all([
-      this.model.aggregate(flatsPipeline).exec(),
-      this.model.aggregate(passagesPipeline).exec(),
-    ]);
-
-    const flatCount = flatsResult[0]?.total || 0;
-    const passageCount = passagesResult[0]?.totalAvailable || 0;
-
-    return flatCount + passageCount;
   }
 
-  // =======================================================================
-  // CÁC HÀM METADATA BÊN DƯỚI GIỮ NGUYÊN
-  // =======================================================================
+  // async countAvailableQuestionsForRule(
+  //   ownerId: Types.ObjectId,
+  //   rule: RepositoryRuleFilter,
+  //   excludeIds: Types.ObjectId[],
+  // ): Promise<number> {
+  //   const baseMatch: QueryFilter<QuestionDocument> = {
+  //     ownerId,
+  //     isArchived: false,
+  //     isDraft: false,
+  //     parentPassageId: null,
+  //     _id: { $nin: excludeIds },
+  //   };
+
+  //   if (rule.folderIds?.length) baseMatch.folderId = { $in: rule.folderIds };
+  //   if (rule.topicIds?.length) baseMatch.topicId = { $in: rule.topicIds };
+
+  //   const countFlats = async () => {
+  //     const flatMatch = { ...baseMatch, type: { $ne: QuestionType.PASSAGE } };
+  //     if (rule.difficulties?.length) flatMatch.difficultyLevel = { $in: rule.difficulties };
+  //     if (rule.tags?.length) flatMatch.tags = { $in: rule.tags };
+
+  //     const result = await this.model.aggregate([
+  //       { $match: flatMatch },
+  //       { $count: 'total' }
+  //     ]).exec();
+  //     return result[0]?.total || 0;
+  //   };
+
+  //   const countPassages = async (legacyMixedMode: boolean = false) => {
+  //     const passageMatch = { ...baseMatch, type: QuestionType.PASSAGE };
+  //     const requiresChildrenLookup = rule.difficulties?.length || rule.tags?.length || legacyMixedMode;
+
+  //     const pipeline: any[] = [{ $match: passageMatch }];
+
+  //     if (requiresChildrenLookup) {
+  //       pipeline.push({
+  //         $lookup: {
+  //           from: 'questions',
+  //           localField: '_id',
+  //           foreignField: 'parentPassageId',
+  //           pipeline: [
+  //             { $match: { isArchived: false, isDraft: false } },
+  //             { $project: { _id: 1, difficultyLevel: 1, tags: 1 } },
+  //           ],
+  //           as: 'children',
+  //         },
+  //       });
+  //       pipeline.push({ $match: { 'children.0': { $exists: true } } });
+
+  //       const ruleAndConditions = [];
+  //       if (rule.difficulties?.length) {
+  //         ruleAndConditions.push({
+  //           $or: [
+  //             { difficultyLevel: { $in: rule.difficulties } },
+  //             { 'children.difficultyLevel': { $in: rule.difficulties } }
+  //           ]
+  //         });
+  //       }
+  //       if (rule.tags?.length) {
+  //         ruleAndConditions.push({
+  //           $or: [
+  //             { tags: { $in: rule.tags } },
+  //             { 'children.tags': { $in: rule.tags } }
+  //           ]
+  //         });
+  //       }
+  //       if (ruleAndConditions.length > 0) {
+  //         pipeline.push({ $match: { $and: ruleAndConditions } });
+  //       }
+  //     }
+
+  //     if (legacyMixedMode) {
+  //       pipeline.push(
+  //         { $project: { countContribution: { $size: '$children' } } },
+  //         { $group: { _id: null, totalAvailable: { $sum: '$countContribution' } } }
+  //       );
+  //       const res = await this.model.aggregate(pipeline).exec();
+  //       return res[0]?.totalAvailable || 0;
+  //     } else {
+  //       pipeline.push({ $count: 'total' });
+  //       const res = await this.model.aggregate(pipeline).exec();
+  //       return res[0]?.total || 0;
+  //     }
+  //   };
+
+  //   switch (rule.questionType) {
+  //     case RuleQuestionType.FLAT:
+  //       return await countFlats();
+
+  //     case RuleQuestionType.PASSAGE:
+  //       return await countPassages(false);
+
+  //     case RuleQuestionType.MIXED:
+  //     default:
+  //       const [flatCount, passageChildrenCount] = await Promise.all([
+  //         countFlats(),
+  //         countPassages(true)
+  //       ]);
+  //       return flatCount + passageChildrenCount;
+  //   }
+  // }
 
   async getActiveFiltersMetadata(
     ownerId: string,
@@ -500,19 +641,25 @@ export class QuestionsRepository extends AbstractRepository<QuestionDocument> {
       globalMatch.isDraft = filters.isDraft;
     }
 
+    if (filters.questionType === RuleQuestionType.FLAT) {
+      globalMatch.type = { $ne: QuestionType.PASSAGE };
+    } else if (filters.questionType === RuleQuestionType.PASSAGE) {
+      globalMatch.type = QuestionType.PASSAGE;
+    }
+
     const folderMatch = filters.folderIds?.length
       ? {
-          folderId: {
-            $in: filters.folderIds.map((id) => new Types.ObjectId(id)),
-          },
-        }
+        folderId: {
+          $in: filters.folderIds.map((id) => new Types.ObjectId(id)),
+        },
+      }
       : {};
     const topicMatch = filters.topicIds?.length
       ? {
-          topicId: {
-            $in: filters.topicIds.map((id) => new Types.ObjectId(id)),
-          },
-        }
+        topicId: {
+          $in: filters.topicIds.map((id) => new Types.ObjectId(id)),
+        },
+      }
       : {};
     const diffMatch = filters.difficulties?.length
       ? { difficultyLevel: { $in: filters.difficulties } }
@@ -575,19 +722,25 @@ export class QuestionsRepository extends AbstractRepository<QuestionDocument> {
       parentPassageId: null,
     };
 
+    if (filters.questionType === RuleQuestionType.FLAT) {
+      globalMatch.type = { $ne: QuestionType.PASSAGE };
+    } else if (filters.questionType === RuleQuestionType.PASSAGE) {
+      globalMatch.type = QuestionType.PASSAGE;
+    }
+
     const folderMatch = filters.folderIds?.length
       ? {
-          folderId: {
-            $in: filters.folderIds.map((id) => new Types.ObjectId(id)),
-          },
-        }
+        folderId: {
+          $in: filters.folderIds.map((id) => new Types.ObjectId(id)),
+        },
+      }
       : {};
     const topicMatch = filters.topicIds?.length
       ? {
-          topicId: {
-            $in: filters.topicIds.map((id) => new Types.ObjectId(id)),
-          },
-        }
+        topicId: {
+          $in: filters.topicIds.map((id) => new Types.ObjectId(id)),
+        },
+      }
       : {};
     const diffMatch = filters.difficulties?.length
       ? { difficultyLevel: { $in: filters.difficulties } }
@@ -637,5 +790,18 @@ export class QuestionsRepository extends AbstractRepository<QuestionDocument> {
       difficulties: result?.difficulties.map((d: any) => d.id) || [],
       tags: result?.tags.map((t: any) => t.id) || [],
     };
+  }
+
+  async findByIdsAndOwner(
+    questionIds: Types.ObjectId[],
+    ownerId: Types.ObjectId,
+  ): Promise<QuestionDocument[]> {
+    return this.model
+      .find({
+        _id: { $in: questionIds },
+        ownerId: ownerId,
+      })
+      .lean()
+      .exec() as Promise<QuestionDocument[]>;
   }
 }

@@ -8,11 +8,11 @@ import { Button } from '@/shared/components/ui/button';
 import { cn } from '@/shared/lib/utils';
 import dynamic from 'next/dynamic';
 
-// --- DATA CONTRACTS TỪ MODULE EXAM BUILDER (Chỉ mượn Type, KHÔNG mượn Hook) ---
 import { PopulatedQuestion, AnswerKey, PopulatedMedia, PopulatedAnswer } from '@/features/exam-builder/lib/hydration-utils';
 
-// [CTO FIX]: Đổi import Hook mới
 import { useAdminPaperDetailByExam } from '../hooks/useAdminExams';
+import { AdminCourseLesson } from '../types/admin.types';
+import { AdminDynamicQuizSection } from './AdminDynamicQuizSection';
 
 const DocumentViewer = dynamic(
     () => import('@/shared/components/ui/document-viewer').then((mod) => mod.DocumentViewer),
@@ -116,8 +116,8 @@ const AdminQuizViewer = ({ examId }: { examId: string }) => {
     };
 
     const responseObj = paperResponse as { data?: ExpectedPaperResponse } | ExpectedPaperResponse | null;
-    const paper = responseObj && typeof responseObj === 'object' && 'data' in responseObj 
-        ? responseObj.data 
+    const paper = responseObj && typeof responseObj === 'object' && 'data' in responseObj
+        ? responseObj.data
         : responseObj as ExpectedPaperResponse | null;
 
     const questions: PopulatedQuestion[] = paper?.questions || [];
@@ -322,14 +322,19 @@ export function AdminCoursePreviewModal({ courseId, isOpen, onClose }: { courseI
                                                 <article className="prose prose-base dark:prose-invert prose-orange max-w-none bg-card p-8 rounded-2xl border border-border shadow-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: activeLesson.content }} />
                                             )}
 
-                                            {/* [CTO FIX]: Truyền đúng prop examId */}
                                             {activeLesson.examId && (
                                                 <div className="pt-4 border-t border-border">
-                                                    <AdminQuizViewer examId={activeLesson.examId} />
+                                                    {activeLesson.examMode === 'DYNAMIC' ? (
+                                                        <AdminDynamicQuizSection
+                                                            courseId={courseDetail?.id as string}
+                                                            lesson={activeLesson as unknown as AdminCourseLesson}
+                                                        />
+                                                    ) : (
+                                                        <AdminQuizViewer examId={activeLesson.examId} />
+                                                    )}
                                                 </div>
                                             )}
 
-                                            {/* KHỐI TÀI LIỆU ĐÍNH KÈM */}
                                             {activeLesson.attachments && activeLesson.attachments.length > 0 && (
                                                 <div className="pt-8 border-t border-border">
                                                     <h3 className="font-bold text-xl mb-6 flex items-center gap-3 text-foreground"><FileText className="size-6 text-orange-500" /> Tài liệu đính kèm</h3>

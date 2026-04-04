@@ -36,6 +36,24 @@ export class AdminCoursesController {
         };
     }
 
+    @Get(':id/lessons/:lessonId/preview-quiz')
+    async previewCourseQuiz(
+        @Param('id') courseId: string,
+        @Param('lessonId') lessonId: string
+    ) {
+        const payload = { courseId, lessonId };
+        const data = await this.adminCoursesService.previewCourseQuiz(payload);
+        
+        return {
+            message: 'Tạo bản xem trước bài thi cho Admin thành công.',
+            data: data.previewData,
+            meta: {
+                totalItems: data.totalItems,
+                totalActualQuestions: data.totalActualQuestions
+            }
+        };
+    }
+
     @Patch(':id/approve')
     async approveCourse(
         @Param('id') id: string,

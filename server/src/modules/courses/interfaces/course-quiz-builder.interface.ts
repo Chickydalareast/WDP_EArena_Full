@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 import { DifficultyLevel } from '../../questions/schemas/question.schema';
 import { ShowResultMode } from '../schemas/lesson.schema';
+import { RuleQuestionType } from '../../exams/interfaces/exam-matrix.interface';
 
 export interface DynamicFilterParam {
   difficulty: DifficultyLevel;
@@ -8,6 +9,8 @@ export interface DynamicFilterParam {
 }
 
 export interface MatrixRuleParam {
+  questionType: RuleQuestionType;
+  subQuestionLimit?: number;
   folderIds?: string[];
   topicIds?: string[];
   difficulties?: DifficultyLevel[];
@@ -74,6 +77,8 @@ export interface GetQuizMatricesParams {
 
 export interface RulePreviewParams {
   teacherId: string;
+  questionType: RuleQuestionType;
+  subQuestionLimit?: number;
   folderIds?: string[];
   topicIds?: string[];
   difficulties?: DifficultyLevel[];
@@ -96,11 +101,13 @@ export interface PreviewQuizConfigParams {
 
 export interface QuizHealthRuleStatus {
   sectionName: string;
+  questionType: RuleQuestionType;
   requiredCount: number;
   availableCount: number;
   isSufficient: boolean;
   safetyRatio: number;
   isWarning: boolean;
+  errorMessage?: string;
 }
 
 export interface QuizHealthResult {
@@ -110,7 +117,7 @@ export interface QuizHealthResult {
   hasWarning: boolean;
   isLocked: boolean;
   matrixExists: boolean | null;
-  configMode: 'matrix' | 'adHoc' | 'unconfigured';
+  configMode: 'matrix' | 'adHoc' | 'unconfigured' | 'snapshot' | 'matrix_missing';
   rules: QuizHealthRuleStatus[];
 }
 

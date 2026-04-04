@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { useFormContext, useWatch, Path } from 'react-hook-form';
+import { useFormContext, useWatch } from 'react-hook-form';
 import { Trash2, FolderTree, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/shared/components/ui/form';
@@ -12,14 +12,19 @@ import { TreeSelectMulti } from '@/features/exam-builder/components/TreeSelectMu
 import { useDebounce } from '@/shared/hooks/useDebounce';
 import { cn } from '@/shared/lib/utils';
 import { CreateQuizLessonDTO } from '../../types/curriculum.schema';
-import { useRuleHealthCheck } from '../../hooks/useRuleHealthCheck';
+
+// [CLEAN ARCHITECTURE] Imports chuẩn hóa Type và API Hook mới
+import { useQuizRuleHealth } from '../../hooks/useQuizRuleHealth';
+import { FolderNode } from '@/features/exam-builder/hooks/useFolders'; 
+import { FlatTopic } from '@/features/exam-builder/hooks/useTopics'; 
+import { ActiveFiltersResponse } from '@/features/exam-builder/types/exam.schema'; 
 
 interface DynamicRuleItemProps {
     sectionIndex: number;
     ruleIndex: number;
-    folders: any[];
-    topics: any[];
-    activeFilters: any;
+    folders: FolderNode[];
+    topics: FlatTopic[];
+    activeFilters: ActiveFiltersResponse | undefined;
     disabled: boolean;
     onRemove: () => void;
     canRemove: boolean;
@@ -39,7 +44,7 @@ export function DynamicRuleItem({
     const basePath = `dynamicConfig.adHocSections.${sectionIndex}.rules.${ruleIndex}` as const;
 
     // 1. Lấy dữ liệu Real-time từ Form
-    const watchedRule = useWatch({ control, name: basePath });
+    const watchedRule = useWatch({ control, name: basePath as any });
     
     // 2. Chuẩn bị payload cho Backend (Debounce để không bị DdoS)
     const rulePayload = useMemo(() => ({
@@ -47,14 +52,18 @@ export function DynamicRuleItem({
         topicIds: watchedRule?.topicIds || [],
         difficulties: watchedRule?.difficulties || [],
         tags: watchedRule?.tags || [],
-        limit: watchedRule?.limit || 1
+        limit: watchedRule?.limit || 1,
+        // [QUAN TRỌNG] Bắt buộc có questionType, dự phòng 'FLAT' nếu form chưa gán
+        questionType: watchedRule?.questionType || 'FLAT' 
     }), [watchedRule]);
 
     const debouncedPayload = useDebounce(rulePayload, 600);
 
-    // 3. Gọi Hook Health Check để lấy tình trạng Kho câu hỏi
+    // 3. Gọi Hook Health Check để lấy tình trạng Kho câu hỏi (Đã dùng Hook mới)
     const isReadyToCheck = debouncedPayload.folderIds.length > 0;
-    const { data: healthData, isFetching: isChecking } = useRuleHealthCheck(isReadyToCheck ? debouncedPayload : null);
+    const { data: healthData, isFetching: isChecking } = useQuizRuleHealth(
+        isReadyToCheck ? (debouncedPayload as any) : null
+    );
 
     // 4. Xác định trạng thái UI dựa vào Business Rules
     const isSufficient = healthData?.isSufficient ?? true;
