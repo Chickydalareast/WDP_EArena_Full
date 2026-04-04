@@ -24,6 +24,7 @@ import {
 import { PostBodyDisplay } from '../components/PostBodyDisplay';
 import { PostAttachmentsDisplay } from '../components/PostAttachmentsDisplay';
 import type { CommunityAttachment } from '../components/PostAttachmentsDisplay';
+import { CommunityAttachmentPicker } from '../components/CommunityAttachmentPicker';
 import { toast } from 'sonner';
 import { Loader2, ArrowLeft, Reply } from 'lucide-react';
 import { formatCurrency } from '@/shared/lib/utils';
@@ -503,6 +504,10 @@ export function CommunityPostScreen({ postId }: { postId: string }) {
               onChange={(e) => setBody(e.target.value)}
               placeholder={parentCommentId ? 'Viết phản hồi...' : 'Viết bình luận...'}
               rows={3}
+            />
+            <CommunityAttachmentPicker
+              attachments={commentAttachments}
+              onChange={setCommentAttachments}
             />
             <Button onClick={sendComment}>Gửi</Button>
           </>

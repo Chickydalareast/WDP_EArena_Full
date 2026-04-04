@@ -1,13 +1,12 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { flushSync } from 'react-dom';
 import { ImagePlus, Loader2, X } from 'lucide-react';
-import { Button, buttonVariants } from '@/shared/components/ui/button';
+import { Button } from '@/shared/components/ui/button';
 import { uploadCommunityImage } from '../api/community-api';
 import { toast } from 'sonner';
-import { cn } from '@/shared/lib/utils';
 import type { CommunityAttachment } from './PostAttachmentsDisplay';
 
 const DEFAULT_MAX = 8;
@@ -36,6 +35,7 @@ export function CommunityAttachmentPicker({
 }) {
   const reactId = useId().replace(/:/g, '');
   const fileInputId = `community-att-${reactId}`;
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [pending, setPending] = useState<{ key: string; previewUrl: string }[]>([]);
 
@@ -106,12 +106,13 @@ export function CommunityAttachmentPicker({
   };
 
   const busy = isUploading || pending.length > 0;
-
   const pickerBlocked = disabled || busy || attachments.length >= maxImages;
 
   return (
     <div className="space-y-2">
+      {/* Hidden file input */}
       <input
+        ref={fileInputRef}
         id={fileInputId}
         type="file"
         accept={ACCEPT}
@@ -121,12 +122,30 @@ export function CommunityAttachmentPicker({
         disabled={pickerBlocked}
         aria-label="Chọn ảnh đính kèm"
       />
+
+      {/* Trigger button */}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={pickerBlocked}
+        onClick={() => fileInputRef.current?.click()}
+      >
+        {busy ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <ImagePlus className="mr-2 h-4 w-4" />
+        )}
+        Thêm ảnh
+      </Button>
+
+      {/* Preview grid */}
       {(attachments.length > 0 || pending.length > 0) && (
         <div className="flex flex-wrap gap-2">
           {pending.map((p) => (
             <div
               key={p.key}
-              className="relative h-20 w-20 overflow-hidden rounded-md border border-border bg-muted"
+              className="relative h-24 w-24 overflow-hidden rounded-md border border-border bg-muted"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={p.previewUrl} alt="" className="h-full w-full object-cover opacity-70" />
@@ -138,7 +157,7 @@ export function CommunityAttachmentPicker({
           {attachments.map((a, i) => (
             <div
               key={`${a.url}-${i}`}
-              className="group relative h-20 w-20 overflow-hidden rounded-md border border-border bg-muted"
+              className="group relative h-24 w-24 overflow-hidden rounded-md border border-border bg-muted"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={a.url} alt="" className="h-full w-full object-cover" />
@@ -155,28 +174,6 @@ export function CommunityAttachmentPicker({
           ))}
         </div>
       )}
-      <label
-        htmlFor={fileInputId}
-        className={cn(
-          'inline-flex',
-          pickerBlocked && 'pointer-events-none cursor-not-allowed opacity-50',
-        )}
-      >
-        <span
-          className={buttonVariants({
-            variant: 'outline',
-            size: 'sm',
-            className: 'cursor-pointer',
-          })}
-        >
-          {busy ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <ImagePlus className="mr-2 h-4 w-4" />
-          )}
-          Thêm ảnh
-        </span>
-      </label>
     </div>
   );
 }
