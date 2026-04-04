@@ -37,6 +37,7 @@ import {
 import { PostBodyDisplay } from '../components/PostBodyDisplay';
 import { PostAttachmentsDisplay } from '../components/PostAttachmentsDisplay';
 import type { CommunityAttachment } from '../components/PostAttachmentsDisplay';
+import { CommunityAttachmentPicker } from '../components/CommunityAttachmentPicker';
 import { toast } from 'sonner';
 import { Loader2, Bookmark, MessageCircle, Sparkles, Bell, BellOff } from 'lucide-react';
 import { cn, formatCurrency } from '@/shared/lib/utils';
@@ -410,6 +411,10 @@ export function CommunityFeedScreen(props?: { lockedSubjectId?: string }) {
               </p>
             )}
             <RichTextEditor value={body} onChange={setBody} placeholder="Viết nội dung..." />
+            <CommunityAttachmentPicker
+              attachments={composerAttachments}
+              onChange={setComposerAttachments}
+            />
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setComposerOpen(false)}>
                 Hủy

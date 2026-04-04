@@ -21,6 +21,7 @@ import { FreePreviewModal } from '../components/FreePreviewModal';
 import { CourseReviewsSection } from '../components/CourseReviewsSection';
 import { ShareCourseToCommunityButton } from '@/features/community/components/ShareCourseToCommunityButton';
 import { CourseCommunitySection } from '@/features/community/components/CourseCommunitySection';
+import { CommunityUserProfileDialog } from '@/features/community/components/CommunityUserProfileDialog';
 import { toast } from 'sonner';
 
 // --- UTILITY HELPERS ---
@@ -57,6 +58,7 @@ export function CourseLandingScreen({ slug }: { slug: string }) {
 
   const [previewLesson, setPreviewLesson] = useState<LessonPreview | null>(null);
   const [isTrailerOpen, setIsTrailerOpen] = useState(false);
+  const [teacherProfileOpen, setTeacherProfileOpen] = useState(false);
 
   if (isLoading) return <CourseLandingSkeleton />;
   if (isError || !course) return <div className="text-center py-32 text-red-500 font-medium">Không tìm thấy khóa học hoặc khóa học đã bị gỡ.</div>;
@@ -265,7 +267,8 @@ export function CourseLandingScreen({ slug }: { slug: string }) {
                     variant="outline"
                     size="sm"
                     className="font-semibold"
-                    onClick={() => toast.info('Tính năng đang phát triển.')}
+                    disabled={!course.teacher?.id}
+                    onClick={() => course.teacher?.id && setTeacherProfileOpen(true)}
                   >
                     Xem hồ sơ giảng viên
                   </Button>
@@ -355,6 +358,13 @@ export function CourseLandingScreen({ slug }: { slug: string }) {
       />
 
       {/* Trailer Modal (Thay thế DumbMediaPlayer) */}
+      <CommunityUserProfileDialog
+        open={teacherProfileOpen}
+        onOpenChange={setTeacherProfileOpen}
+        userId={course.teacher?.id ?? null}
+        displayNameHint={teacherInfo.fullName}
+      />
+
       <Dialog open={isTrailerOpen} onOpenChange={setIsTrailerOpen}>
         <DialogContent className="max-w-4xl bg-black border-border shadow-2xl p-0 overflow-hidden">
           <div className="relative w-full aspect-video bg-black flex items-center justify-center">
