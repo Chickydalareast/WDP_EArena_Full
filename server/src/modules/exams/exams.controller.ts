@@ -26,7 +26,6 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { UserRole } from '../../common/enums/user-role.enum';
 import { RequireTeacherVerified } from '../../common/decorators/teacher-verified.decorator';
 import { UserRole } from 'src/common/enums/user-role.enum';
 import { GenerateDynamicExamDto } from './dto/generate-exam.dto';

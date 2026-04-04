@@ -47,6 +47,7 @@ import {
   AutoTagJobPayload,
   QUESTION_TASKS_QUEUE,
 } from './interfaces/question-jobs.interface';
+import { calculatePassageDifficulty } from './utils/difficulty.util';
 
 export type UpdateQuestionPayload = Partial<CreateQuestionPayload>;
 export type MoveQuestionsPayload = {
@@ -123,7 +124,7 @@ export class QuestionsService {
     return objectIds;
   }
 
-  async bulkCreateQuestions(payload: BulkCreateQuestionPayload) {
+async bulkCreateQuestions(payload: BulkCreateQuestionPayload) {
     const { ownerId, folderId, questions } = payload;
 
     const folder = await (this.foldersRepo as any).findByIdSafe(
@@ -160,6 +161,8 @@ export class QuestionsService {
         if (q.type === QuestionType.PASSAGE && q.subQuestions?.length) {
           const parentId = new Types.ObjectId();
 
+          const parentDifficulty = calculatePassageDifficulty(q.subQuestions);
+
           flatDocuments.push({
             _id: parentId,
             ownerId: ownerObjectId,
@@ -171,7 +174,7 @@ export class QuestionsService {
             answers: [],
             attachedMedia: mappedMedia,
             tags: q.tags || [],
-            difficultyLevel: q.difficultyLevel || DifficultyLevel.UNKNOWN,
+            difficultyLevel: parentDifficulty,
             isDraft: q.isDraft !== undefined ? q.isDraft : true,
           });
 
@@ -715,7 +718,7 @@ export class QuestionsService {
     return { message: 'Đã xóa vĩnh viễn câu hỏi.' };
   }
 
-  async updatePassageWithDiffing(
+async updatePassageWithDiffing(
     passageId: string,
     ownerId: string,
     payload: UpdatePassagePayload,
@@ -723,16 +726,18 @@ export class QuestionsService {
     if (!Types.ObjectId.isValid(passageId)) {
       throw new BadRequestException('ID Đoạn văn không hợp lệ.');
     }
-    const passageObjectId = new Types.ObjectId(passageId);
 
+    const passageObjectId = new Types.ObjectId(passageId);
     const passage = await (this.questionsRepository as any).findByIdSafe(
       passageObjectId,
     );
+
     if (!passage) throw new NotFoundException('Không tìm thấy đoạn văn mẹ.');
     if (passage.ownerId.toString() !== ownerId)
       throw new ForbiddenException(
         'Bạn không có quyền chỉnh sửa nội dung này.',
       );
+
     if (passage.type !== QuestionType.PASSAGE)
       throw new BadRequestException(
         'Câu hỏi này không phải là Đoạn văn (PASSAGE).',
@@ -741,16 +746,17 @@ export class QuestionsService {
     const allMediaIdsToValidate: string[] = [];
     if (payload.attachedMedia)
       allMediaIdsToValidate.push(...payload.attachedMedia);
+
     payload.subQuestions.forEach((sub) => {
       if (sub.attachedMedia) allMediaIdsToValidate.push(...sub.attachedMedia);
     });
-
     await this.validateMediaOwnership(ownerId, allMediaIdsToValidate);
 
     const existingSubQuestions = await (this.questionsRepository as any).model
       .find({ parentPassageId: passageObjectId })
       .select('_id')
       .lean();
+
     const existingIds: string[] = existingSubQuestions.map((q: any) =>
       q._id.toString(),
     );
@@ -758,6 +764,7 @@ export class QuestionsService {
     const incomingIds: string[] = payload.subQuestions
       .map((sub) => sub.id)
       .filter((id): id is string => !!id);
+
     const idsToDelete = existingIds.filter((id) => !incomingIds.includes(id));
 
     const toCreateDocs: any[] = [];
@@ -818,8 +825,9 @@ export class QuestionsService {
           passageUpdateData.content = payload.content;
         if (payload.explanation !== undefined)
           passageUpdateData.explanation = payload.explanation;
-        if (payload.difficultyLevel !== undefined)
-          passageUpdateData.difficultyLevel = payload.difficultyLevel;
+        
+        passageUpdateData.difficultyLevel = calculatePassageDifficulty(payload.subQuestions || []);
+
         if (payload.tags !== undefined) passageUpdateData.tags = payload.tags;
         if (payload.topicId !== undefined)
           passageUpdateData.topicId = new Types.ObjectId(payload.topicId);
@@ -838,14 +846,12 @@ export class QuestionsService {
               payload.topicId !== undefined
                 ? payload.topicId
                 : passage.topicId?.toString();
-            const finalDiff =
-              payload.difficultyLevel !== undefined
-                ? payload.difficultyLevel
-                : passage.difficultyLevel;
+                
+            const finalDiff = passageUpdateData.difficultyLevel;
 
             if (!finalTopicId || finalDiff === DifficultyLevel.UNKNOWN) {
               throw new BadRequestException(
-                'Không thể xuất bản! Đoạn văn bắt buộc phải được gán Chuyên đề và Mức độ nhận thức.',
+                'Không thể xuất bản! Đoạn văn bắt buộc phải được gán Chuyên đề và Mức độ nhận thức (Cần ít nhất 1 câu hỏi con có cấu hình độ khó hợp lệ).',
               );
             }
           }
@@ -900,6 +906,7 @@ export class QuestionsService {
     if (updatedIds.length > 0) {
       await this.dispatchSyncEvent(QuestionSyncAction.UPDATE, updatedIds);
     }
+
     if (idsToDelete.length > 0) {
       await this.dispatchSyncEvent(QuestionSyncAction.DELETE, idsToDelete);
     }

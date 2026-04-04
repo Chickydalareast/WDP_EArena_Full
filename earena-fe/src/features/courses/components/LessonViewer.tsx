@@ -39,6 +39,7 @@ import { toast } from 'sonner';
 
 import { StudentExamEngine } from '@/features/exam-taking/components/StudentExamEngine';
 import { parseApiError } from '@/shared/lib/error-parser';
+import { LessonDiscussionPanel } from '@/features/discussions/components/LessonDiscussionPanel';
 
 interface LessonViewerProps {
   courseId: string;
@@ -475,6 +476,13 @@ export function LessonViewer({ courseId, lessonId }: LessonViewerProps) {
 
           </div>
         )}
+
+        {/* =============== BẮT ĐẦU BLOCK TÍCH HỢP Q&A =============== */}
+        <div className="pt-8 mt-8 border-t-2 border-border/30">
+             <LessonDiscussionPanel courseId={courseId} lessonId={lessonId} />
+        </div>
+        {/* =============== KẾT THÚC BLOCK TÍCH HỢP Q&A =============== */}
+
       </div>
     </div>
   );

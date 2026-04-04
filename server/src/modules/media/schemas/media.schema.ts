@@ -10,6 +10,7 @@ export enum MediaContext {
   LESSON_DOCUMENT = 'lesson_document',
   QUESTION = 'question',
   GENERAL = 'general',
+  LESSON_DISCUSSION = 'lesson_discussion',
 }
 
 export enum MediaProvider {

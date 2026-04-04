@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { questionBankService } from '../api/question-bank.service';
-import { CloneQuestionDTO, BulkCloneQuestionsDTO, BulkDeleteQuestionsDTO, AiQuestionBuilderDTO, OrganizeQuestionsPayload, BulkAutoTagDTO, BulkPublishQuestionsDTO } from '../types/question-bank.schema';
+import { CloneQuestionDTO, BulkCloneQuestionsDTO, BulkDeleteQuestionsDTO, AiQuestionBuilderDTO, OrganizeQuestionsPayload, BulkAutoTagDTO, BulkPublishQuestionsDTO, AiLectureBuilderDTO } from '../types/question-bank.schema';
 import { BANK_QUESTIONS_KEY } from './useBankQueries';
 import { ApiError, parseApiError } from '@/shared/lib/error-parser';
 import { QuestionItemDTO } from '@/features/exam-builder/types/exam.schema';
@@ -147,19 +147,19 @@ export const useBulkAutoTag = () => {
         mutationFn: (data: BulkAutoTagDTO) => questionBankService.bulkAutoTag(data),
         onSuccess: (_, variables) => {
             const store = useQuestionBankStore.getState();
-            
+
             store.addProcessingIds(variables.questionIds);
-            
+
             store.clearQuestionSelection();
-            
+
             toast.success('Hệ thống đang xử lý ngầm!', {
                 description: 'Yêu cầu AI phân loại đã được đưa vào hàng đợi. Quá trình này có thể mất vài phút.',
                 duration: 5000,
             });
         },
         onError: (err: ApiError) => {
-            toast.error('Không thể thực hiện yêu cầu', { 
-                description: err.message || 'Lỗi kết nối hoặc tài khoản không hợp lệ.' 
+            toast.error('Không thể thực hiện yêu cầu', {
+                description: err.message || 'Lỗi kết nối hoặc tài khoản không hợp lệ.'
             });
         }
     });
@@ -171,15 +171,53 @@ export const useBulkPublishQuestions = () => {
     return useMutation({
         mutationFn: (data: BulkPublishQuestionsDTO) => questionBankService.bulkPublishQuestions(data),
         onSuccess: (data) => {
-            toast.success('Xuất bản thành công', { 
-                description: `Đã chuyển ${data.publishedCount} câu hỏi sang trạng thái Chính thức.` 
+            toast.success('Xuất bản thành công', {
+                description: `Đã chuyển ${data.publishedCount} câu hỏi sang trạng thái Chính thức.`
             });
             queryClient.invalidateQueries({ queryKey: BANK_QUESTIONS_KEY });
         },
         onError: (err: ApiError) => {
-            toast.error('Không thể xuất bản', { 
-                description: err.message || 'Đã có lỗi xảy ra khi kiểm tra dữ liệu.' 
+            toast.error('Không thể xuất bản', {
+                description: err.message || 'Đã có lỗi xảy ra khi kiểm tra dữ liệu.'
             });
         }
+    });
+};
+
+export const useGenerateAiFromLecture = () => {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (data: AiLectureBuilderDTO) => questionBankService.generateAiQuestionsFromLecture(data),
+
+        onSuccess: (data) => {
+            toast.success('Sinh câu hỏi thành công!', {
+                description: data.message || `Đã tổng hợp và tạo ra ${data.questionsGenerated} câu hỏi từ bài giảng.`,
+                duration: 6000,
+            });
+
+            queryClient.invalidateQueries({ queryKey: BANK_QUESTIONS_KEY });
+        },
+
+        onError: (error: unknown) => {
+            const parsedError = parseApiError(error);
+
+            const isTimeout =
+                parsedError.statusCode === 408 ||
+                error?.toString().includes('timeout') ||
+                error?.toString().includes('ECONNABORTED');
+
+            if (isTimeout) {
+                toast.info('Hệ thống đang xử lý ngầm!', {
+                    description: 'Tài liệu của bạn khá lớn nên tiến trình AI vẫn đang chạy dưới nền. Vui lòng kiểm tra lại thư mục sau 1-2 phút.',
+                    duration: 10000,
+                });
+            } else {
+                toast.error('Không thể sinh câu hỏi', {
+                    description: parsedError.message || 'Lỗi đọc tài liệu bài giảng. Vui lòng thử lại.',
+                    duration: 8000,
+                });
+            }
+        },
     });
 };

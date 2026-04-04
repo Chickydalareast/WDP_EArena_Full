@@ -10,6 +10,7 @@ export interface NotificationPayload {
   requestId?: string;
   postId?: string;
   commentId?: string;
+  discussionId?: string;
   metadata?: Record<string, unknown>;
 }
 

@@ -60,6 +60,10 @@ import { QuestionsModule } from '../questions/questions.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { CoursePromotionService } from './services/course-promotion.service';
+import { LessonDiscussion, LessonDiscussionSchema } from './schemas/lesson-discussion.schema';
+import { LessonDiscussionsController } from './controllers/lesson-discussions.controller';
+import { LessonDiscussionsRepository } from './repositories/lesson-discussions.repository';
+import { LessonDiscussionsService } from './services/lesson-discussions.service';
 
 @Module({
   imports: [
@@ -72,6 +76,7 @@ import { CoursePromotionService } from './services/course-promotion.service';
       { name: LessonProgress.name, schema: LessonProgressSchema },
       { name: CoursePromotion.name, schema: CoursePromotionSchema },
       { name: User.name, schema: UserSchema },
+      { name: LessonDiscussion.name, schema: LessonDiscussionSchema },
     ]),
     SubscriptionsModule,
     BullModule.registerQueue({
@@ -94,6 +99,7 @@ import { CoursePromotionService } from './services/course-promotion.service';
     AiCourseBuilderController,
     LearningTrackingController,
     CourseQuizBuilderController,
+    LessonDiscussionsController,
   ],
   providers: [
     CoursesRepository,
@@ -102,6 +108,7 @@ import { CoursePromotionService } from './services/course-promotion.service';
     EnrollmentsRepository,
     CourseReviewsRepository,
     LessonProgressRepository,
+    LessonDiscussionsRepository,
 
     CoursesService,
     CurriculumService,
@@ -116,6 +123,7 @@ import { CoursePromotionService } from './services/course-promotion.service';
     LearningTrackingService,
     HeartbeatSyncProcessor,
     CourseProgressionListener,
+    LessonDiscussionsService,
   ],
   exports: [
     EnrollmentsService,

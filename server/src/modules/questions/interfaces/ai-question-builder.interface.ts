@@ -42,3 +42,11 @@ export interface AiQuestionBuilderPayload {
   files: AiDocumentFile[];
   additionalInstructions?: string;
 }
+
+export interface AiLectureBuilderPayload {
+  teacherId: string;
+  folderId: string;
+  files: AiDocumentFile[];
+  questionCount: number;
+  additionalInstructions?: string;
+}

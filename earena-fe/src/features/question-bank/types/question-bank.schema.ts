@@ -185,3 +185,47 @@ export type BulkPublishQuestionsDTO = z.infer<typeof BulkPublishQuestionsSchema>
 export interface BulkPublishResponse {
   publishedCount: number;
 }
+
+const ACCEPTED_FILE_TYPES_LECTURE = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain'
+];
+
+export const AiLectureBuilderSchema = z.object({
+  files: z.array(z.custom<File>((val) => val instanceof File, 'Định dạng tệp không hợp lệ'))
+    .min(1, 'Vui lòng chọn ít nhất 1 tài liệu bài giảng')
+    .max(5, 'Chỉ được phép chọn tối đa 5 tài liệu cùng lúc')
+    .refine(
+      (files) => files.every((file) => file.size <= 15 * 1024 * 1024),
+      'Dung lượng mỗi tài liệu không được vượt quá 15MB'
+    )
+    .refine(
+      (files) => files.every((file) => {
+        const extension = file.name.split('.').pop()?.toLowerCase();
+        return ACCEPTED_FILE_TYPES_LECTURE.includes(file.type) || ['pdf', 'docx', 'txt'].includes(extension || '');
+      }),
+      'Hệ thống chỉ hỗ trợ định dạng .pdf, .docx, và .txt'
+    ),
+
+  folderId: z.string().min(1, 'Hệ thống bị lỗi nhận dạng Thư mục lưu trữ'),
+  
+  questionCount: z.number({
+    required_error: "Vui lòng nhập số lượng câu hỏi",
+    invalid_type_error: "Số lượng phải là một con số",
+  })
+    .min(1, 'Tối thiểu 1 câu hỏi')
+    .max(50, 'Tối đa 50 câu hỏi mỗi lần sinh'),
+
+  additionalInstructions: z.string()
+    .max(2000, 'Lời dặn dò không được vượt quá 2000 ký tự')
+    .optional(),
+});
+
+export type AiLectureBuilderDTO = z.infer<typeof AiLectureBuilderSchema>;
+
+export interface AiLectureBuilderResponse {
+  status: 'SUCCESS';
+  questionsGenerated: number;
+  message: string;
+}
